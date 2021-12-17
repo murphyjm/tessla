@@ -15,7 +15,7 @@ class TessSystem:
                 sectors=np.array([], dtype=int), # Sectors you'd like to include. Can also pass string 'all' to use all available sectors.
                 cadence=120, # By default, extract the 2-minute cadence data, as opposed to the 20 s cadence, if both are available for a TOI.
                 default_flux_origin='pdcsap_flux', # By default, try to use the PDCSAP flux. If this isn't available for all sectors, the SAP flux will be used for consistency.
-                ntransiting=1):
+                ntransiting=1) -> None: # Annotation denotes that __init__ should always return None
         self.name = name
         self.tic = tic
         self.toi = toi
@@ -39,7 +39,7 @@ class TessSystem:
                 sectors = np.array([sectors], dtype=int) # If only a single sector passed as an int or float, then make it a single-element array.
             self.sectors = sectors
 
-    def get_tess_phot(self):
+    def get_tess_phot(self) -> pd.DataFrame:
         '''
         Download the TESS photometry. 
         
@@ -71,7 +71,7 @@ class TessSystem:
 
         return self.lc_df
         
-    def __download_tess_phot(self):
+    def __download_tess_phot(self) -> dict:
         '''
         Download the lightkurve objects, if available. 
         Private method, since the user shouldn't need to access this one specifically.
@@ -92,7 +92,7 @@ class TessSystem:
                     print(f"Download successful for Sector {sector} {author} light curve...")
         return lc_dict
 
-    def __clean_and_normalize_tess_photometry(self, lc_dict):
+    def __clean_and_normalize_tess_photometry(self, lc_dict) -> None:
         '''
         Do some initial cleaning and normalizing of the TESS photometry.
         '''
