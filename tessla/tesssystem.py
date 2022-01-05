@@ -113,4 +113,3 @@ class TessSystem:
 
     def get_rvs(self, rv_fname):
         pass
-        
