@@ -14,6 +14,6 @@ def time_delta_to_data_delta(x, time_window=1) -> int:
     ----------
     int: The (median) number of array elements corresponding to the time window.
     '''
-    med_time_delta = np.median(np.ediff1d(x))
+    med_time_delta = np.median(np.ediff1d(x)).value # HACK
     window_size = int(time_window / med_time_delta) # Points
     return window_size
