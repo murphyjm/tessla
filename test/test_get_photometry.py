@@ -33,7 +33,7 @@ def test_normalized_flux():
                     ntransiting=2, 
                     verbose=True)
     lc = toi.get_tess_phot()
-    assert np.abs(np.median(lc.flux) - 1) < 0.1, "Something is wrong with the flux normalization."
+    assert np.abs(np.median(lc.norm_flux)) < 0.1, "Something is wrong with the flux normalization."
 
 def test_no_data_available():
     '''

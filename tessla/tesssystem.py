@@ -71,6 +71,10 @@ class TessSystem:
         # Isolate the lightkurve objects that we want based on the mask above and download the data.
         collection = search_result[mask].download_all()
         assert collection is not None, "Trouble downloading the data"
+        if self.verbose:
+            print("----------")
+            print("Data that will be used for modeling:")
+            print(search_result[mask])
         return collection
 
     def __stitch_corrector(self, lc) -> lk.lightcurve:
