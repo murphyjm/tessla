@@ -177,7 +177,7 @@ class TessSystem:
         
         return self.all_transits_mask
 
-    def __sg_smoothing(self, window_size, positive_outliers_only=False, max_iters=10, sigma_thresh=3):
+    def __sg_smoothing(self, positive_outliers_only=False, max_iters=10, sigma_thresh=3):
         '''
         Before using a GP to flatten the light curve, remove outliers using a Savitzky-Golay filter.
         '''
@@ -187,11 +187,11 @@ class TessSystem:
             # import pdb; pdb.set_trace()
             # HACK
             norm_flux_prime = np.interp(self.lc.time.value, self.lc.time[m].value, self.lc.norm_flux[m].value)
-            if (window_size % 2) == 0:
+            if (self.sg_window_size % 2) == 0:
                 if self.verbose:
-                    print(f"Must use an odd window size. Changing window size from {window_size} to {window_size + 1}.")
-                window_size += 1
-            smooth = savgol_filter(norm_flux_prime, window_size, polyorder=3)
+                    print(f"Must use an odd window size. Changing window size from {self.sg_window_size} to {self.sg_window_size + 1}.")
+                self.sg_window_size += 1
+            smooth = savgol_filter(norm_flux_prime, self.sg_window_size, polyorder=3)
             resid = self.lc.norm_flux - smooth
             sigma = np.sqrt(np.mean(resid ** 2))
             m0 = np.abs(resid) < sigma_thresh * sigma
@@ -209,7 +209,7 @@ class TessSystem:
             m = m0
         
         # Don't remove in-transit data.
-        m &= ~self.all_transits_mask
+        m = ~(~m & ~self.all_transits_mask) # TODO: Why does this work?
         if self.verbose:
             print(f"{len(self.lc.time) - m.sum()} {sigma_thresh}-sigma outliers identified.")
 
@@ -234,7 +234,7 @@ class TessSystem:
         ----------
 
         '''
-        window_size = time_delta_to_data_delta(self.lc.time, time_window=time_window)
-        sg_outlier_mask = self.__sg_smoothing(window_size, positive_outliers_only=positive_outliers_only, max_iters=max_iters, sigma_thresh=sigma_thresh)
-        if self.plotting:
-            sg_smoothing_plot(self)
+        self.sg_window_size = time_delta_to_data_delta(self.lc.time, time_window=time_window)
+        self.__sg_smoothing(positive_outliers_only=positive_outliers_only, max_iters=max_iters, sigma_thresh=sigma_thresh)
+        # if self.plotting:
+        #     sg_smoothing_plot(self, window_size)
