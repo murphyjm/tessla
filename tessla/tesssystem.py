@@ -32,9 +32,11 @@ class TessSystem:
         self.mission = mission
         self.cadence = cadence
         
-        self.n_transiting = n_transiting
+        # Planet-related attributes
+        self.n_transiting = n_transiting # Should get rid of this attribute eventually, and just go by the length of the dictionary self.transiting_planets.
         self.n_keplerians = n_transiting
         self.transiting_planets = {}
+        self.all_transits_mask = None
 
         self.bjd_ref = bjd_ref
         self.phot_gp_kernel = phot_gp_kernel
@@ -58,6 +60,7 @@ class TessSystem:
         Add a transiting planet to the TessSystem object.
         '''
         self.transiting_planets[planet.pl_letter] = planet
+        self.n_transiting = len(self.transiting_planets)
     
     def remove_transiting_planet(self, pl_letter):
         '''
@@ -184,8 +187,7 @@ class TessSystem:
         m = np.ones(len(self.lc.time), dtype=bool)
         
         for i in range(max_iters):
-            # import pdb; pdb.set_trace()
-            # HACK
+            # HACK: Why is this a hack? I forget...
             norm_flux_prime = np.interp(self.lc.time.value, self.lc.time[m].value, self.lc.norm_flux[m].value)
             if (self.sg_window_size % 2) == 0:
                 if self.verbose:
@@ -209,7 +211,7 @@ class TessSystem:
             m = m0
         
         # Don't remove in-transit data.
-        m = ~(~m & ~self.all_transits_mask) # TODO: Why does this work?
+        m = ~(~m & ~self.all_transits_mask) # Some bitwise operator kung-fu, but it makes sense.
         if self.verbose:
             print(f"{len(self.lc.time) - m.sum()} {sigma_thresh}-sigma outliers identified.")
 
@@ -234,7 +236,9 @@ class TessSystem:
         ----------
 
         '''
+        if self.all_transits_mask is None and self.n_transiting > 0 and self.verbose:
+            print("Warning: No transit mask has been created, so this initial outlier removal step may flag in-transit data as outliers.")
+        if self.n_transiting != len(self.transiting_planets):
+            print("Warning: The number ")
         self.sg_window_size = time_delta_to_data_delta(self.lc.time, time_window=time_window)
         self.__sg_smoothing(positive_outliers_only=positive_outliers_only, max_iters=max_iters, sigma_thresh=sigma_thresh)
-        # if self.plotting:
-        #     sg_smoothing_plot(self, window_size)
