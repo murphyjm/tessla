@@ -1,11 +1,27 @@
+# Core packages
 import os
 import numpy as np
 import pandas as pd
 import lightkurve as lk
+
+# Data utils
 from tessla.data_utils import time_delta_to_data_delta
 from scipy.signal import savgol_filter
 
-from tessla.plotting_utils import sg_smoothing_plot
+# Enables sampling with multiple cores.
+import multiprocessing as mp
+# mp.set_start_method("fork") # Add this at the start of the sampling portion of this script.
+
+# Plotting utils
+from tessla.plotting_utils import plot_periodogram
+
+# Exoplanet, pymc3, theano imports. 
+import exoplanet as xo
+import pymc3_ext as pmx
+import theano
+theano.config.gcc.cxxflags = "-Wno-c++11-narrowing" # Not exactly sure what this flag change does.
+import aesara_theano_fallback.tensor as tt
+from celerite2.theano import terms, GaussianProcess
 
 class TessSystem:
     '''
@@ -47,10 +63,13 @@ class TessSystem:
         self.flux_origin = flux_origin
 
         # Organize the output directory structure
-        save_dir_prefix = ''
-        if output_dir is not None:
-            save_dir_prefix = output_dir
-        phot_out_dir = os.path.join(save_dir_prefix, 'photometry')
+        if output_dir is None:
+            self.output_dir = self.name
+        if not os.path.isdir(self.output_dir):
+            os.makedirs(self.output_dir)
+        
+        # Sub-directory for photometry
+        phot_out_dir = os.path.join(self.output_dir, 'photometry')
         if not os.path.isdir(phot_out_dir):
             os.makedirs(phot_out_dir) # TODO: Some sort of warning re: overwriting.
         self.phot_dir = phot_out_dir
@@ -215,10 +234,7 @@ class TessSystem:
         if self.verbose:
             print(f"{len(self.lc.time) - m.sum()} {sigma_thresh}-sigma outliers identified.")
 
-        # Should these be attributes or just returned by this function?
         self.sg_outlier_mask = m
-        self.sg_smoothed_flux = smooth
-
         return self.sg_outlier_mask
 
     def initial_outlier_removal(self, positive_outliers_only=False, max_iters=10, sigma_thresh=3, time_window=1):
@@ -242,3 +258,47 @@ class TessSystem:
             print("Warning: The number ")
         self.sg_window_size = time_delta_to_data_delta(self.lc.time, time_window=time_window)
         self.__sg_smoothing(positive_outliers_only=positive_outliers_only, max_iters=max_iters, sigma_thresh=sigma_thresh)
+
+    def oot_periodogram(self, min_per=1, max_per=50, samples_per_peak=1000, plot=True, **kwargs):
+        '''
+        Use a LS periodogram of the out-of-transit flux to estimate the stellar rotation period.
+
+        Args
+        -----
+        min_per (float): Minimum period in days to use for periodogram.
+        max_per (float): Maximum period in days to use for periodogram.
+        samples_per_peak (float): Number of samples to generate per peak. 
+        plot (bool): Plot the periodogram if true.
+        **kwargs (unpacked dictionary): Keyword arguments to send to plot_periodogram().
+
+        Returns
+        -----
+        self.rot_per (float): Estimated rotation period of the star based on the OoT photometry. Peak of the periodogram.
+        (fig, ax) (tuple): Figure and axes objects of the plot. Both None if plot=False.
+        '''
+        oot_mask = self.sg_outlier_mask & ~self.all_transits_mask
+        xo_ls = xo.estimators.lomb_scargle_estimator(self.lc.time[oot_mask].value, self.lc.norm_flux[oot_mask].value, self.lc.norm_flux_err[oot_mask].value, 
+                                                    min_period=min_per, max_period=max_per, samples_per_peak=samples_per_peak)
+        try:
+            peak = xo_ls['peaks'][0]
+            rot_per_guess = peak['period']
+            self.rot_per = rot_per_guess
+        except IndexError:
+            print("There were no peaks detected in the LS periodogram of the OoT data.")
+            self.rot_per = None
+
+        fig, ax = None, None
+        if plot:
+            fig, ax = plot_periodogram(self.output_dir, f"{self.name} OoT Photometry LS Periodogram", 
+                        xo_ls, 
+                        {planet.pl_letter:planet.per for planet in self.transiting_planets.values()}, 
+                        verbose=self.verbose,
+                        **kwargs) # What to do with figure and ax that is returned?
+        return self.rot_per, (fig, ax)
+
+    def flatten_light_curve(self, sigma_thresh=7):
+        '''
+        Produce MAP fit of the photometry data, iteratively removing outliers until convergence to produce the flattened light curve.
+        Will then extract the flattened data around each transit to produce a model of just the transits themselves to use during sampling. This should hopefully speedup sampling.
+        '''
+        pass

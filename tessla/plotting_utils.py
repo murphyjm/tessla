@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 import os
 import numpy as np
-from scipy.signal import savgol_filter
+from scipy.signal import savgol_filter, find_peaks
 
 def sg_smoothing_plot(toi):
     '''
@@ -41,3 +41,75 @@ def sg_smoothing_plot(toi):
     
     if toi.verbose:
         print(f"SG smoothing plots saved to {out_dir}")
+
+
+def plot_periodogram(out_dir, title, xo_ls, planet_letter_per_dict, label_peaks=True, peak_thresh=1.0, verbose=True):
+    '''
+    Plot a periodogram given data and some plot hyperparameters.
+
+    Args
+    -----
+    periodogram_dir (str): Output directory for where to save the plot.
+    title (str): Title for the plot
+    xo_ls (exoplanet.estimators.lomb_scargle_estimator): LS periodogram object from exoplanet. 
+    planet_letter_per_dict (dict): e.g., {"b": 22.81, "c": 30.5} Dictionary with keys being planet letters and values being their periods.
+    label_peaks (bool): Default=True. If True, label peaks in LS power that rise above the FAP level specified by peak_thresh.
+    peak_thresh (float): Default=1.0. If find_peaks=True, use this as the FAP percent threshold above which to label the peaks. Note: 1.0 == FAP level of 1%. 
+    verbose (bool): If verbose, output print statements.
+    Returns
+    -----
+    fig, ax: The figure and axis objects of the plot.
+    '''
+    fig, ax = plt.subplots()
+
+    # Plot the periodogram
+    freq, power = xo_ls['periodogram']
+    periods = 1/freq
+    ax.plot(periods, power, 'k', lw=0.5)
+
+    # Label the periods of transiting planets.
+    for pl_letter, per in planet_letter_per_dict.items():
+        ax.axvline(per, label=f"Planet {pl_letter}, $P =$ {per:.2f} d", zorder=0)
+    
+    # Label the highest peak and its first harmonic
+    top_peak_period = periods[np.argmax(power)]
+    ax.axvline(top_peak_period, alpha=0.3, lw=5, color='purple', label=f"Highest peak, $P =$ {top_peak_period:.2f} d")
+    ax.axvline(top_peak_period/2, alpha=0.3, lw=5, color='gray', label=f"Highest peak harmonic, $P =$ {top_peak_period/2:.2f} d")
+
+    # Plot the false alarm probabilities
+    ls = xo_ls['ls'] # Extract the astropy periodogram object
+    fap_point01_percent = ls.false_alarm_level(0.0001) # 0.01 % level
+    fap_point1_percent = ls.false_alarm_level(0.001) # 0.1 % level
+    fap_1percent = ls.false_alarm_level(0.01) # 1 % level
+    fap_10percent = ls.false_alarm_level(0.1) # 10 % level
+    for fap,level,linestyle in zip([fap_point01_percent, fap_point1_percent, fap_1percent, fap_10percent], ['0.01%', '0.1%', '1%', '10%'], ['-', '--', '-.', ':']):
+        ax.axhline(fap, label=f'FAP {level} level', ls=linestyle)
+
+    # Optionally label periodogram peaks that rise above peak_thresh (which is given in units of FAP percentage! 
+    # i.e., peak_thresh=1 corresponds to the FAP 1% level.
+    if label_peaks:
+        peak_inds, peak_props = find_peaks(power, height=float(ls.false_alarm_level(peak_thresh * 1e-2)))
+        
+        # Sort the peak periods according to highest to lowest power.
+        peak_periods = periods[peak_inds]
+        sorted_inds = np.argsort(peak_props['peak_heights'])[-5:]
+        peak_heights = peak_props['peak_heights'][sorted_inds]
+        peak_periods = peak_periods[sorted_inds]
+        for i,per in enumerate(peak_periods):
+            ax.text(per + per*0.05, peak_heights[i], f"$P =$ {per:.1f} d", fontsize=12)
+
+    # Plot housekeeping
+    ax.set_xlabel("Period [days]")
+    ax.set_ylabel("LS power")
+    ax.legend(bbox_to_anchor=(1, 1), fontsize=12)
+    ax.set_title(title)
+
+    out_dir = os.path.join(out_dir, 'periodograms')
+    if not os.path.isdir(out_dir):
+        os.makedirs(out_dir)
+    fig.savefig(os.path.join(out_dir, f'{title}_ls_periodogram.png'), bbox_inches='tight', dpi=300)
+    
+    if verbose:
+        print(f"Periodogram plot saved to {out_dir}")
+
+    return fig, ax
