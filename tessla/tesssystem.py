@@ -29,8 +29,8 @@ class TessSystem:
     '''
     def __init__(self, 
                 name, # CPS ID or common name if not in Jump.
-                tic=None, 
-                toi=None, 
+                tic=None, # TIC ID
+                toi=None, # TOI Number
                 mission='TESS', # Only use TESS data by default. Could also specify other missions like "Kepler" or "all".
                 cadence=120, # By default, extract the 2-minute cadence data, as opposed to the 20 s cadence, if both are available for a TOI.
                 flux_origin='sap_flux', # By default, use the SAP flux. Can also specify "pdcsap_flux" but this may not be available for all sectors.
@@ -39,9 +39,9 @@ class TessSystem:
                 bjd_ref=2457000, # BJD offset
                 phot_gp_kernel='activity', # What GP kernel to use to flatten the light curve. 
                                             # Options are: ['activity', 'exp_decay', 'rotation']. Activity is exp_decay + rotation. See celerite2 documentation.
-                verbose=True,
-                plotting=True,
-                output_dir=None) -> None:
+                verbose=True, # Print out messages
+                plotting=True, # Create plots as you go
+                output_dir=None) -> None: # Output directory. Will default to CPS Name if non is provided.
         self.name = name
         self.tic = tic
         self.toi = toi
@@ -93,6 +93,10 @@ class TessSystem:
         
         Use SAP flux by default, but can specify to use PDCSAP flux instead, 
             though PDCSAP flux might not be available for all sectors.
+        
+        Returns
+        ----------
+        lc (lk.lightcurve): Stitched, normalized, and cleaned light curve object.
         '''
         # Download the photometry
         collection = self.__download_tess_phot()
@@ -117,7 +121,12 @@ class TessSystem:
             I.e., don't combine a sector of 30-min cadence FFI data with a 2-min cadence light curve. 
             Could adjust this in the future, but strict use of same cadence data for now.
 
-        Returns: The collection of lk.Light
+        Args
+        ----------
+
+        Returns
+        ----------
+        The collection of lk.Light
         '''
         search_result = lk.search_lightcurve(f"TIC {self.tic}")
         if self.verbose:
@@ -144,6 +153,14 @@ class TessSystem:
     def __stitch_corrector(self, lc) -> lk.lightcurve:
         '''
         Corrector function to be passed to lk.LightCurveCollection.stitch().
+
+        Args
+        ----------
+        lc (lk.lightcurve): Lightcurve object to be cleaned/normalized.
+
+        Returns
+        ----------
+        lc (lk.lightcurve): The cleaned and normalized light curve to be stitched together.
         '''
         # Clean the data
         lc = lc.remove_nans().normalize().remove_outliers()
@@ -250,7 +267,7 @@ class TessSystem:
 
         Returns
         ----------
-
+        
         '''
         if self.all_transits_mask is None and self.n_transiting > 0 and self.verbose:
             print("Warning: No transit mask has been created, so this initial outlier removal step may flag in-transit data as outliers.")
@@ -259,7 +276,7 @@ class TessSystem:
         self.sg_window_size = time_delta_to_data_delta(self.lc.time, time_window=time_window)
         self.__sg_smoothing(positive_outliers_only=positive_outliers_only, max_iters=max_iters, sigma_thresh=sigma_thresh)
 
-    def oot_periodogram(self, min_per=1, max_per=50, samples_per_peak=1000, plot=True, **kwargs):
+    def oot_periodogram(self, min_per=1, max_per=50, samples_per_peak=1000, **kwargs):
         '''
         Use a LS periodogram of the out-of-transit flux to estimate the stellar rotation period.
 
@@ -288,7 +305,7 @@ class TessSystem:
             self.rot_per = None
 
         fig, ax = None, None
-        if plot:
+        if self.plotting:
             fig, ax = plot_periodogram(self.output_dir, f"{self.name} OoT Photometry LS Periodogram", 
                         xo_ls, 
                         {planet.pl_letter:planet.per for planet in self.transiting_planets.values()}, 
