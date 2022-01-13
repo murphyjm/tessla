@@ -1,8 +1,11 @@
 # Core packages
 import os
+from exoplanet import light_curves
+from lightkurve import lightcurve
 import numpy as np
 import pandas as pd
 import lightkurve as lk
+from pymc3.distributions.bound import Bound
 
 # Data utils
 from tessla.data_utils import time_delta_to_data_delta
@@ -17,6 +20,7 @@ from tessla.plotting_utils import plot_periodogram
 
 # Exoplanet, pymc3, theano imports. 
 import exoplanet as xo
+import pymc3 as pm
 import pymc3_ext as pmx
 import theano
 theano.config.gcc.cxxflags = "-Wno-c++11-narrowing" # Not exactly sure what this flag change does.
@@ -34,6 +38,7 @@ class TessSystem:
                 mission='TESS', # Only use TESS data by default. Could also specify other missions like "Kepler" or "all".
                 cadence=120, # By default, extract the 2-minute cadence data, as opposed to the 20 s cadence, if both are available for a TOI.
                 flux_origin='sap_flux', # By default, use the SAP flux. Can also specify "pdcsap_flux" but this may not be available for all sectors.
+                star=None, # Star object containing stellar properties
                 n_transiting=1, # Number of transiting planets
                 n_keplerians=None, # Number of Keplerian signals to include in models of the RVs. This will include transiting planets and any potentially non-transiting planet signals.
                 bjd_ref=2457000, # BJD offset
@@ -42,11 +47,15 @@ class TessSystem:
                 verbose=True, # Print out messages
                 plotting=True, # Create plots as you go
                 output_dir=None) -> None: # Output directory. Will default to CPS Name if non is provided.
+        
+        # System-level attributes
         self.name = name
         self.tic = tic
         self.toi = toi
         self.mission = mission
         self.cadence = cadence
+        self.flux_origin = flux_origin
+        self.star = star
         
         # Planet-related attributes
         self.n_transiting = n_transiting # Should get rid of this attribute eventually, and just go by the length of the dictionary self.transiting_planets.
@@ -58,9 +67,6 @@ class TessSystem:
         self.phot_gp_kernel = phot_gp_kernel
         self.verbose = verbose
         self.plotting = plotting
-
-       # Default flux origin to use. SAP flux used by default.
-        self.flux_origin = flux_origin
 
         # Organize the output directory structure
         if output_dir is None:
@@ -86,6 +92,12 @@ class TessSystem:
         Remove a transiting planet.
         '''
         return self.transiting_planets.pop(pl_letter)
+
+    def add_star_props(self, star):
+        '''
+        Add star properties.
+        '''
+        self.star = star
 
     def get_tess_phot(self) -> lk.LightCurve:
         '''
@@ -313,9 +325,154 @@ class TessSystem:
                         **kwargs) # What to do with figure and ax that is returned?
         return self.rot_per, (fig, ax)
 
-    def flatten_light_curve(self, sigma_thresh=7):
+    def __get_exp_decay_kernel(self):
+        '''
+        Create an exponentially-decaying SHOTerm GP kernel.
+        '''
+        sigma_dec_gp = pm.InverseGamma("sigma_dec_gp", alpha=3.0, beta=2*np.median(self.lc.norm_flux_err[self.map_phot_model_mask]))
+        log_sigma_dec_gp = pm.Normal("log_sigma_dec_gp", mu=0., sigma=10)
+        log_rho_gp = pm.Normal("log_rho_gp", mu=np.log(10), sigma=10)
+        kernel = terms.SHOTerm(sigma=tt.exp(log_sigma_dec_gp), rho=tt.exp(log_rho_gp), Q=1/2.)
+        noise_params = [sigma_dec_gp, log_sigma_dec_gp, log_rho_gp]
+        return noise_params, kernel
+
+    def __get_rotation_kernel(self):
+        '''
+        Create a rotation term for the GP kernel.
+        '''
+        sigma_rot_gp = pm.InverseGamma("sigma_rot_gp", alpha=3.0, beta=2*np.median(self.lc.norm_flux_err[self.map_phot_model_mask]))
+        log_prot = pm.Normal("log_prot", mu=np.log(self.rot_per), sd=np.log(5))
+        prot = pm.Deterministic("prot", tt.exp(log_prot))
+        log_Q0 = pm.Normal("log_Q0", mu=0, sd=2)
+        log_dQ = pm.Normal("log_dQ", mu=0, sd=2)
+        f = pm.Uniform("f", lower=0.01, upper=1)
+        kernel = terms.RotationTerm(sigma=sigma_rot_gp, period=prot, Q0=tt.exp(log_Q0), dQ=tt.exp(log_dQ), f=f)
+        noise_params = [sigma_rot_gp, log_prot, prot, log_Q0, log_dQ, f]
+
+        return noise_params, kernel
+
+    def __build_full_phot_model(self, start=None, n_eval_points=1000):
+        '''
+        Build the photometric model used to flatten the light curve.
+        '''
+        with pm.Model() as model:
+            '''
+            TODO: Read the parameters of the priors from a .json file instead of hardcoding?
+            '''
+            # Parameters for stellar properties
+            mean = pm.Normal("mean", mu=0.0, sd=10.0)
+            u = xo.QuadLimbDark("u")
+            xo_star = xo.LimbDarkLightCurve(u)
+            star_params = [mean, u]
+
+            # Stellar parameters from isoclassify
+            assert self.star is not None, "Missing stellar properties from spectroscopy and/or isochrone fitting."
+            BoundedNormal = pm.Bound(pm.Normal, lower=0, upper=3)
+            mstar = BoundedNormal("mstar", mu=self.star.mstar, sd=self.star.mstar_err)
+            rstar = BoundedNormal("rstar", mu=self.star.rstar, sd=self.star.rstar_err)
+
+            # Orbital parameters for the transiting planets
+            assert all([planet.bjd_ref == self.bjd_ref for planet in self.transiting_planets]), "Not all of the transiting planets use the same BJD reference date as the TOI object so the t0 value will be incorrect."
+            t0 = pm.Normal("t0", mu=np.array([planet.t0 for planet in self.transiting_planets]), sd=1, shape=self.n_transiting)
+            log_period = pm.Normal("log_period", mu=np.log(np.array([planet.per for planet in self.transiting_planets])), sd=1, shape=self.n_transiting)
+            period = pm.Deterministic("period", tt.exp(log_period))
+
+            # Fit in terms of transit depth (assume b < 1)
+            b = pm.Uniform("b", lower=0, upper=1, shape=self.n_transiting)
+            log_depth = pm.Normal("log_depth", mu=np.log(1e-3 * np.array([planet.depth for planet in self.transiting_planets])), sigma=2.0, shape=self.n_transiting)
+            ror = pm.Deterministic("ror", xo_star.get_ror_from_approx_transit_depth(1e-3 * tt.exp(log_depth), b))
+            r_pl = pm.Deterministic("r_pl", ror * rstar)
+
+            # Eccentricity parameterization and prior
+            ecs = pmx.UnitDisk("ecs", shape=(self.n_transiting, self.n_transiting), testval=0.01 * np.ones((self.n_transiting, self.n_transiting)))
+            ecc = pm.Deterministic("ecc", tt.sum(ecs ** 2, axis=0))
+            omega = pm.Deterministic("omega", tt.arctan2(ecs[1], ecs[0]))
+            xo.eccentricity.vaneylen19("ecc_prior", multi=True if self.n_transiting > 1 else False, shape=self.n_transiting, observed=ecc)
+            
+            # Light curve jitter
+            log_sigma_lc = pm.Normal("log_sigma_lc", mu=np.log(np.median(self.lc.norm_flux_err[self.map_phot_model_mask])), sd=10)
+
+            # Orbit model
+            orbit = xo.orbits.KeplerianOrbit(r_star=rstar, m_star=mstar, period=period, t0=t0, b=b, ecc=ecc, omega=omega)
+
+            # Light curves
+            light_curves = xo_star.get_light_curve(orbit=orbit, r=r_pl, t=self.lc.time[self.map_phot_model_mask].value, texp=self.cadence/60/60/24) * 1e-3 # Converts self.cadence to days from seconds.
+            light_curve = tt.sum(light_curves, axis=-1) + mean
+            resid = self.lc.norm_flux[self.map_phot_model_mask] - light_curve
+
+            # Build the GP kernel
+            gp_params = []
+            kernel = None
+            if self.phot_gp_kernel == 'exp_decay' or self.phot_gp_kernel == 'activity':
+                exp_decay_params, exp_decay_kernel = self.__get_exp_decay_kernel()
+                gp_params.append(exp_decay_params)
+                kernel += exp_decay_kernel
+            if self.phot_gp_kernel == 'rotation' or self.phot_gp_kernel == 'activity':
+                rotation_params, rotation_kernel = self.__get_rotation_kernel()
+                gp_params.append(rotation_params)
+                kernel += rotation_kernel
+
+            # Compute the GP model for the light curve
+            gp = GaussianProcess(kernel, t=self.lc.time[self.map_phot_model_mask].value, yerr=tt.exp(log_sigma_lc))
+            gp.marginal("gp", observed=resid)
+
+            # Compute and save the phased light curve models
+            phase_lc = np.linspace(-0.3, 0.3, n_eval_points)
+            lc_phase_pred = pm.Deterministic("lc_pred", 1e3 * xo_star.get_light_curve(orbit=orbit, r=r_pl, t0=t0 + phase_lc, texp=self.cadence/60/60/24)[..., 0],)
+
+            # Perform the MAP fitting
+            if start is None:
+                start = model.test_point
+            # Order of parameters to be optimized is a bit arbitrary
+            map_soln = pmx.optimize(start=start, vars=[log_sigma_lc])
+            map_soln = pmx.optimize(start=map_soln, vars=gp_params)
+            map_soln = pmx.optimize(start=map_soln, vars=[log_depth])
+            map_soln = pmx.optimize(start=map_soln, vars=[b])
+            map_soln = pmx.optimize(start=map_soln, vars=[log_period, t0])
+            map_soln = pmx.optimize(start=map_soln, vars=[u])
+            map_soln = pmx.optimize(start=map_soln, vars=[log_depth])
+            map_soln = pmx.optimize(start=map_soln, vars=[b])
+            map_soln = pmx.optimize(start=map_soln, vars=[ecs])
+            map_soln = pmx.optimize(start=map_soln, vars=[mean])
+            map_soln = pmx.optimize(start=map_soln, vars=[log_sigma_lc])
+            map_soln = pmx.optimize(start=map_soln, vars=gp_params)
+            map_soln = pmx.optimize(start=map_soln)
+
+            extras = dict(
+                zip(
+                    ["light_curves", "gp_pred", "lc_phase_pred"],
+                    pmx.eval_in_model([light_curves, gp.predict(resid), lc_phase_pred], map_soln)
+                )
+            )
+            return model, map_soln, extras
+
+    def __mark_resid_outliers(self, sigma_thresh=7):
+        '''
+        '''
+        pass
+
+    def flatten_light_curve(self, n_eval_points=1000, sigma_thresh=7, max_iters=10):
         '''
         Produce MAP fit of the photometry data, iteratively removing outliers until convergence to produce the flattened light curve.
         Will then extract the flattened data around each transit to produce a model of just the transits themselves to use during sampling. This should hopefully speedup sampling.
         '''
-        pass
+
+        prev_map_soln = None
+        self.map_phot_model_mask = self.sg_outlier_mask # Start with the mask from the Savitzky-Golay filtering.
+
+        for i in range(max_iters):
+            
+            model, map_soln, extras = self.__build_full_phot_model(mask=self.map_phot_model_mask, start=prev_map_soln, n_eval_points=n_eval_points)
+            num_outliers = self.__mark_resid_outliers(sigma_thresh=sigma_thresh)
+            
+            if num_outliers == 0:
+                break
+
+            prev_map_soln = map_soln
+        
+        if self.verbose:
+            if i == max_iters - 1:
+                print("Maximum number of iterations reached. MAP fitting loop did not converge.")
+            print(f"MAP fitting and {sigma_thresh}-sigma outlier removal converged in {i} iterations.")
+            print(f"{np.sum(~self.map_phot_model_mask)} outliers removed.")
+        

@@ -2,6 +2,7 @@ import numpy as np
 from tessla.tesssystem import TessSystem
 
 # What color to associate with each planet in plots.
+# Can change/set these as needed.
 planet_color_dict = {
     'b':'cornflowerblue',
     'c':'orange',
