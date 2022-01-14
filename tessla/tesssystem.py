@@ -325,22 +325,22 @@ class TessSystem:
                         **kwargs) # What to do with figure and ax that is returned?
         return self.rot_per, (fig, ax)
 
-    def __get_exp_decay_kernel(self):
+    def __get_exp_decay_kernel(self, y, mask):
         '''
         Create an exponentially-decaying SHOTerm GP kernel.
         '''
-        sigma_dec_gp = pm.InverseGamma("sigma_dec_gp", alpha=3.0, beta=2*np.median(self.lc.norm_flux_err[self.map_phot_model_mask]))
+        sigma_dec_gp = pm.InverseGamma("sigma_dec_gp", alpha=3.0, beta=2*np.std(y[mask]))
         log_sigma_dec_gp = pm.Normal("log_sigma_dec_gp", mu=0., sigma=10)
         log_rho_gp = pm.Normal("log_rho_gp", mu=np.log(10), sigma=10)
         kernel = terms.SHOTerm(sigma=tt.exp(log_sigma_dec_gp), rho=tt.exp(log_rho_gp), Q=1/2.)
         noise_params = [sigma_dec_gp, log_sigma_dec_gp, log_rho_gp]
         return noise_params, kernel
 
-    def __get_rotation_kernel(self):
+    def __get_rotation_kernel(self, y, mask):
         '''
         Create a rotation term for the GP kernel.
         '''
-        sigma_rot_gp = pm.InverseGamma("sigma_rot_gp", alpha=3.0, beta=2*np.median(self.lc.norm_flux_err[self.map_phot_model_mask]))
+        sigma_rot_gp = pm.InverseGamma("sigma_rot_gp", alpha=3.0, beta=2*np.std(y[mask]))
         log_prot = pm.Normal("log_prot", mu=np.log(self.rot_per), sd=np.log(5))
         prot = pm.Deterministic("prot", tt.exp(log_prot))
         log_Q0 = pm.Normal("log_Q0", mu=0, sd=2)
@@ -348,13 +348,15 @@ class TessSystem:
         f = pm.Uniform("f", lower=0.01, upper=1)
         kernel = terms.RotationTerm(sigma=sigma_rot_gp, period=prot, Q0=tt.exp(log_Q0), dQ=tt.exp(log_dQ), f=f)
         noise_params = [sigma_rot_gp, log_prot, prot, log_Q0, log_dQ, f]
-
         return noise_params, kernel
 
-    def __build_full_phot_model(self, start=None, n_eval_points=1000):
+    def __build_full_phot_model(self, x, y, mask=None, start=None, n_eval_points=500):
         '''
         Build the photometric model used to flatten the light curve.
         '''
+        if mask is None:
+            mask = np.ones(len(x), dtype=bool)
+
         with pm.Model() as model:
             '''
             TODO: Read the parameters of the priors from a .json file instead of hardcoding?
@@ -363,7 +365,6 @@ class TessSystem:
             mean = pm.Normal("mean", mu=0.0, sd=10.0)
             u = xo.QuadLimbDark("u")
             xo_star = xo.LimbDarkLightCurve(u)
-            star_params = [mean, u]
 
             # Stellar parameters from isoclassify
             assert self.star is not None, "Missing stellar properties from spectroscopy and/or isochrone fitting."
@@ -372,53 +373,70 @@ class TessSystem:
             rstar = BoundedNormal("rstar", mu=self.star.rstar, sd=self.star.rstar_err)
 
             # Orbital parameters for the transiting planets
-            assert all([planet.bjd_ref == self.bjd_ref for planet in self.transiting_planets]), "Not all of the transiting planets use the same BJD reference date as the TOI object so the t0 value will be incorrect."
-            t0 = pm.Normal("t0", mu=np.array([planet.t0 for planet in self.transiting_planets]), sd=1, shape=self.n_transiting)
-            log_period = pm.Normal("log_period", mu=np.log(np.array([planet.per for planet in self.transiting_planets])), sd=1, shape=self.n_transiting)
+            assert all([planet.bjd_ref == self.bjd_ref for planet in self.transiting_planets.values()]), "Not all of the transiting planets use the same BJD reference date as the TOI object so the t0 value will be incorrect."
+            t0 = pm.Normal("t0", mu=np.array([planet.t0 for planet in self.transiting_planets.values()]), sd=1, shape=self.n_transiting)
+            log_period = pm.Normal("log_period", mu=np.log(np.array([planet.per for planet in self.transiting_planets.values()])), sd=1, shape=self.n_transiting)
             period = pm.Deterministic("period", tt.exp(log_period))
 
             # Fit in terms of transit depth (assume b < 1)
             b = pm.Uniform("b", lower=0, upper=1, shape=self.n_transiting)
-            log_depth = pm.Normal("log_depth", mu=np.log(1e-3 * np.array([planet.depth for planet in self.transiting_planets])), sigma=2.0, shape=self.n_transiting)
+            log_depth = pm.Normal("log_depth", mu=np.log(1e-3 * np.array([planet.depth for planet in self.transiting_planets.values()])), sigma=2.0, shape=self.n_transiting)
             ror = pm.Deterministic("ror", xo_star.get_ror_from_approx_transit_depth(1e-3 * tt.exp(log_depth), b))
             r_pl = pm.Deterministic("r_pl", ror * rstar)
 
             # Eccentricity parameterization and prior
-            ecs = pmx.UnitDisk("ecs", shape=(self.n_transiting, self.n_transiting), testval=0.01 * np.ones((self.n_transiting, self.n_transiting)))
+            ecs = pmx.UnitDisk("ecs", shape=(2, self.n_transiting), testval=0.01 * np.ones((2, self.n_transiting)))
             ecc = pm.Deterministic("ecc", tt.sum(ecs ** 2, axis=0))
             omega = pm.Deterministic("omega", tt.arctan2(ecs[1], ecs[0]))
             xo.eccentricity.vaneylen19("ecc_prior", multi=True if self.n_transiting > 1 else False, shape=self.n_transiting, observed=ecc)
             
             # Light curve jitter
-            log_sigma_lc = pm.Normal("log_sigma_lc", mu=np.log(np.median(self.lc.norm_flux_err[self.map_phot_model_mask])), sd=10)
+            log_sigma_lc = pm.Normal("log_sigma_lc", mu=np.log(np.median(y.values[mask])), sd=10)
 
             # Orbit model
             orbit = xo.orbits.KeplerianOrbit(r_star=rstar, m_star=mstar, period=period, t0=t0, b=b, ecc=ecc, omega=omega)
 
             # Light curves
-            light_curves = xo_star.get_light_curve(orbit=orbit, r=r_pl, t=self.lc.time[self.map_phot_model_mask].value, texp=self.cadence/60/60/24) * 1e-3 # Converts self.cadence to days from seconds.
+            light_curves = xo_star.get_light_curve(orbit=orbit, r=r_pl, t=x.values[mask], texp=self.cadence/60/60/24) * 1e-3 # Converts self.cadence to days from seconds.
             light_curve = tt.sum(light_curves, axis=-1) + mean
-            resid = self.lc.norm_flux[self.map_phot_model_mask] - light_curve
+            resid = y.values[mask] - light_curve
 
             # Build the GP kernel
-            gp_params = []
+            gp_params = None
             kernel = None
-            if self.phot_gp_kernel == 'exp_decay' or self.phot_gp_kernel == 'activity':
-                exp_decay_params, exp_decay_kernel = self.__get_exp_decay_kernel()
-                gp_params.append(exp_decay_params)
-                kernel += exp_decay_kernel
-            if self.phot_gp_kernel == 'rotation' or self.phot_gp_kernel == 'activity':
-                rotation_params, rotation_kernel = self.__get_rotation_kernel()
-                gp_params.append(rotation_params)
+            if self.phot_gp_kernel == 'exp_decay':
+                exp_decay_params, exp_decay_kernel = self.__get_exp_decay_kernel(y, mask)
+                gp_params = exp_decay_params
+                kernel = exp_decay_kernel
+            elif self.phot_gp_kernel == 'rotation':
+                rotation_params, rotation_kernel = self.__get_rotation_kernel(y, mask)
+                gp_params = rotation_params
+                kernel = rotation_kernel
+            elif self.phot_gp_kernel == 'activity':
+                exp_decay_params, exp_decay_kernel = self.__get_exp_decay_kernel(y, mask)
+                gp_params = exp_decay_params
+                kernel = exp_decay_kernel
+
+                rotation_params, rotation_kernel = self.__get_rotation_kernel(y, mask)
+                gp_params += rotation_params
                 kernel += rotation_kernel
 
             # Compute the GP model for the light curve
-            gp = GaussianProcess(kernel, t=self.lc.time[self.map_phot_model_mask].value, yerr=tt.exp(log_sigma_lc))
+            gp = GaussianProcess(kernel, t=x.values[mask], yerr=tt.exp(log_sigma_lc))
             gp.marginal("gp", observed=resid)
 
             # Compute and save the phased light curve models
             phase_lc = np.linspace(-0.3, 0.3, n_eval_points)
-            lc_phase_pred = pm.Deterministic("lc_pred", 1e3 * xo_star.get_light_curve(orbit=orbit, r=r_pl, t0=t0 + phase_lc, texp=self.cadence/60/60/24)[..., 0],)
+            lc_phase_pred = pm.Deterministic("lc_phase_pred", 
+                                1e3 * tt.stack(
+                                    [
+                                        xo_star.get_light_curve(
+                                            orbit=orbit, r=r_pl, t=t0[n] + phase_lc, texp=self.cadence/60/60/24)[..., n]
+                                            for n in range(self.n_transiting)
+                                    ],
+                                    axis=-1,
+                                )
+            )
 
             # Perform the MAP fitting
             if start is None:
@@ -446,33 +464,52 @@ class TessSystem:
             )
             return model, map_soln, extras
 
-    def __mark_resid_outliers(self, sigma_thresh=7):
+    def __mark_resid_outliers(self, y, old_mask, map_soln, extras, sigma_thresh=7):
         '''
+        Mark outliers and create a mask that removes them.
         '''
-        pass
+        mod = extras["gp_pred"] + np.sum(extras["light_curves"], axis=-1) + map_soln["mean"]
+        resid = y.values[old_mask] - mod
+        rms = np.sqrt(np.median(resid ** 2))
+        mask = np.abs(resid) < sigma_thresh * rms
+        return mask
 
-    def flatten_light_curve(self, n_eval_points=1000, sigma_thresh=7, max_iters=10):
+    def flatten_light_curve(self, n_eval_points=500, sigma_thresh=7, max_iters=10):
         '''
         Produce MAP fit of the photometry data, iteratively removing outliers until convergence to produce the flattened light curve.
         Will then extract the flattened data around each transit to produce a model of just the transits themselves to use during sampling. This should hopefully speedup sampling.
         '''
 
-        prev_map_soln = None
-        self.map_phot_model_mask = self.sg_outlier_mask # Start with the mask from the Savitzky-Golay filtering.
-
+        map_soln = None
+        old_mask = self.sg_outlier_mask # Start with the mask from the Savitzky-Golay filtering.
+        x, y = pd.Series(self.lc.time.value), pd.Series(self.lc.norm_flux) # Make these series objects so that we can keep track of the indices of the data that remain and be able to map their indices back on to the original dataset.
+        tot_map_outliers = 0 # Does not count outliers removed from SG filtering.
+        if self.verbose:
+            print("Entering optimization and outlier rejection loop...")
         for i in range(max_iters):
+            if self.verbose:
+                print("====================")
+                print(f"Optimation and outlier rejection iteration number {i + 1}.")
+                print("====================")
+            model, map_soln, extras = self.__build_full_phot_model(x, y, mask=old_mask, start=map_soln, n_eval_points=n_eval_points)
+            new_mask = self.__mark_resid_outliers(y, old_mask, map_soln, extras, sigma_thresh=sigma_thresh)
             
-            model, map_soln, extras = self.__build_full_phot_model(mask=self.map_phot_model_mask, start=prev_map_soln, n_eval_points=n_eval_points)
-            num_outliers = self.__mark_resid_outliers(sigma_thresh=sigma_thresh)
+            # Remove the outliers from the previous step.
+            x, y = x[old_mask], y[old_mask]
             
-            if num_outliers == 0:
+            tot_map_outliers += np.sum(~new_mask)
+            
+            if np.sum(~new_mask) == 0:
                 break
+            old_mask = new_mask
 
-            prev_map_soln = map_soln
-        
         if self.verbose:
             if i == max_iters - 1:
                 print("Maximum number of iterations reached. MAP fitting loop did not converge.")
-            print(f"MAP fitting and {sigma_thresh}-sigma outlier removal converged in {i} iterations.")
-            print(f"{np.sum(~self.map_phot_model_mask)} outliers removed.")
+            print(f"MAP fitting and {sigma_thresh}-sigma outlier removal converged in {i + 1} iterations.")
+            print(f"{tot_map_outliers} outliers removed.")
+
+        self.flat_time, self.flat_flux = x, y
+        
+        return model, map_soln, extras
         

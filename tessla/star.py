@@ -1,5 +1,3 @@
-from tesssystem import TessSystem
-
 class Star:
     '''
     Object to hold properties about the stellar characterization.
@@ -23,7 +21,7 @@ class Star:
                 jmag=None,
                 hmag=None,
                 kmag=None):
-        
+
         self.mstar = mstar
         self.mstar_err = mstar_err
         self.mstar_prov = mstar_prov
@@ -35,6 +33,7 @@ class Star:
         self.teff_prov = teff_prov
         self.feh = feh
         self.feh_err = feh_err
+        self.feh_prov = feh_prov
         self.vmag = vmag
         self.gmag = gmag
         self.jmag = jmag
