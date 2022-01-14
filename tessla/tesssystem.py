@@ -397,7 +397,7 @@ class TessSystem:
             orbit = xo.orbits.KeplerianOrbit(r_star=rstar, m_star=mstar, period=period, t0=t0, b=b, ecc=ecc, omega=omega)
 
             # Light curves
-            light_curves = xo_star.get_light_curve(orbit=orbit, r=r_pl, t=x.values[mask], texp=self.cadence/60/60/24) * 1e-3 # Converts self.cadence to days from seconds.
+            light_curves = xo_star.get_light_curve(orbit=orbit, r=r_pl, t=x.values[mask], texp=self.cadence/60/60/24) * 1e3 # Converts self.cadence to days from seconds.
             light_curve = tt.sum(light_curves, axis=-1) + mean
             resid = y.values[mask] - light_curve
 
@@ -493,7 +493,7 @@ class TessSystem:
                 print("====================")
             model, map_soln, extras = self.__build_full_phot_model(x, y, mask=old_mask, start=map_soln, n_eval_points=n_eval_points)
             new_mask = self.__mark_resid_outliers(y, old_mask, map_soln, extras, sigma_thresh=sigma_thresh)
-            
+
             # Remove the outliers from the previous step.
             x, y = x[old_mask], y[old_mask]
             
