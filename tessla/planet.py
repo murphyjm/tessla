@@ -61,3 +61,5 @@ class Planet:
         '''
         self.transit_mask = self.__create_transit_mask(time)
         return self.transit_mask
+    
+    
