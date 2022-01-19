@@ -4,3 +4,4 @@ tessla.egg-info/
 *~
 **/__pycache__/
 data/
+tessla/scraps.py

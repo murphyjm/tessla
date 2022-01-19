@@ -4,18 +4,19 @@ import string
 import numpy as np
 import pandas as pd
 import lightkurve as lk
-from astropy import units
 
 # Data utils
 from tessla.data_utils import time_delta_to_data_delta
 from scipy.signal import savgol_filter
 
 # Enables sampling with multiple cores.
-import multiprocessing as mp
+# import multiprocessing as mp
 # mp.set_start_method("fork") # Add this at the start of the sampling portion of this script.
 
 # Plotting utils
 from tessla.plotting_utils import plot_periodogram
+
+from tessla.planet import Planet
 
 # Exoplanet, pymc3, theano imports. 
 import exoplanet as xo
@@ -55,12 +56,14 @@ class TessSystem:
         self.cadence = cadence
         self.flux_origin = flux_origin
         self.star = star
+        self.toi_catalog_csv_path = '~/code/tessla/data/toi_list.csv'
         
         # Planet-related attributes
         self.n_transiting = n_transiting # Should get rid of this attribute eventually, and just go by the length of the dictionary self.transiting_planets.
         self.n_keplerians = n_transiting
         self.transiting_planets = {}
         self.all_transits_mask = None
+        self.toi_catalog = None
 
         self.bjd_ref = bjd_ref
         self.phot_gp_kernel = phot_gp_kernel
@@ -92,11 +95,62 @@ class TessSystem:
         '''
         return self.transiting_planets.pop(pl_letter)
 
+    def search_for_tois(self):
+        '''
+        Look for TOIs in the TOI catalog.
+        '''
+        catalog = pd.read_csv(self.toi_catalog_csv_path, comment='#')
+        result = catalog[catalog['TIC'] == self.tic]
+        if self.verbose:
+            print(f"Identified {len(result)} TOI(s) for TIC {self.tic}.")
+            print("----------")
+            for i,row in result.iterrows():
+                print(row)
+                print("----------")
+        self.toi_catalog = result
+    
+    def add_tois_from_catalog(self):
+        '''
+        Add TOIs from the TOI catalog.
+        '''
+        assert self.toi_catalog is not None, "No TOIs found in TOI list or you have not searched for them yet."
+
+        # HACK
+        pl_letter_mapper = {
+            '.01':'b',
+            '.02':'c',
+            '.03':'d',
+            '.04':'e',
+            '.05':'f',
+            '.06':'g'
+        }
+
+        for i,row in self.toi_catalog.iterrows():
+            pl_toi_suffix = str(row['Full TOI ID'])[-3:]
+            pl_letter = pl_letter_mapper[pl_toi_suffix]
+            planet = Planet(self, 
+                            pl_letter=pl_letter, 
+                            pl_toi_suffix=pl_toi_suffix, 
+                            per=row['Orbital Period Value'], 
+                            t0=row['Epoch Value'], 
+                            dur=row['Transit Duration Value']/24, 
+                            depth=row['Transit Depth Value'] * 1e-3)
+            self.add_transiting_planet(planet)
+        
+        self.create_transit_mask()
+
     def add_star_props(self, star):
         '''
         Add star properties.
         '''
         self.star = star
+
+    def set_phot_gp_kernel(self, kernel_name):
+        '''
+        Set the phot_gp_kernel attribute.
+        '''
+        assert kernel_name in ['exp_decay', 'activity', 'rotation'], 'That kernel name is not recognized'
+        self.phot_gp_kernel = kernel_name
 
     def get_tess_phot(self) -> lk.LightCurve:
         '''
@@ -361,7 +415,7 @@ class TessSystem:
             mask = np.ones(len(x), dtype=bool)
 
         with pm.Model() as model:
-            
+
             # Parameters for the star
             mean = pm.Normal("mean", mu=0.0, sd=10.0)
             u = xo.QuadLimbDark("u")
@@ -439,12 +493,12 @@ class TessSystem:
             map_soln = pmx.optimize(start=map_soln, vars=gp_params)
             map_soln = pmx.optimize(start=map_soln, vars=[log_ror])
             map_soln = pmx.optimize(start=map_soln, vars=[b])
-            map_soln = pmx.optimize(start=map_soln, vars=[log_rho_circ])
+            map_soln = pmx.optimize(start=map_soln, vars=[log_dur])
             map_soln = pmx.optimize(start=map_soln, vars=[log_period, t0])
             map_soln = pmx.optimize(start=map_soln, vars=[u])
             map_soln = pmx.optimize(start=map_soln, vars=[log_ror])
             map_soln = pmx.optimize(start=map_soln, vars=[b])
-            map_soln = pmx.optimize(start=map_soln, vars=[log_rho_circ])
+            map_soln = pmx.optimize(start=map_soln, vars=[log_dur])
             map_soln = pmx.optimize(start=map_soln, vars=[mean])
             map_soln = pmx.optimize(start=map_soln, vars=[log_sigma_lc])
             map_soln = pmx.optimize(start=map_soln, vars=gp_params)

@@ -1,5 +1,4 @@
 import numpy as np
-from tessla.tesssystem import TessSystem
 
 # What color to associate with each planet in plots.
 # Can change/set these as needed.
