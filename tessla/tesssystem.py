@@ -385,7 +385,7 @@ class TessSystem:
         '''
         log_sigma_dec_gp = pm.Normal("log_sigma_dec_gp", mu=0., sigma=10)
         log_rho_gp = pm.Normal("log_rho_gp", mu=np.log(10), sigma=10)
-        kernel = terms.SHOTerm(sigma=tt.exp(log_sigma_dec_gp), rho=tt.exp(log_rho_gp), Q=1/2.)
+        kernel = terms.SHOTerm(sigma=tt.exp(log_sigma_dec_gp), rho=tt.exp(log_rho_gp), Q=1/np.sqrt(2))
         noise_params = [log_sigma_dec_gp, log_rho_gp]
         return noise_params, kernel
 
@@ -393,6 +393,7 @@ class TessSystem:
         '''
         Create a rotation term for the GP kernel.
         '''
+        # TODO:
         # sigma_rot_gp = pm.InverseGamma("sigma_rot_gp", alpha=3.0, beta=2*np.std(y[mask]))
         # CONFUSED
         sigma_rot_gp = pm.InverseGamma(
@@ -565,118 +566,4 @@ class TessSystem:
         
         return model, map_soln, extras
 
-    def __build_transit_model(self, x, y, mask=None, full_map_soln=None, n_eval_points=500):
-        '''
-        Build a pymc3 model for the transits only (no GP). Assumes y is the cleaned, flattened, flux.
-        '''
-        with pm.Model() as model:
-
-            # TODO: A lot of this is copy-and-pasted from __build_full_model(). Way to consolodate? 
-            u = xo.QuadLimbDark("u")
-            xo_star = xo.LimbDarkLightCurve(u)
-
-            # Stellar parameters from isoclassify
-            assert self.star is not None, "Missing stellar properties from spectroscopy and/or isochrone fitting."
-            BoundedNormal = pm.Bound(pm.Normal, lower=0, upper=3)
-            mstar = BoundedNormal("mstar", mu=self.star.mstar, sd=self.star.mstar_err)
-            rstar = BoundedNormal("rstar", mu=self.star.rstar, sd=self.star.rstar_err)
-
-            # Orbital parameters for the transiting planets
-            assert all([planet.bjd_ref == self.bjd_ref for planet in self.transiting_planets.values()]), "Not all of the transiting planets use the same BJD reference date as the TOI object so the t0 value will be incorrect."
-            t0 = pm.Normal("t0", mu=np.array([planet.t0 for planet in self.transiting_planets.values()]), sd=1, shape=self.n_transiting)
-            log_period = pm.Normal("log_period", mu=np.log(np.array([planet.per for planet in self.transiting_planets.values()])), sd=1, shape=self.n_transiting)
-            period = pm.Deterministic("period", tt.exp(log_period))
-
-            # Fit in terms of transit depth (assume b < 1)
-            b = pm.Uniform("b", lower=0, upper=1, shape=self.n_transiting)
-            log_depth = pm.Normal("log_depth", mu=np.log(np.array([planet.depth for planet in self.transiting_planets.values()])), sigma=2.0, shape=self.n_transiting)
-            ror = pm.Deterministic("ror", xo_star.get_ror_from_approx_transit_depth(1e-3 * tt.exp(log_depth), b))
-            r_pl = pm.Deterministic("r_pl", ror * rstar)
-
-            # Eccentricity parameterization and prior
-            if not self.circular_orbit:
-                ecs = pmx.UnitDisk("ecs", shape=(2, self.n_transiting), testval=0.01 * np.ones((2, self.n_transiting)))
-                ecc = pm.Deterministic("ecc", tt.sum(ecs ** 2, axis=0))
-                omega = pm.Deterministic("omega", tt.arctan2(ecs[1], ecs[0]))
-                xo.eccentricity.vaneylen19("ecc_prior", multi=True if self.n_transiting > 1 else False, fixed=True, shape=self.n_transiting, observed=ecc)
-            else:
-                ecc = None
-                omega = None
-            # Light curve jitter
-            log_sigma_lc = pm.Normal("log_sigma_lc", mu=np.log(np.std(y.values[mask])), sd=10)
-
-            # Orbit model
-            orbit = xo.orbits.KeplerianOrbit(r_star=rstar, m_star=mstar, period=period, t0=t0, b=b, ecc=ecc, omega=omega)
-
-            # Light curves
-            light_curves = xo_star.get_light_curve(orbit=orbit, r=r_pl, t=x.values[mask], texp=self.cadence/60/60/24) * 1e3 # Converts self.cadence to days from seconds.
-
-            # Compute and save the phased light curve models
-            phase_lc = np.linspace(-0.3, 0.3, n_eval_points)
-            lc_phase_pred = 1e3 * tt.stack(
-                                    [
-                                        xo_star.get_light_curve(
-                                            orbit=orbit, r=r_pl, t=t0[n] + phase_lc, texp=self.cadence/60/60/24)[..., n]
-                                            for n in range(self.n_transiting)
-                                    ],
-                                    axis=-1,
-            )
-
-            # Perform the MAP fitting
-            start = {}
-            if full_map_soln is None:
-                start = model.test_point
-            else:
-                transit_model_params = [rv.name for rv in model.free_RVs]
-                for param in full_map_soln.keys():
-                    if param in transit_model_params:
-                        start[param] = full_map_soln[param]
-            # Order of parameters to be optimized is a bit arbitrary
-            map_soln = pmx.optimize(start=start, vars=[log_sigma_lc])
-            map_soln = pmx.optimize(start=map_soln, vars=[log_depth])
-            map_soln = pmx.optimize(start=map_soln, vars=[b])
-            map_soln = pmx.optimize(start=map_soln, vars=[log_period, t0])
-            map_soln = pmx.optimize(start=map_soln, vars=[u])
-            map_soln = pmx.optimize(start=map_soln, vars=[log_depth])
-            map_soln = pmx.optimize(start=map_soln, vars=[b])
-            if not self.circular_orbit:
-                map_soln = pmx.optimize(start=map_soln, vars=[ecs])
-            map_soln = pmx.optimize(start=map_soln, vars=[log_sigma_lc])
-            map_soln = pmx.optimize(start=map_soln)
-
-            extras = dict(
-                zip(
-                    ["light_curves", "lc_phase_pred"],
-                    pmx.eval_in_model([light_curves, lc_phase_pred], map_soln)
-                )
-            )
-            return model, map_soln, extras
-
-    def fit_data_around_transits(self, full_map_soln, n_eval_points=500, transit_bound=0.3):
-        '''
-        Using the MAP solution from the model of the full light curve, extract the flattened data immediately surrounding the transit 
-        and fit the transits. Since we're starting from the flattened flux we don't need the GP and can perform the sampling with a smaller model, 
-        hopefully speeding up the computation time.
-        '''
-        x, y = self.cleaned_time, self.cleaned_flat_flux
-
-        # Create phase-folded time arrays for each of the 
-        x_fold = np.empty((self.n_transiting, len(x)))
-        x_fold_transit_mask = np.empty((self.n_transiting, len(x)), dtype=bool)
-        for i in range(self.n_transiting):
-            letter = string.ascii_lowercase[i + 1]
-            planet = self.transiting_planets[letter]
-            x_fold[i, :] = (x - planet.t0 + 0.5 * planet.per) % planet.per - 0.5 * planet.per
-            
-            # Identify the data near each transit for each planet
-            x_fold_transit_mask[i, :] = np.abs(x_fold[i, :]) < transit_bound
-            
-        # Identify the data near a transit for any planet.
-        x_fold_all_transit_mask = x_fold_transit_mask.any(axis=0)
-        self.x_fold_all_transit_mask = x_fold_all_transit_mask
-        
-        # Fit the transit model to the data
-        model, map_soln, extras = self.__build_transit_model(x, y, mask=x_fold_all_transit_mask, full_map_soln=full_map_soln, n_eval_points=500)
-
-        return model, map_soln, extras
         
