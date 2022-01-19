@@ -180,17 +180,13 @@ class TessSystem:
         # Normalize the flux
         flux = getattr(lc, self.flux_origin)
         flux_normed = (flux.value / np.median(flux.value) - 1) * 1e3 # Puts flux in units of PPT
-        
-        # HACKY
-        if self.flux_origin == 'sap_flux':
-            flux_err = lc.sap_flux_err.value / np.median(flux.value) * 1e3   # Puts flux error in units of PPT
-        elif self.flux_origin == 'pdcsap_flux':
-            flux_err = lc.pdcsap_flux_err.value / np.median(flux.value) * 1e3   # Puts flux error in units of PPT
+        flux_normed_err = getattr(lc, f"{self.flux_origin}_err")
+        flux_normed_err = flux_normed_err.value / np.median(flux.value) * 1e3 # Puts flux error in units of PPT
         
         # Add these columns to the lightcurve object.
         lc['norm_flux'] = flux_normed # PPT
-        lc['norm_flux_err'] = flux_err # PPT # TODO: THIS IS OFF FOR SOME REASON
-
+        lc['norm_flux_err'] = flux_normed_err # PPT
+        
         lc['sector'] = lc.sector
 
         return lc
