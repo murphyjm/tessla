@@ -186,7 +186,7 @@ class TessSystem:
         # Add these columns to the lightcurve object.
         lc['norm_flux'] = flux_normed # PPT
         lc['norm_flux_err'] = flux_normed_err # PPT
-        
+
         lc['sector'] = lc.sector
 
         return lc
@@ -320,7 +320,7 @@ class TessSystem:
         if self.plotting:
             fig, ax = plot_periodogram(self.output_dir, f"{self.name} OoT Photometry LS Periodogram", 
                         xo_ls, 
-                        {planet.pl_letter:planet.per for planet in self.transiting_planets.values()}, 
+                        self.transiting_planets,
                         verbose=self.verbose,
                         **kwargs) # What to do with figure and ax that is returned?
         return self.rot_per, (fig, ax)
@@ -361,38 +361,34 @@ class TessSystem:
             mask = np.ones(len(x), dtype=bool)
 
         with pm.Model() as model:
-            '''
-            TODO: Read the parameters of the priors from a .json file instead of hardcoding?
-            '''
+            
             # Parameters for the star
             mean = pm.Normal("mean", mu=0.0, sd=10.0)
             u = xo.QuadLimbDark("u")
             xo_star = xo.LimbDarkLightCurve(u)
-            log_rho_circ = pm.Normal("log_rho_circ", mu=np.log(2.0), sd=10)
-            rho_circ = pm.Deterministic("rho_circ", tt.exp(log_rho_circ))
 
             # Orbital parameters for the transiting planets
-            # Fit transits in terms of: P, t0, Rp/R*, rho_circ (implied stellar density for circular orbit), and b.
-            assert all([planet.bjd_ref == self.bjd_ref for planet in self.transiting_planets.values()]), "Not all of the transiting planets use the same BJD reference date as the TOI object so the t0 value will be incorrect."
-            # NOTE: This list comprehension may or may not return the transiting planets in the correct order. 
-            # Dictionaries in Python > 3.7 are ordered by insertion, so I think we should be okay, but should have an assert statement somewhere to check this.
+            # This transit fitting parameterization follows the methodology in the "Quick Fits for TESS Light Curves" Exoplanet tutorial.
+            # Fit transits in terms of: P, t0, Rp/R*, transit duration (a form of stellar density), and b.
+            assert_msg = "Not all of the transiting planets use the same BJD reference date as the TOI object so the t0 value will be incorrect."
+            assert all([planet.bjd_ref == self.bjd_ref for planet in self.transiting_planets.values()]), assert_msg
             t0 = pm.Normal("t0", mu=np.array([planet.t0 for planet in self.transiting_planets.values()]), sd=1, shape=self.n_transiting)
             log_period = pm.Normal("log_period", mu=np.log(np.array([planet.per for planet in self.transiting_planets.values()])), sd=1, shape=self.n_transiting)
             period = pm.Deterministic("period", tt.exp(log_period))
             log_ror = pm.Normal("log_ror", mu=0.5 * np.log(1e-3 * np.array([planet.depth for planet in self.transiting_planets.values()])), sigma=10.0, shape=self.n_transiting)
             ror = pm.Deterministic("ror", tt.exp(log_ror))
             b = xo.distributions.ImpactParameter("b", ror=ror, shape=self.n_transiting)
-            # log_dur = pm.Normal("log_dur", mu=np.log([planet.dur for planet in self.transiting_planets.values()]), sigma=10, shape=self.n_transiting)
-            # dur = pm.Deterministic("dur", tt.exp(log_dur))
+            log_dur = pm.Normal("log_dur", mu=np.log([planet.dur for planet in self.transiting_planets.values()]), sigma=10, shape=self.n_transiting)
+            dur = pm.Deterministic("dur", tt.exp(log_dur))
             
             # Light curve jitter
             log_sigma_lc = pm.Normal("log_sigma_lc", mu=np.log(np.median(yerr.values[mask])), sd=2)
 
             # Orbit model
-            orbit = xo.orbits.KeplerianOrbit(period=period, t0=t0, b=b, ror=ror, rho_star=rho_circ)
+            orbit = xo.orbits.KeplerianOrbit(period=period, t0=t0, b=b, ror=ror, duration=dur)
 
             # Track the implied stellar density
-            # pm.Deterministic("rho_circ", orbit.rho_star)
+            pm.Deterministic("rho_circ", orbit.rho_star)
 
             # Light curves
             light_curves = xo_star.get_light_curve(orbit=orbit, r=ror, t=x.values[mask], texp=self.cadence/60/60/24) * 1e3 # Converts self.cadence to days from seconds.
@@ -421,7 +417,7 @@ class TessSystem:
 
             self.phot_gp_params = gp_params
             # Compute the GP model for the light curve
-            gp = GaussianProcess(kernel, t=x.values[mask], yerr=tt.exp(log_sigma_lc))
+            gp = GaussianProcess(kernel, t=x.values[mask], diag=yerr.values[mask]**2 + tt.exp(2 * log_sigma_lc)) # diag= is the variance of the observational model.
             gp.marginal("gp", observed=resid)
 
             # Compute and save the phased light curve models
@@ -493,7 +489,7 @@ class TessSystem:
             new_mask = self.__mark_resid_outliers(y, old_mask, map_soln, extras, sigma_thresh=sigma_thresh)
 
             # Remove the outliers from the previous step.
-            x, y = x[old_mask], y[old_mask]
+            x, y, yerr = x[old_mask], y[old_mask], yerr[old_mask]
             
             tot_map_outliers += np.sum(~new_mask)
             

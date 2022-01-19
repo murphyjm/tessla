@@ -43,7 +43,7 @@ def sg_smoothing_plot(toi):
         print(f"SG smoothing plots saved to {out_dir}")
 
 
-def plot_periodogram(out_dir, title, xo_ls, planet_letter_per_dict, label_peaks=True, peak_thresh=1.0, verbose=True):
+def plot_periodogram(out_dir, title, xo_ls, transiting_planets, label_peaks=True, peak_thresh=1.0, verbose=True):
     '''
     Plot a periodogram given data and some plot hyperparameters.
 
@@ -52,7 +52,7 @@ def plot_periodogram(out_dir, title, xo_ls, planet_letter_per_dict, label_peaks=
     periodogram_dir (str): Output directory for where to save the plot.
     title (str): Title for the plot
     xo_ls (exoplanet.estimators.lomb_scargle_estimator): LS periodogram object from exoplanet. 
-    planet_letter_per_dict (dict): e.g., {"b": 22.81, "c": 30.5} Dictionary with keys being planet letters and values being their periods.
+    transiting_planets (dict): e.g., Dictionary with keys being planet letters and values Planet objects.
     label_peaks (bool): Default=True. If True, label peaks in LS power that rise above the FAP level specified by peak_thresh.
     peak_thresh (float): Default=1.0. If find_peaks=True, use this as the FAP percent threshold above which to label the peaks. Note: 1.0 == FAP level of 1%. 
     verbose (bool): If verbose, output print statements.
@@ -68,8 +68,8 @@ def plot_periodogram(out_dir, title, xo_ls, planet_letter_per_dict, label_peaks=
     ax.plot(periods, power, 'k', lw=0.5)
 
     # Label the periods of transiting planets.
-    for pl_letter, per in planet_letter_per_dict.items():
-        ax.axvline(per, label=f"Planet {pl_letter}, $P =$ {per:.2f} d", zorder=0)
+    for pl_letter, planet in transiting_planets.items():
+        ax.axvline(planet.per, label=f"Planet {pl_letter}, $P =$ {planet.per:.2f} d", color=planet.color, zorder=0)
     
     # Label the highest peak and its first harmonic
     top_peak_period = periods[np.argmax(power)]
