@@ -6,5 +6,5 @@ setup(name='tessla',
       packages=['tessla',
                 'test'],
       scripts=['bin/foo.py'],
-      package_data={'tessla': ['data/foo.txt']},
+      package_data={'tessla': ['data/toi_list.csv']},
       )
