@@ -1,3 +1,6 @@
+import numpy as np
+from tessla.data_utils import get_density
+
 class Star:
     '''
     Object to hold properties about the stellar characterization.
@@ -10,6 +13,9 @@ class Star:
                 rstar=None,
                 rstar_err=None,
                 rstar_prov=None,
+                rhostar=None,
+                rhostar_err=None,
+                rhostar_prov=None,
                 teff=None,
                 teff_err=None,
                 teff_prov=None,
@@ -28,6 +34,21 @@ class Star:
         self.rstar = rstar
         self.rstar_err = rstar_err
         self.rstar_prov = rstar_prov
+
+        N = 1000
+        if mstar is not None and rstar is not None and rhostar is None:
+            mstar_chain = np.random.normal(mstar, mstar_err, N)
+            rstar_chain = np.random.normal(rstar, rstar_err, N)
+            rhostar_chain = get_density(mstar_chain, rstar_chain, 'solMass', 'solRad', 'g', 'cm')
+            rhostar = np.median(rhostar_chain)
+            rhostar_err = np.median(np.abs(np.quantile(rhostar_chain, [0.16, 0.84]) - rhostar))
+            assert mstar_prov == rstar_prov, "Difference provenance values for mstar and rstar"
+            rhostar_prov = mstar_prov
+        
+        self.rhostar = rhostar
+        self.rhostar_err = rhostar_err
+        self.rhosstar_prov = rhostar_prov
+
         self.teff = teff
         self.teff_err = teff_err
         self.teff_prov = teff_prov
@@ -59,3 +80,4 @@ class Star:
         self.feh = feh
         self.feh_err = feh_err
         self.feh_prov = feh_prov
+    

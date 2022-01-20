@@ -1,6 +1,6 @@
 # Core packages
 import os
-import string
+import warnings
 import numpy as np
 import pandas as pd
 import lightkurve as lk
@@ -10,8 +10,7 @@ from tessla.data_utils import time_delta_to_data_delta
 from scipy.signal import savgol_filter
 
 # Enables sampling with multiple cores.
-# import multiprocessing as mp
-# mp.set_start_method("fork") # Add this at the start of the sampling portion of this script.
+import multiprocessing as mp
 
 # Plotting utils
 from tessla.plotting_utils import plot_periodogram
@@ -26,6 +25,8 @@ import theano
 theano.config.gcc.cxxflags = "-Wno-c++11-narrowing" # Not exactly sure what this flag change does.
 import aesara_theano_fallback.tensor as tt
 from celerite2.theano import terms, GaussianProcess
+
+import arviz as az
 
 class TessSystem:
     '''
@@ -81,6 +82,12 @@ class TessSystem:
         if not os.path.isdir(phot_out_dir):
             os.makedirs(phot_out_dir) # TODO: Some sort of warning re: overwriting.
         self.phot_dir = phot_out_dir
+
+        # Sub-directory for sampling
+        phot_sampling_out_dir = os.path.join(self.output_dir, 'phot_sampling')
+        if not os.path.isdir(phot_sampling_out_dir):
+            os.makedirs(phot_sampling_out_dir)
+        self.phot_sampling_dir = phot_sampling_out_dir
 
     def add_transiting_planet(self, planet) -> None:
         '''
@@ -566,4 +573,98 @@ class TessSystem:
         
         return model, map_soln, extras
 
+    def __flat_samps_to_csv(self, model, flat_samps, chains_output_fname):
+        '''
+        HACK
+
+        Ugly hacky function to extract the concatenated chains and save them to a compressed .csv file.
+        '''
+        df_chains = pd.DataFrame()
+        for param in model.named_vars.keys():
+            if '__' in param or param == 'gp':
+                continue
+            if len(flat_samps[param].shape) > 1 and param != 'u':
+                msg = "Chains and number of transiting planets have shape mismatch."
+                assert len(self.transiting_planets) == flat_samps[param].shape[0], msg
+                for i, pl_letter in enumerate(self.transiting_planets.keys()):
+                    df_chains[f"{param}_{pl_letter}"] = flat_samps[param][i, :]
+            elif param == 'u':
+                for i in range(flat_samps[param].shape[0]):
+                    df_chains[f"u_{i}"] = flat_samps[param][i, :]
+            else:
+                df_chains[param] = flat_samps[param]
+            
+        df_chains.to_csv(chains_output_fname, index=False)
+
+    def run_sampling(self, model, map_soln, tune=6000, draws=4000, chains=8, cores=None, init_method='adapt_full', output_fname_suffix='', overwrite=False):
+        '''
+        Run the HMC sampling.
+        '''
         
+        # Enables parallel processing on Mac OS. 
+        try:
+            mp.set_start_method("fork")
+        except RuntimeError:
+            if self.verbose:
+                print("Multiprocessing context has already been set. Continuing.")
+            else:
+                pass
+        
+        # Do some output directory housekeeping
+        assert os.path.isdir(self.phot_sampling_dir), "Output directory does not exist." # This should be redundant, but just in case.
+        chains_output_fname = os.path.join(self.phot_sampling_dir, f"{self.name}_phot_chains{output_fname_suffix}.csv.bz2")
+        if not overwrite and os.path.isfile(chains_output_fname):
+            warnings.warn("Exiting before starting the sampling to avoid overwriting exisiting chains file.")
+            return None
+
+        trace_summary_output_fname = os.path.join(self.phot_sampling_dir, f'{self.name}_trace_summary{output_fname_suffix}.csv')
+        if not overwrite and os.path.isfile(trace_summary_output_fname):
+            warnings.warn("Exiting before starting the sampling to avoid overwriting exisiting trace summary file.")
+            return None
+
+        if cores is None:
+            cores = chains
+        
+        with model:
+            trace = pmx.sample(
+                            tune=tune,
+                            draws=draws,
+                            start=map_soln,
+                            chains=chains,
+                            cores=cores,
+                            return_inferencedata=True,
+                            init=init_method
+            )
+        
+        # Save the trace summary which contains convergence information
+        summary_df = az.summary(trace)
+        summary_df.to_csv(trace_summary_output_fname)
+
+        # Save the concatenated samples.
+        flat_samps =  trace.posterior.stack(sample=("chain", "draw"))
+        self.__flat_samps_to_csv(model, flat_samps, chains_output_fname)
+        self.chains_path = chains_output_fname
+        
+        return flat_samps
+
+    def add_ecc_and_omega_to_chains(self, flat_samps, chains_path, rho_circ_param_name='rho_circ'):
+        '''
+        Estimate eccentricity and omega using the photoeccentric effect.
+        '''
+
+        # Flat priors
+        ecc = np.random.uniform(0, 1, size=flat_samps[rho_circ_param_name].shape)
+        omega = np.random.uniform(-np.pi, np.pi, size=flat_samps[rho_circ_param_name].shape) # Radians
+
+        g = (1 + ecc * np.sin(omega)) / np.sqrt(1 - ecc**2)
+        rho = flat_samps[rho_circ_param_name] / g**3
+
+        log_weights = -0.5 * ((rho - self.star.rhostar) / self.star.rhostar_err) **2 # Like a chi-square likelihood
+        weights = np.exp(log_weights - np.max(log_weights))
+
+        df_chains = pd.read_csv(chains_path)
+        for i,letter in enumerate(self.transiting_planets.keys()):
+            df_chains[f"ecc_{letter}"] = ecc[i, :]
+            df_chains[f"omega_{letter}"] = omega[i, :]
+            df_chains[f"ecc_omega_weights_{letter}"] = weights[i, :]
+        df_chains.to_csv(chains_path, index=False)
