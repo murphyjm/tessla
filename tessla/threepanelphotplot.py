@@ -51,4 +51,4 @@ class ThreePanelPhotPlot:
     def __broken_three_panel_plot(self):
         '''
         '''
-        
+        pass
