@@ -31,38 +31,37 @@ def convert_negative_angles(omega):
         omega += 2 * np.pi
     return omega
 
-def get_semimajor_axis(period_samples, mstar, mstar_err):
-    '''
-    Return a in units of AU.
-    '''
-    mstar_samples = np.random.normal(mstar, mstar_err, len(period_samples))
-    period_samples /= 365.25 # Convert JD to years
-    return np.cbrt(np.square(period_samples) * mstar_samples)
-
-def get_luminosity(teff, teff_err, rstar, rstar_err, n_samples):
+'''
+TODO: Clean these functions and standardize.
+'''
+def get_luminosity(teff_samples, rstar_samples):
     '''
     Return L in units of L_sun
     '''
     TEFF_SOL = 5772 # K.
-    rstar_samples = np.random.normal(rstar, rstar_err, n_samples)
-    teff_samples = np.random.normal(teff/TEFF_SOL, teff_err/TEFF_SOL, n_samples)
+    teff_samples /= TEFF_SOL
     return np.square(rstar_samples) * np.power(teff_samples, 4)
 
-def get_sinc(teff, teff_err, rstar, rstar_err, a_samples):
+def get_semimajor_axis(period_samples, mstar_samples):
+    '''
+    Return a in units of AU.
+    '''
+    period_samples /= 365.25 # Convert JD to years
+    return np.cbrt(np.square(period_samples) * mstar_samples)
+
+def get_sinc(teff_samples, rstar_samples, a_samples):
     '''
     Return insolation flux in units of S_earth
     '''
-    luminosity_samples = get_luminosity(teff, teff_err, rstar, rstar_err, len(a_samples))
+    luminosity_samples = get_luminosity(teff_samples, rstar_samples)
     return luminosity_samples / np.square(a_samples)
 
-def get_aor(a_samples, r_star_samples):
-    return (a_samples.values * units.AU).to(units.R_sun).value / r_star_samples
+def get_aor(a_samples, rstar_samples):
+    return (a_samples.values * units.AU).to(units.R_sun).value / rstar_samples
 
-def get_teq(a_samples, teff, teff_err, r_star_samples, bond_albedo=0):
+def get_teq(a_samples, teff_samples, rstar_samples, bond_albedo=0):
     '''
     Return planet equilibrium temperature in units of Kelvin
     '''
-    n_samples = len(r_star_samples)
-    teff_samples = np.random.normal(teff, teff_err, n_samples)
     a_samples_sun = (a_samples.values * units.AU).to(units.R_sun).value
-    return teff_samples * (1 - bond_albedo)**(0.25) * np.sqrt(r_star_samples / (2 * a_samples_sun))
+    return teff_samples * (1 - bond_albedo)**(0.25) * np.sqrt(rstar_samples / (2 * a_samples_sun))

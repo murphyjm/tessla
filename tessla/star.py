@@ -36,6 +36,7 @@ class Star:
         self.rstar_prov = rstar_prov
 
         N = 1000
+        # If given stellar mass and radius but no density, compute it
         if mstar is not None and rstar is not None and rhostar is None:
             mstar_chain = np.random.normal(mstar, mstar_err, N)
             rstar_chain = np.random.normal(rstar, rstar_err, N)
@@ -44,7 +45,7 @@ class Star:
             rhostar_err = np.median(np.abs(np.quantile(rhostar_chain, [0.16, 0.84]) - rhostar))
             assert mstar_prov == rstar_prov, "Difference provenance values for mstar and rstar"
             rhostar_prov = mstar_prov
-        
+
         self.rhostar = rhostar
         self.rhostar_err = rhostar_err
         self.rhosstar_prov = rhostar_prov
