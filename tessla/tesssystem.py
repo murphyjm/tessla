@@ -6,7 +6,7 @@ import pandas as pd
 import lightkurve as lk
 
 # Data utils
-from tessla.data_utils import time_delta_to_data_delta, get_semimajor_axis, get_sinc, get_aor, get_teq
+from tessla.data_utils import time_delta_to_data_delta, convert_negative_angles, get_semimajor_axis, get_sinc, get_aor, get_teq
 from scipy.signal import savgol_filter
 
 # Enables sampling with multiple cores.
@@ -453,7 +453,7 @@ class TessSystem:
             pm.Deterministic("rho_circ", orbit.rho_star)
 
             # Light curves
-            light_curves = xo_star.get_light_curve(orbit=orbit, r=ror, t=x.values[mask], texp=self.cadence/60/60/24) * 1e3 # Converts self.cadence to days from seconds.
+            light_curves = xo_star.get_light_curve(orbit=orbit, r=ror, t=x.values[mask], texp=self.cadence/60/60/24) * 1e3 # Converts self.cadence from seconds to days.
             light_curve = tt.sum(light_curves, axis=-1) + mean
             resid = y.values[mask] - light_curve
 
@@ -669,18 +669,20 @@ class TessSystem:
             df_chains[f"ecc_omega_weights_{letter}"] = weights[i, :]
         df_chains.to_csv(self.chains_path, index=False)
 
-    def add_derived_quantities_to_chains(self):
+    def add_derived_quantities_to_chains(self, chains_path):
         '''
         Add some useful derived quantities to the chains.
         '''
-        df_chains = pd.read_csv(self.chains_path)
+        df_chains = pd.read_csv(chains_path)
         N = len(df_chains)
         mstar_samples = np.random.normal(self.mstar, self.mstar_err, N)
         rstar_samples = np.random.normal(self.rstar, self.rstar_err, N)
         teff_samples = np.random.normal(self.teff, self.teff_err, N)
         for letter in self.transiting_planets.keys():
+            df_chains[f"omega_folded_{letter}"] = convert_negative_angles(df_chains[f"omega_{letter}"])
+            df_chains[f"omega_folded_deg_{letter}"] = df_chains[f"omega_folded_{letter}"].values * 180 / np.pi # Convert omega from radians to degrees to have for convenience
             df_chains[f"a_{letter}"] = get_semimajor_axis(df_chains[f"period_{letter}"], mstar_samples)
             df_chains[f"aor_{letter}"] = get_aor(df_chains[f"a_{letter}"], rstar_samples)
-            df_chains[f"sinc_{letter}"] = get_sinc(teff_samples, rstar_samples, df_chains[f"a_{letter}"])
-            df_chains[f"teq_{letter}"] = get_teq(df_chains[f"a_{letter}"], teff_samples, rstar_samples)
-        df_chains.to_csv(self.chains_path, index=False)
+            df_chains[f"sinc_{letter}"] = get_sinc(df_chains[f"a_{letter}"], teff_samples, rstar_samples)
+            df_chains[f"teq_{letter}"] = get_teq(df_chains[f"a_{letter}"], teff_samples, rstar_samples) # Calculated assuming zero Bond albedo
+        df_chains.to_csv(chains_path, index=False)

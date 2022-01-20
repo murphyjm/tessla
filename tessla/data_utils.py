@@ -49,7 +49,7 @@ def get_semimajor_axis(period_samples, mstar_samples):
     period_samples /= 365.25 # Convert JD to years
     return np.cbrt(np.square(period_samples) * mstar_samples)
 
-def get_sinc(teff_samples, rstar_samples, a_samples):
+def get_sinc(a_samples, teff_samples, rstar_samples):
     '''
     Return insolation flux in units of S_earth
     '''
