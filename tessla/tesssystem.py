@@ -637,7 +637,7 @@ class TessSystem:
             )
         
         # Save the trace summary which contains convergence information
-        summary_df = az.summary(trace)
+        summary_df = az.summary(trace, round_to=5)
         summary_df.to_csv(trace_summary_output_fname)
 
         # Save the concatenated samples.
@@ -645,7 +645,7 @@ class TessSystem:
         self.__flat_samps_to_csv(model, flat_samps, chains_output_fname)
         self.chains_path = chains_output_fname
 
-        return flat_samps
+        return flat_samps, trace
 
     def add_ecc_and_omega_to_chains(self, flat_samps, rho_circ_param_name='rho_circ'):
         '''
