@@ -39,15 +39,15 @@ def get_luminosity(teff_samples, rstar_samples):
     Return L in units of L_sun
     '''
     TEFF_SOL = 5772 # K.
-    teff_samples /= TEFF_SOL
-    return np.square(rstar_samples) * np.power(teff_samples, 4)
+    teff_samples_sol = teff_samples / TEFF_SOL
+    return np.square(rstar_samples) * np.power(teff_samples_sol, 4)
 
 def get_semimajor_axis(period_samples, mstar_samples):
     '''
     Return a in units of AU.
     '''
-    period_samples /= 365.25 # Convert JD to years
-    return np.cbrt(np.square(period_samples) * mstar_samples)
+    period_samples_yr = period_samples / 365.25 # Convert JD to years
+    return np.cbrt(np.square(period_samples_yr) * mstar_samples)
 
 def get_sinc(a_samples, teff_samples, rstar_samples):
     '''
@@ -57,11 +57,11 @@ def get_sinc(a_samples, teff_samples, rstar_samples):
     return luminosity_samples / np.square(a_samples)
 
 def get_aor(a_samples, rstar_samples):
-    return (a_samples.values * units.AU).to(units.R_sun).value / rstar_samples
+    return (a_samples * units.AU).to(units.R_sun).value / rstar_samples
 
 def get_teq(a_samples, teff_samples, rstar_samples, bond_albedo=0):
     '''
     Return planet equilibrium temperature in units of Kelvin
     '''
-    a_samples_sun = (a_samples.values * units.AU).to(units.R_sun).value
+    a_samples_sun = (a_samples * units.AU).to(units.R_sun).value
     return teff_samples * (1 - bond_albedo)**(0.25) * np.sqrt(rstar_samples / (2 * a_samples_sun))
