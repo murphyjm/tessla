@@ -602,6 +602,7 @@ class TessSystem:
         '''
         
         # Enables parallel processing on Mac OS. 
+        # TODO: Maybe update this to check if the OS is Darwin, to avoid setting context on clusters.
         try:
             mp.set_start_method("fork")
         except RuntimeError:
