@@ -1,6 +1,22 @@
 import numpy as np
 from astropy import units
 
+def find_breaks(time, diff_threshold=10, verbose=False):
+    '''
+    Identify breaks between non-consecutive sectors of data (identified by gaps larger than diff_threshold days)
+    '''
+    diffs = np.ediff1d(time)
+    diffs = np.append(diffs, 0) # To make it the same length for mask
+    break_inds = np.arange(len(time))[diffs > diff_threshold]
+
+    # Verify that the breaks seem correct
+    if verbose:
+        for break_ind in break_inds:
+            print(f"break_ind = {break_ind}")
+            print(f"Gap between {time[break_ind]:.2f} and {time[break_ind + 1]:.2f} BTJD")
+            print("=======")
+    return break_inds
+
 def time_delta_to_data_delta(x, time_window=1) -> int:
     '''
     Convert a difference in time to a difference in the spacing of elements in an array.
@@ -31,9 +47,6 @@ def convert_negative_angles(omega):
         omega += 2 * np.pi
     return omega
 
-'''
-TODO: Clean these functions and standardize.
-'''
 def get_luminosity(teff_samples, rstar_samples):
     '''
     Return L in units of L_sun

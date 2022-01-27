@@ -566,11 +566,17 @@ class TessSystem:
             print(f"{tot_map_outliers} outliers removed.")
 
         # Save the cleaned timestamps and flux as attributes
-        self.cleaned_time, self.cleaned_flux = x, y
+        self.cleaned_time, self.cleaned_flux, self.cleaned_flux_err = x, y, yerr
 
         # Save the cleaned and flattened flux as an attribute by subtracting out the GP and offset.
         self.cleaned_flat_flux = y - (extras["gp_pred"] + map_soln["mean"])
         
+        # Save these dictionaries as attributes. TODO: Also save model object?
+        self.map_soln = map_soln
+        self.extras = extras
+
+        # TODO: Update planet properties with MAP values
+
         return model, map_soln, extras
 
     def __flat_samps_to_csv(self, model, flat_samps, chains_output_fname):
