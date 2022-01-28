@@ -207,9 +207,8 @@ class ThreePanelPhotPlot:
         ax_left.yaxis.set_minor_locator(MultipleLocator(1))
         ax_right.tick_params(axis='y', label1On=False)
 
-        # TODO:
         # Add label for years to the upper axis for the left-most and right-most chunks
-
+        
 
     def __three_panel_plot(self):
         '''
