@@ -1,14 +1,27 @@
+# Data imports
 import numpy as np
 import pandas as pd
 from scipy.stats import binned_statistic
+from tessla.data_utils import find_breaks
 
+# Plotting imports
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MultipleLocator
 from brokenaxes import brokenaxes
 from matplotlib import gridspec
 from matplotlib.gridspec import GridSpec
 
-from tessla.data_utils import find_breaks
+########################################
+# Need all of these????
+import datetime
+import calendar
+import matplotlib.dates as mdates
+import matplotlib.cbook as cbook
+import matplotlib.units as munits
+from astropy.time import Time
+import matplotlib.gridspec as gridspec
+import string
+########################################
 
 class ThreePanelPhotPlot:
     '''
@@ -111,7 +124,7 @@ class ThreePanelPhotPlot:
         '''
         Mark the transits on ax for the chunk of time between xstart and xstop
         '''
-        for planet in self.toi.transiting_planets.keys():
+        for planet in self.toi.transiting_planets.values():
             t0s = self.__get_t0s_in_range(xstart, xstop, planet.per, planet.t0)
             for t0 in t0s:
                 ax.plot(t0, np.min(self.y), '^', ms=10, color=planet.color)
@@ -132,6 +145,45 @@ class ThreePanelPhotPlot:
                 sector_str += f"{sectors[j]}, "
             sector_str += f"{sectors[-1]}"
         ax.text(xstart, np.max(self.y), sector_str, horizontalalignment='left', verticalalignment='top', fontsize=12)
+
+    def __add_ymd_label(self, fig, ax, xlims, left_or_right):
+        '''
+        Add a ymd label to the top panel left-most and right-most chunks.
+        '''
+        fig.canvas.draw() # Needed in order to get back the ticklabels otherwise they'll be empty
+
+        ax_yrs = ax.secondary_axis('top')
+        ax_yrs.set_xticks(ax.get_xticks())
+        ax_yrs_ticks = ax.get_xticks()
+        ax_yrs_ticklabels = ax.get_xticklabels()
+        tick_mask = (ax_yrs_ticks > xlims[0]) & (ax_yrs_ticks < xlims[-1])
+        ax_yrs_ticks = ax_yrs_ticks[tick_mask]
+        ax_yrs_ticklabels = [label.get_text() for i,label in enumerate(ax_yrs_ticklabels) if tick_mask[i]]
+
+        bjd_date = None
+        ind = None
+        if left_or_right == 'left':
+            ind = 0
+            bjd_date = ax_yrs_ticks[ind] + self.toi.bjd_ref
+        elif left_or_right == 'right':
+            ind = -1
+            bjd_date = ax_yrs_ticks[ind] + self.toi.bjd_ref
+        else:
+            assert False, "Choose left or right chunk."
+        ymd_date = Time(bjd_date, format='jd', scale='utc').ymdhms
+        month_number = ymd_date['month'] # Next few lines get the abbreviation for the month's name from the month's number
+        datetime_obj = datetime.datetime.strptime(f"{month_number}", "%m")
+        month_name = datetime_obj.strftime("%b")
+        day = ymd_date['day']
+        year = ymd_date['year']
+        
+        ax_yrs.set_xticks(ax_yrs_ticks)
+        ax_yrs_ticklabels = [''] * len(ax_yrs_ticklabels)
+        ax_yrs_ticklabels[ind] = f"{year}-{month_name}-{day}"
+        ax_yrs.set_xticklabels(ax_yrs_ticklabels)
+
+        # Make the ticks themselves invisible 
+        ax_yrs.tick_params(axis="x", top=False, bottom=False, pad=1.0)
 
     def __broken_three_panel_plot(self):
         '''
@@ -163,8 +215,10 @@ class ThreePanelPhotPlot:
         # Also mark the transits in each chunk for each planet
         gp_mod = self.toi.extras["gp_pred"] + self.toi.map_soln["mean"]
         assert len(self.x) == len(gp_mod), "Different lengths for data being plotted and GP model"
-        
-        # Left-most chunk
+
+        # --------------- #
+        # Left-most chunk #
+        # --------------- #
         xstop_ind = break_inds[0] + 1
         bax1.plot(self.x[:xstop_ind], gp_mod[:xstop_ind], color="C2", label="GP model")
         xstart = np.min(self.x)
@@ -175,8 +229,15 @@ class ThreePanelPhotPlot:
         ax_left = bax1.axs[0]
         self.__annotate_sector_marker(ax_left, xstart, 0, xstop_ind)
 
-        # Middle chunks
+        # Add label for years to the upper axis for the left-most chunk
+        left_xlims = xlim_tuple[0]
+        self.__add_ymd_label(fig, ax_left, left_xlims, 'left')
+
+        # ------------- #
+        # Middle chunks #
+        # ------------- #
         for i in range(len(break_inds) - 1):
+            # Plot the GP model
             xstart_ind = break_inds[i] + 1
             xstop_ind  = break_inds[i + 1] + 1 # Plus 1 here is for array slicing
             bax1.plot(self.x[xstart_ind:xstop_ind], gp_mod[xstart_ind:xstop_ind], color="C2", label="GP model")
@@ -188,27 +249,124 @@ class ThreePanelPhotPlot:
             ax_curr = bax1.axs[i + 1]
             self.__annotate_sector_marker(ax_curr, xstart, xstart_ind, xstop_ind)
             
-        
-        # Right-most chunk
+        # ---------------- #
+        # Right-most chunk #
+        # ---------------- #
+        # Plot the GP model
         xstart_ind = break_inds[-1] + 1
         bax1.plot(self.x[xstart_ind:], gp_mod[xstart_ind:], color="C2", label="GP model")
         xstart = self.x[break_inds[-1] + 1]
         xstop  = np.max(self.x)
         self.__plot_transit_markers(bax1, xstart, xstop)
+
         # Annotate the top of this chunk with the sector number
         ax_right = bax1.axs[-1]
         # The -1 isn't technically the correct index (leaves our last element) but it shouldn't matter because there wouldn't be a single data point from a different sector at the end.
         self.__annotate_sector_marker(ax_right, xstart, xstart_ind, -0)
 
+        # Add label for years to the upper axis for the left-most chunk
+        right_xlims = xlim_tuple[-1]
+        self.__add_ymd_label(fig, ax_right, right_xlims, 'right')
+
         # Top panel housekeeping
         bax1.set_xticklabels([])
         bax1.set_ylabel("Relative flux [ppt]", fontsize=14, labelpad=self.ylabelpad)
-        ax_left.yaxis.set_major_locator(MultipleLocator(2))
-        ax_left.yaxis.set_minor_locator(MultipleLocator(1))
+        for ax in [ax_left, ax_right]:
+            ax.yaxis.set_major_locator(MultipleLocator(2))
+            ax.yaxis.set_minor_locator(MultipleLocator(1))
         ax_right.tick_params(axis='y', label1On=False)
 
-        # Add label for years to the upper axis for the left-most and right-most chunks
+        ################################################################################################
+        ################################################################################################
+        ################################################################################################
+
+        ################################################################################################
+        ####################### MIDDLE PANEL: Flattened data and orbital model #########################
+        ################################################################################################
+        bax2 = brokenaxes(xlims=xlim_tuple, d=self.d, sublot_spec=sps2, despine=False, wspace=self.wspace)
+
+        # Plot the flattened data and the orbital model for each planet. Could also plot the orbital models in chunks 
+        # like the gp model so plot lines don't extend into the data gaps but just being lazy here. 
+        bax2.plot(self.x, self.y - gp_mod, ".k", alpha=0.3, label="Flattened data")
+        for k, planet in enumerate(self.toi.transiting_planets.values()):
+            bax2.plot(self.x, self.toi.extras["light_curves"][:, k], color=planet.color, label=f"{self.toi.name} {planet.letter}", alpha=1.0, zorder=2000 - k)
         
+        # Plot housekeeping
+        bax2.set_xticklabels([])
+        bax2.set_ylabel("Relative flux [ppt]", fontsize=14, labelpad=self.ylabelpad)
+        ax_left, ax_right = bax2.axs[0], bax2.axs[-1]
+        for ax in [ax_left, ax_right]:
+            ax.yaxis.set_major_locator(MultipleLocator(1))
+        ax_right.set_yticklabels([])
+
+        ################################################################################################
+        ################################################################################################
+        ################################################################################################
+
+        ################################################################################################
+        ################################## BOTTOM PANEL: Residuals #####################################
+        ################################################################################################
+        bax3 = brokenaxes(xlims=xlim_tuple, d=self.d, subplot_spec=sps3, despine=False, wspace=self.wspace)
+
+        # Plot the residuals about the full model
+        residuals = self.y - gp_mod - np.sum(self.toi.extras["light_curves"], axis=-1)
+        bax3.plot(self.x, residuals, ".k", alpha=0.3)
+        bax3.axhline(0, color="#aaaaaa", lw=1)
+
+        # Plot housekeeping
+        bax3.set_ylabel("Residuals", fontsize=14, labelpad=self.ylabelpad)
+        bax3.set_xlabel(f"Time [BJD - {self.toi.bjd_ref:.1f}]", fontsize=14, labelpad=30)
+        ax_left, ax_right = bax3.axs[0], bax3.axs[-1]
+        for ax in [ax_left, ax_right]:
+            ax.yaxis.set_major_locator(MultipleLocator(2))
+            bottom = -1 * np.max(ax.get_ylim())
+            ax.set_ylim(bottom=bottom)
+
+        ################################################################################################
+        ################################################################################################
+        ################################################################################################
+
+        ################################################################################################
+        ############################ HOUSEKEEPING FOR TOP THREE PANELS #################################
+        ################################################################################################
+        fig.align_ylabels() # Align ylabels for each panel
+        
+        # Make ticks go inward and set multiple locator for x-axis
+        for bax in [bax1, bax2, bax3]:
+            # Left-most
+            ax_left = bax.axs[0]
+            ax_left.xaxis.set_major_locator(MultipleLocator(10))
+            ax_left.xaxis.set_minor_locator(MultipleLocator(5))
+            ax_left.tick_params(axis="y", direction="in", which="both", left=True, right=False)
+            ax_left.tick_params(axis="x", direction="in", which="both", top=True, bottom=True)
+
+            # Middle
+            for j in range(1, len(bax.axs) - 1):
+                ax_mid = bax.axs[j]
+                ax_mid.tick_params(axis="y", which="both", left=False, right=False)
+                ax_mid.xaxis.set_major_locator(MultipleLocator(10))
+                ax_mid.xaxis.set_minor_locator(MultipleLocator(5))
+                ax_mid.tick_params(axis="x", direction="in", which="both", top=True, bottom=True)
+            
+            # Right-most
+            ax_right = bax.axs[-1]
+            ax_right.xaxis.set_major_locator(MultipleLocator(10))
+            ax_right.xaxis.set_minor_locator(MultipleLocator(5))
+            ax_right.tick_params(axis="x", direction="in", which="both", top=True, bottom=True)
+            ax_right.tick_params(axis="y", direction="in", which="both", left=False, right=True)
+
+        ################################################################################################
+        ################################################################################################
+        ################################################################################################
+
+        ################################################################################################
+        ############################ PHASE-FOLDED TRANSIT AND RESIDUALS ################################
+        ################################################################################################
+
+        ################################################################################################
+        ################################################################################################
+        ################################################################################################
+
 
     def __three_panel_plot(self):
         '''
