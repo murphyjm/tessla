@@ -40,7 +40,8 @@ class ThreePanelPhotPlot:
                 ylabelpad=10,
                 wspace=0.025, # space of gap in broken axis
                 d=0.0075, # size of diagonal lines for broken axis
-
+                plot_random_transit_draws=False, # If true, plot random realizations of the phase-folded transit using the posteriors of the model fit.
+                num_random_transit_draws=25, # Number of random draws to plot.
                 ) -> None:
         
         self.toi = toi
@@ -52,6 +53,8 @@ class ThreePanelPhotPlot:
         self.extras = extras
         self.use_broken_x_axis = use_broken_x_axis
         self.data_gap_thresh = data_gap_thresh
+        self.plot_random_transit_draws = plot_random_transit_draws
+        self.num_random_transit_draws = num_random_transit_draws
 
         # Plot hyperparameters
         self.figsize = figsize
@@ -366,6 +369,34 @@ class ThreePanelPhotPlot:
         ################################################################################################
         ################################################################################################
         ################################################################################################
+        heights = [1, 0.33]
+        sps = gridspec.GridSpecFromSubplotSpec(2, len(self.toi.transiting_planets), subplot_spec=gs1, height_ratios=heights, hspace=0.05)
+
+        for i,planet in enumerate(self.toi.transiting_planets.values()):
+
+            ax0 = fig.add_subplot(sps[0, i])
+
+            # Plot the folded data
+            x_fold = (self.x - planet.t0 + 0.5 * planet.per) % planet.per - 0.5 * planet.per
+            ax0.plot(x_fold, self.y - gp_mod, ".k", label="Data", zorder=-1000, alpha=0.3)
+
+            # Plot the binned flux in bins of 30 minutes
+            bin_duration = 0.5 / 24 # 30 minutes in unites of days
+            bins = (x_fold.max() - x_fold.min()) / bin_duration
+            binned_flux, binned_edges, _ = binned_statistic(x_fold, self.y - gp_mod, statistic="mean", bins=bins)
+            binned_edge_diff = np.ediff1d(binned_edges) / 2
+            binned_locs = binned_edges[:-1] + binned_edge_diff
+            ax0.scatter(binned_locs, binned_flux, s=20, color='tomato', edgecolor='red', zorder=1000, label='Binned flux')
+
+            # Calculate indices for the folded model
+            inds = np.argsort(x_fold)
+            xlim = 0.3 # Days
+            inds = inds[np.abs(x_fold)[inds] < xlim] # Get indices within the xlim of the transit
+            map_model = self.toi.extras["light_curves"][:, i][inds]
+
+            if self.plot_random_transit_draws:
+                if self.toi.verbose:
+                    pass
 
 
     def __three_panel_plot(self):
