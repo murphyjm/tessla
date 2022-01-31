@@ -4,9 +4,18 @@ import pandas as pd
 from scipy.stats import binned_statistic
 from tessla.data_utils import find_breaks
 
+# Exoplanet stuff
+import exoplanet as xo
+import theano
+theano.config.gcc.cxxflags = "-Wno-c++11-narrowing" # Not exactly sure what this flag change does.
+import aesara_theano_fallback.tensor as tt
+
+# Progress bar
+from tqdm import tqdm
+
 # Plotting imports
 import matplotlib.pyplot as plt
-from matplotlib.ticker import MultipleLocator
+from matplotlib.ticker import MultipleLocator, FuncFormatter
 from brokenaxes import brokenaxes
 from matplotlib import gridspec
 from matplotlib.gridspec import GridSpec
@@ -372,6 +381,10 @@ class ThreePanelPhotPlot:
         heights = [1, 0.33]
         sps = gridspec.GridSpecFromSubplotSpec(2, len(self.toi.transiting_planets), subplot_spec=gs1, height_ratios=heights, hspace=0.05)
 
+        chains = None
+        if self.plot_random_transit_draws:
+            chains = pd.read_csv(self.toi.chains_path)
+
         for i,planet in enumerate(self.toi.transiting_planets.values()):
 
             ax0 = fig.add_subplot(sps[0, i])
@@ -381,7 +394,7 @@ class ThreePanelPhotPlot:
             ax0.plot(x_fold, self.y - gp_mod, ".k", label="Data", zorder=-1000, alpha=0.3)
 
             # Plot the binned flux in bins of 30 minutes
-            bin_duration = 0.5 / 24 # 30 minutes in unites of days
+            bin_duration = 0.5 / 24 # 30 minutes in units of days
             bins = (x_fold.max() - x_fold.min()) / bin_duration
             binned_flux, binned_edges, _ = binned_statistic(x_fold, self.y - gp_mod, statistic="mean", bins=bins)
             binned_edge_diff = np.ediff1d(binned_edges) / 2
@@ -393,10 +406,80 @@ class ThreePanelPhotPlot:
             xlim = 0.3 # Days
             inds = inds[np.abs(x_fold)[inds] < xlim] # Get indices within the xlim of the transit
             map_model = self.toi.extras["light_curves"][:, i][inds]
+            
+            # Plot the MAP solution
+            ax0.plot(x_fold[inds], map_model, color=planet.color, alpha=1, zorder=1001, label="MAP solution")
 
             if self.plot_random_transit_draws:
                 if self.toi.verbose:
-                    pass
+                    print(f"Plotting {self.num_random_transit_draws} random draws of phase-folded transit for planet {planet.pl_letter}...")
+                for j in tqdm(range(self.num_random_transit_draws)): # Could optionally use the "disable" keyword argument to only use the progress if self.toi.verbose == True.
+                    
+                    ind = np.random.choice(np.arange(self.num_random_transit_draws))
+
+                    # Build the model we used before
+                    # Star
+                    mean = chains['mean'].values[ind]
+                    u = [chains['u_0'].values[ind], chains['u_1'].values[ind]]
+                    xo_star = xo.LimbDarkLightCurve(u)
+
+                    # Orbit
+                    period = np.array([chains[f"period_{letter}"].values[ind] for letter in self.toi.transiting_planets.keys()])
+                    t0 = np.array([chains[f"t0_{letter}"].values[ind] for letter in self.toi.transiting_planets.keys()])
+                    ror = np.array([chains[f"ror_{letter}"].values[ind] for letter in self.toi.transiting_planets.keys()])
+                    b = np.array([chains[f"b_{letter}"].values[ind] for letter in self.toi.transiting_planets.keys()])
+                    dur = np.array([chains[f"dur_{letter}"].values[ind] for letter in self.toi.transiting_planets.keys()])
+                    orbit = xo.orbits.KeplerianOrbit(period=period, t0=t0, b=b, ror=ror, duration=dur)
+
+                    # Light curves
+                    N_EVAL_POINTS = 500
+                    phase_lc = np.linspace(-xlim, xlim, N_EVAL_POINTS)
+                    lc_phase_pred = 1e3 * tt.stack(
+                                            [
+                                                xo_star.get_light_curve(
+                                                    orbit=orbit, r=ror, t=t0[n] + phase_lc, texp=self.cadence/60/60/24)[..., n]
+                                                    for n in range(self.n_transiting)
+                                            ],
+                                            axis=-1,
+                    ) + mean
+                    lc_phase_pred = lc_phase_pred.eval()
+
+                    # Plot the random draw. Wasteful because it only uses one of the planet light curves and does this again for the next planet
+                    ax0.plot(phase_lc, lc_phase_pred[:, i], color=planet.color, alpha=0.3, zorder=999, label='Random posterior draw')
+
+                # Plot the residuals below
+                ax1 = fig.add_subplot(sps[1, i])
+                ax1.plot(x_fold, residuals, '.k', label='Residuals', alpha=0.3, zorder=0)
+                ax1.axhline(0, color="#aaaaaa", lw=1)
+
+                # Plot housekeeping
+                ax0.set_title(f"{self.toi.name} {planet.pl_letter}")
+
+                # Put the x-axis labels and ticks in units of hours instead of days
+                for ax in [ax0, ax1]:
+                    ax.xaxis.set_major_formatter(FuncFormatter(lambda x, pos: f"{x * 24:g}"))
+                    ax.xaxis.set_major_locator(MultipleLocator(2/24))
+                    ax.xaxis.set_minor_locator(MultipleLocator(1/24))
+                    ax.tick_params(axis='x', direction='in', which='both', top=True, bottom=True)
+                    ax.tick_params(axis='y', direction='in', which='both', left=True, right=True)
+
+                ax0.set_xticklabels([])
+                ax1.set_xlabel("Time since transit [hours]", fontsize=14)
+                ax0.yaxis.set_major_locator(MultipleLocator(1/24))
+                ax1.xaxis.set_major_locator(MultipleLocator(2/24))
+
+                if i == 0:
+                    ax0.set_ylabel("Relative flux [ppt]", fontsize=14)
+                    ax1.set_ylabel("Residuals", fontsize=14)
+                
+                ax0.set_xlim([-xlim, xlim])
+                ax1.set_xlim([-xlim, xlim])
+                axis_to_data = ax.transAxes + ax.transData.inverted()
+                points_data = axis_to_data.transform((0.1, 2.5 * np.min(lc_phase_pred[:, i])))
+                ax0.errorbar(points_data[0], points_data[1], yerr=np.sqrt(np.exp(self.toi.map_soln['log_sigma_lc'])**2 + np.median(self.yerr)**2), fmt='none', color='k', elinewidth=2, capsize=4)
+                if i == 0:
+                    ax.text(points_data[0] + 0.1/24, points_data[1], 'Data pointwise error', fontsize=12)
+                
 
 
     def __three_panel_plot(self):
