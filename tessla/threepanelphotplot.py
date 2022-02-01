@@ -1,4 +1,6 @@
-# Data imports
+# General imports
+import os
+import warnings
 import numpy as np
 import pandas as pd
 from scipy.stats import binned_statistic
@@ -51,6 +53,9 @@ class ThreePanelPhotPlot:
                 d=0.0075, # size of diagonal lines for broken axis
                 plot_random_transit_draws=False, # If true, plot random realizations of the phase-folded transit using the posteriors of the model fit.
                 num_random_transit_draws=25, # Number of random draws to plot.
+                save_format='.png',
+                save_dpi=400,
+                overwrite=False,
                 ) -> None:
         
         self.toi = toi
@@ -71,6 +76,9 @@ class ThreePanelPhotPlot:
         self.ylabelpad = ylabelpad
         self.wspace = wspace
         self.d = d
+        self.save_format = save_format
+        self.save_dpi = save_dpi
+        self.overwrite = overwrite
 
     def __plot_top_panel(self):
         '''
@@ -87,15 +95,31 @@ class ThreePanelPhotPlot:
     def __plot_phase_folded_transit(self):
         pass
     
-    def plot(self):
+    def plot(self, save_fname=None):
         '''
         Make the plot!
         '''
         if self.toi.verbose:
             print("Creating three panel plot...")
+        
+        out_dir = os.path.join(self.toi.phot_dir, 'plotting')
+        if not os.path.isdir(out_dir):
+            os.makedirs(out_dir)
 
         if self.broken_x_axis:
-            self.__broken_three_panel_plot()
+            if save_fname is None:
+                default_save_fname = f"{self.toi.name}_phot_model"
+                save_fname = os.path.join(out_dir, default_save_fname + self.save_format)
+            else:
+                save_fname = os.path.join(out_dir, save_fname + self.save_format)
+            if not self.overwrite and os.path.isfile(save_fname):
+                warnings.warn("Exiting before plotting to avoid overwriting exisiting plot file.")
+                return None
+            
+            fig, axes = self.__broken_three_panel_plot()
+            fig.savefig(save_fname, bbox_inches='tight', dpi=self.save_dpi)
+            print(f"Photometry model plot saved to {save_fname}")
+            return fig, axes
         else:
             self.__three_panel_plot()
 
@@ -384,10 +408,12 @@ class ThreePanelPhotPlot:
         chains = None
         if self.plot_random_transit_draws:
             chains = pd.read_csv(self.toi.chains_path)
-
+        phase_folded_axes = []
+        phase_folded_resid_axes = []
         for i,planet in enumerate(self.toi.transiting_planets.values()):
 
             ax0 = fig.add_subplot(sps[0, i])
+            phase_folded_axes.append(ax0)
 
             # Plot the folded data
             x_fold = (self.x - planet.t0 + 0.5 * planet.per) % planet.per - 0.5 * planet.per
@@ -449,6 +475,7 @@ class ThreePanelPhotPlot:
 
                 # Plot the residuals below
                 ax1 = fig.add_subplot(sps[1, i])
+                phase_folded_resid_axes.append(ax1)
                 ax1.plot(x_fold, residuals, '.k', label='Residuals', alpha=0.3, zorder=0)
                 ax1.axhline(0, color="#aaaaaa", lw=1)
 
@@ -479,7 +506,18 @@ class ThreePanelPhotPlot:
                 ax0.errorbar(points_data[0], points_data[1], yerr=np.sqrt(np.exp(self.toi.map_soln['log_sigma_lc'])**2 + np.median(self.yerr)**2), fmt='none', color='k', elinewidth=2, capsize=4)
                 if i == 0:
                     ax.text(points_data[0] + 0.1/24, points_data[1], 'Data pointwise error', fontsize=12)
-                
+        
+        # Make the y-axes range the same for all of the phase-folded transit plots
+        for axes in [phase_folded_axes, phase_folded_resid_axes]:
+            y_phase_max = np.max([max(ax.get_ylim()) for ax in axes])
+            y_phase_min = np.min([min(ax.get_ylim()) for ax in axes])
+            y_phase_lim = (y_phase_min, y_phase_max)
+            for i in range(len(axes)):
+                axes[i].set_ylim(y_phase_lim)
+        
+        # Save the plot
+
+        return fig, (bax1, bax2, bax3)
 
 
     def __three_panel_plot(self):
