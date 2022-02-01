@@ -600,7 +600,7 @@ class TessSystem:
             else:
                 df_chains[param] = flat_samps[param]
             
-        df_chains.to_csv(chains_output_fname, index=False)
+        df_chains.to_csv(chains_output_fname, index=False, compression="gzip")
 
     def run_sampling(self, model, map_soln, tune=6000, draws=4000, chains=8, cores=None, init_method='adapt_full', output_fname_suffix='', overwrite=False):
         '''
@@ -619,15 +619,15 @@ class TessSystem:
         
         # Do some output directory housekeeping
         assert os.path.isdir(self.phot_sampling_dir), "Output directory does not exist." # This should be redundant, but just in case.
-        chains_output_fname = os.path.join(self.phot_sampling_dir, f"{self.name}_phot_chains{output_fname_suffix}.csv.zip")
+        chains_output_fname = os.path.join(self.phot_sampling_dir, f"{self.name}_phot_chains{output_fname_suffix}.csv.gz")
         if not overwrite and os.path.isfile(chains_output_fname):
             warnings.warn("Exiting before starting the sampling to avoid overwriting exisiting chains file.")
-            return None
+            return None, None
 
-        trace_summary_output_fname = os.path.join(self.phot_sampling_dir, f'{self.name}_trace_summary{output_fname_suffix}.csv.zip')
+        trace_summary_output_fname = os.path.join(self.phot_sampling_dir, f'{self.name}_trace_summary{output_fname_suffix}.csv')
         if not overwrite and os.path.isfile(trace_summary_output_fname):
             warnings.warn("Exiting before starting the sampling to avoid overwriting exisiting trace summary file.")
-            return None
+            return None, None
 
         if cores is None:
             cores = chains
@@ -676,10 +676,10 @@ class TessSystem:
             df_chains[f"ecc_omega_weights_{letter}"] = weights[i, :]
 
         # Don't overwrite the original chains file, just in case something goes wrong in adding columns for derived parameters.
-        extension = '.csv.zip'
+        extension = '.csv.gz'
         chains_derived_path = self.chains_path[:self.chains_path.find(extension)] + '_derived' + extension
         self.chains_derived_path = chains_derived_path
-        df_chains.to_csv(self.chains_derived_path, index=False)
+        df_chains.to_csv(self.chains_derived_path, index=False, compression="gzip")
 
     def add_derived_quantities_to_chains(self):
         '''
@@ -697,4 +697,4 @@ class TessSystem:
             df_chains[f"aor_{letter}"] = get_aor(df_chains[f"a_{letter}"].values, rstar_samples)
             df_chains[f"sinc_{letter}"] = get_sinc(df_chains[f"a_{letter}"].values, teff_samples, rstar_samples)
             df_chains[f"teq_{letter}"] = get_teq(df_chains[f"a_{letter}"].values, teff_samples, rstar_samples) # Calculated assuming zero Bond albedo
-        df_chains.to_csv(self.chains_derived_path, index=False)
+        df_chains.to_csv(self.chains_derived_path, index=False, compression="gzip")

@@ -17,6 +17,8 @@ from tqdm import tqdm
 
 # Plotting imports
 import matplotlib.pyplot as plt
+from matplotlib import rcParams
+rcParams["font.size"] = 16
 from matplotlib.ticker import MultipleLocator, FuncFormatter
 from brokenaxes import brokenaxes
 from matplotlib import gridspec
@@ -55,7 +57,6 @@ class ThreePanelPhotPlot:
                 num_random_transit_draws=25, # Number of random draws to plot.
                 save_format='.png',
                 save_dpi=400,
-                overwrite=False,
                 ) -> None:
         
         self.toi = toi
@@ -78,7 +79,6 @@ class ThreePanelPhotPlot:
         self.d = d
         self.save_format = save_format
         self.save_dpi = save_dpi
-        self.overwrite = overwrite
 
     def __plot_top_panel(self):
         '''
@@ -95,7 +95,7 @@ class ThreePanelPhotPlot:
     def __plot_phase_folded_transit(self):
         pass
     
-    def plot(self, save_fname=None):
+    def plot(self, save_fname=None, overwrite=False):
         '''
         Make the plot!
         '''
@@ -106,13 +106,13 @@ class ThreePanelPhotPlot:
         if not os.path.isdir(out_dir):
             os.makedirs(out_dir)
 
-        if self.broken_x_axis:
+        if self.use_broken_x_axis:
             if save_fname is None:
                 default_save_fname = f"{self.toi.name}_phot_model"
                 save_fname = os.path.join(out_dir, default_save_fname + self.save_format)
             else:
                 save_fname = os.path.join(out_dir, save_fname + self.save_format)
-            if not self.overwrite and os.path.isfile(save_fname):
+            if not overwrite and os.path.isfile(save_fname):
                 warnings.warn("Exiting before plotting to avoid overwriting exisiting plot file.")
                 return None
             
@@ -172,14 +172,15 @@ class ThreePanelPhotPlot:
         '''
         original_indices = self.toi.cleaned_time.index.values
         sectors = self.toi.lc.sector[original_indices[xstart_ind:xstop_ind]]
+        assert len(np.unique(sectors)) > 0, "No sector labels."
         if len(np.unique(sectors)) == 1:
-            sector_str = f"Sector {np.unique(sectors)}"
-        else:
+            sector_str = f"Sector {np.unique(sectors).value[0]}"
+        elif len(np.unique(sectors)) > 1:
             sectors = np.unique(sectors)
             sector_str = "Sectors "
             for j in range(len(sectors) -1):
-                sector_str += f"{sectors[j]}, "
-            sector_str += f"{sectors[-1]}"
+                sector_str += f"{sectors.value[j]}, "
+            sector_str += f"{sectors.value[-1]}"
         ax.text(xstart, np.max(self.y), sector_str, horizontalalignment='left', verticalalignment='top', fontsize=12)
 
     def __add_ymd_label(self, fig, ax, xlims, left_or_right):
@@ -188,7 +189,7 @@ class ThreePanelPhotPlot:
         '''
         fig.canvas.draw() # Needed in order to get back the ticklabels otherwise they'll be empty
 
-        ax_yrs = ax.secondary_axis('top')
+        ax_yrs = ax.secondary_xaxis('top')
         ax_yrs.set_xticks(ax.get_xticks())
         ax_yrs_ticks = ax.get_xticks()
         ax_yrs_ticklabels = ax.get_xticklabels()
@@ -298,7 +299,7 @@ class ThreePanelPhotPlot:
         # Annotate the top of this chunk with the sector number
         ax_right = bax1.axs[-1]
         # The -1 isn't technically the correct index (leaves our last element) but it shouldn't matter because there wouldn't be a single data point from a different sector at the end.
-        self.__annotate_sector_marker(ax_right, xstart, xstart_ind, -0)
+        self.__annotate_sector_marker(ax_right, xstart, xstart_ind, -1)
 
         # Add label for years to the upper axis for the left-most chunk
         right_xlims = xlim_tuple[-1]
@@ -319,13 +320,13 @@ class ThreePanelPhotPlot:
         ################################################################################################
         ####################### MIDDLE PANEL: Flattened data and orbital model #########################
         ################################################################################################
-        bax2 = brokenaxes(xlims=xlim_tuple, d=self.d, sublot_spec=sps2, despine=False, wspace=self.wspace)
+        bax2 = brokenaxes(xlims=xlim_tuple, d=self.d, subplot_spec=sps2, despine=False, wspace=self.wspace)
 
         # Plot the flattened data and the orbital model for each planet. Could also plot the orbital models in chunks 
         # like the gp model so plot lines don't extend into the data gaps but just being lazy here. 
         bax2.plot(self.x, self.y - gp_mod, ".k", alpha=0.3, label="Flattened data")
         for k, planet in enumerate(self.toi.transiting_planets.values()):
-            bax2.plot(self.x, self.toi.extras["light_curves"][:, k], color=planet.color, label=f"{self.toi.name} {planet.letter}", alpha=1.0, zorder=2000 - k)
+            bax2.plot(self.x, self.toi.extras["light_curves"][:, k], color=planet.color, label=f"{self.toi.name} {planet.pl_letter}", alpha=1.0, zorder=2000 - k)
         
         # Plot housekeeping
         bax2.set_xticklabels([])
@@ -445,7 +446,6 @@ class ThreePanelPhotPlot:
 
                     # Build the model we used before
                     # Star
-                    mean = chains['mean'].values[ind]
                     u = [chains['u_0'].values[ind], chains['u_1'].values[ind]]
                     xo_star = xo.LimbDarkLightCurve(u)
 
@@ -463,11 +463,11 @@ class ThreePanelPhotPlot:
                     lc_phase_pred = 1e3 * tt.stack(
                                             [
                                                 xo_star.get_light_curve(
-                                                    orbit=orbit, r=ror, t=t0[n] + phase_lc, texp=self.cadence/60/60/24)[..., n]
-                                                    for n in range(self.n_transiting)
+                                                    orbit=orbit, r=ror, t=t0[n] + phase_lc, texp=self.toi.cadence/60/60/24)[..., n]
+                                                    for n in range(self.toi.n_transiting)
                                             ],
                                             axis=-1,
-                    ) + mean
+                    )
                     lc_phase_pred = lc_phase_pred.eval()
 
                     # Plot the random draw. Wasteful because it only uses one of the planet light curves and does this again for the next planet
@@ -492,8 +492,9 @@ class ThreePanelPhotPlot:
 
                 ax0.set_xticklabels([])
                 ax1.set_xlabel("Time since transit [hours]", fontsize=14)
-                ax0.yaxis.set_major_locator(MultipleLocator(1/24))
-                ax1.xaxis.set_major_locator(MultipleLocator(2/24))
+                ax0.yaxis.set_major_locator(MultipleLocator(1))
+                ax0.yaxis.set_minor_locator(MultipleLocator(0.5))
+                ax1.yaxis.set_major_locator(MultipleLocator(2))
 
                 if i == 0:
                     ax0.set_ylabel("Relative flux [ppt]", fontsize=14)
@@ -502,10 +503,10 @@ class ThreePanelPhotPlot:
                 ax0.set_xlim([-xlim, xlim])
                 ax1.set_xlim([-xlim, xlim])
                 axis_to_data = ax.transAxes + ax.transData.inverted()
-                points_data = axis_to_data.transform((0.1, 2.5 * np.min(lc_phase_pred[:, i])))
+                points_data = axis_to_data.transform((0.025, 0.))
                 ax0.errorbar(points_data[0], points_data[1], yerr=np.sqrt(np.exp(self.toi.map_soln['log_sigma_lc'])**2 + np.median(self.yerr)**2), fmt='none', color='k', elinewidth=2, capsize=4)
                 if i == 0:
-                    ax.text(points_data[0] + 0.1/24, points_data[1], 'Data pointwise error', fontsize=12)
+                    ax0.text(points_data[0] + 0.2/24, points_data[1], 'Data pointwise error', fontsize=12)
         
         # Make the y-axes range the same for all of the phase-folded transit plots
         for axes in [phase_folded_axes, phase_folded_resid_axes]:
@@ -515,8 +516,6 @@ class ThreePanelPhotPlot:
             for i in range(len(axes)):
                 axes[i].set_ylim(y_phase_lim)
         
-        # Save the plot
-
         return fig, (bax1, bax2, bax3)
 
 
