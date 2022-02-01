@@ -1,4 +1,5 @@
 import matplotlib.pyplot as plt
+from matplotlib.ticker import FuncFormatter, MultipleLocator
 import os
 import numpy as np
 from scipy.signal import savgol_filter, find_peaks
@@ -113,3 +114,24 @@ def plot_periodogram(out_dir, title, xo_ls, transiting_planets, label_peaks=True
         print(f"Periodogram plot saved to {out_dir}")
 
     return fig, ax
+
+def quick_transit_plot(toi, map_soln, extras):
+    for i,planet in enumerate(toi.transiting_planets.values()):
+        fig, ax = plt.subplots()
+        x, y = toi.cleaned_time, toi.cleaned_flux
+        x_fold = ((x - map_soln["t0"][i] + 0.5 * map_soln["period"][i]) % map_soln[
+            "period"
+        ][i] - 0.5 * map_soln["period"][i]).values
+        ax.scatter(x_fold, y - extras['gp_pred'] - map_soln['mean'], c=x, s=3)
+        phase = np.linspace(-0.3, 0.3, len(extras['lc_phase_pred'][:, i]))
+        ax.plot(phase, extras['lc_phase_pred'][:, i], 'r', lw=5)
+        ax.set_xlim(-6/24, 6/24)
+        ax.xaxis.set_major_locator(MultipleLocator(3/24))
+        ax.xaxis.set_minor_locator(MultipleLocator(1.5/24))
+        ax.xaxis.set_major_formatter(FuncFormatter(lambda x, pos: f'{x * 24:g}'))
+        ax.set_xlabel("time since transit [hours]")
+        ax.set_ylabel("relative flux [ppt]")
+        ax.set_title(f"{toi.name} {planet.pl_letter}")
+        ax.text(0.1, 0.1, f"$P =$ {map_soln['period'][i]:.1f} d", transform=ax.transAxes)
+        ax.text(0.1, 0.05, f"$R_\mathrm{{p}}/R_* =$ {map_soln['ror'][i]:.4f}", transform=ax.transAxes)
+        plt.show()
