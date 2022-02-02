@@ -5,6 +5,6 @@ setup(name='tessla',
       # list folders, not files
       packages=['tessla',
                 'test'],
-      scripts=['bin/foo.py'],
+      scripts=['bin/fit_phot.py'],
       package_data={'tessla': ['data/toi_list.csv']},
       )
