@@ -602,7 +602,7 @@ class TessSystem:
                 print("Updating transiting planet properties to MAP solution values")
             self.update_transiting_planet_props_to_map_soln()
 
-        return model, map_soln, extras
+        return model
 
     def __flat_samps_to_csv(self, model, flat_samps, chains_output_fname):
         '''
