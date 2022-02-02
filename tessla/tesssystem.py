@@ -71,6 +71,10 @@ class TessSystem:
         self.verbose = verbose
         self.plotting = plotting
 
+        # Set this at the start
+        self.chains_path = None # TODO: Could instantiate the object with a chains path from a previous run
+        self.map_soln = None
+
         # Organize the output directory structure
         if output_dir is None:
             self.output_dir = self.name
@@ -102,6 +106,17 @@ class TessSystem:
         '''
         return self.transiting_planets.pop(pl_letter)
 
+    def update_transiting_planet_props_to_map_soln(self):
+        '''
+        Update the transiting planet properties to the MAP solution values.
+        '''
+        assert self.map_soln is not None, "MAP Solution is none. Must run MAP fitting procedure first."
+        for i,planet in enumerate(self.transiting_planets.values()):
+            planet.per = self.map_soln["period"][i]
+            planet.t0 = self.map_soln["t0"][i]
+            planet.dur = self.map_soln["dur"][i]
+            planet.depth = (self.map_soln["ror"][i])**2 * 1e3 # Places in units of PPT
+        
     def search_for_tois(self):
         '''
         Look for TOIs in the TOI catalog.
@@ -288,6 +303,12 @@ class TessSystem:
             self.all_transits_mask |= transit_mask
         
         return self.all_transits_mask
+
+    def reset_transit_mask(self):
+        '''
+        Reset the transit mask if you add/remove planets basd on the 
+        '''
+        self.all_transits_mask = np.zeros(len(self.lc.time), dtype=bool)
 
     def __sg_smoothing(self, positive_outliers_only=False, max_iters=10, sigma_thresh=3):
         '''

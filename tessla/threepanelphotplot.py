@@ -181,7 +181,8 @@ class ThreePanelPhotPlot:
             for j in range(len(sectors) -1):
                 sector_str += f"{sectors.value[j]}, "
             sector_str += f"{sectors.value[-1]}"
-        ax.text(xstart, np.max(self.y), sector_str, horizontalalignment='left', verticalalignment='top', fontsize=12)
+        text = ax.text(xstart, np.max(self.y), sector_str, horizontalalignment='left', verticalalignment='top', fontsize=12)
+        text.set_bbox(dict(facecolor='lightgray', alpha=0.65, edgecolor='lightgray'))
 
     def __add_ymd_label(self, fig, ax, xlims, left_or_right):
         '''
@@ -226,7 +227,6 @@ class ThreePanelPhotPlot:
         '''
         Make the three panel plot using a broken x-axis. Used for TOIs with widely time-separated sectors.
         '''
-
         break_inds = find_breaks(self.x, diff_threshold=self.data_gap_thresh, verbose=self.toi.verbose)
 
         # Create the figure object
@@ -474,40 +474,41 @@ class ThreePanelPhotPlot:
                     # Plot the random draw. Wasteful because it only uses one of the planet light curves and does this again for the next planet
                     ax0.plot(phase_lc, lc_phase_pred[:, i], color=planet.color, alpha=0.3, zorder=999, label='Random posterior draw')
 
-                # Plot the residuals below
-                ax1 = fig.add_subplot(sps[1, i])
-                phase_folded_resid_axes.append(ax1)
-                ax1.plot(x_fold, residuals, '.k', label='Residuals', alpha=0.3, zorder=0)
-                ax1.axhline(0, color="#aaaaaa", lw=1)
+            # Plot the residuals below
+            ax1 = fig.add_subplot(sps[1, i])
+            phase_folded_resid_axes.append(ax1)
+            ax1.plot(x_fold, residuals, '.k', label='Residuals', alpha=0.3, zorder=0)
+            ax1.axhline(0, color="#aaaaaa", lw=1)
 
-                # Plot housekeeping
-                ax0.set_title(f"{self.toi.name} {planet.pl_letter}")
+            # Plot housekeeping
+            ax0.set_title(f"{self.toi.name} {planet.pl_letter}")
 
-                # Put the x-axis labels and ticks in units of hours instead of days
-                for ax in [ax0, ax1]:
-                    ax.xaxis.set_major_formatter(FuncFormatter(lambda x, pos: f"{x * 24:g}"))
-                    ax.xaxis.set_major_locator(MultipleLocator(2/24))
-                    ax.xaxis.set_minor_locator(MultipleLocator(1/24))
-                    ax.tick_params(axis='x', direction='in', which='both', top=True, bottom=True)
-                    ax.tick_params(axis='y', direction='in', which='both', left=True, right=True)
+            # Put the x-axis labels and ticks in units of hours instead of days
+            for ax in [ax0, ax1]:
+                ax.xaxis.set_major_formatter(FuncFormatter(lambda x, pos: f"{x * 24:g}"))
+                ax.xaxis.set_major_locator(MultipleLocator(2/24))
+                ax.xaxis.set_minor_locator(MultipleLocator(1/24))
+                ax.tick_params(axis='x', direction='in', which='both', top=True, bottom=True)
+                ax.tick_params(axis='y', direction='in', which='both', left=True, right=True)
 
-                ax0.set_xticklabels([])
-                ax1.set_xlabel("Time since transit [hours]", fontsize=14)
-                ax0.yaxis.set_major_locator(MultipleLocator(1))
-                ax0.yaxis.set_minor_locator(MultipleLocator(0.5))
-                ax1.yaxis.set_major_locator(MultipleLocator(2))
+            ax0.set_xticklabels([])
+            ax1.set_xlabel("Time since transit [hours]", fontsize=14)
+            ax0.yaxis.set_major_locator(MultipleLocator(1))
+            ax0.yaxis.set_minor_locator(MultipleLocator(0.5))
+            ax1.yaxis.set_major_locator(MultipleLocator(2))
 
-                if i == 0:
-                    ax0.set_ylabel("Relative flux [ppt]", fontsize=14)
-                    ax1.set_ylabel("Residuals", fontsize=14)
-                
-                ax0.set_xlim([-xlim, xlim])
-                ax1.set_xlim([-xlim, xlim])
-                axis_to_data = ax.transAxes + ax.transData.inverted()
-                points_data = axis_to_data.transform((0.025, 0.))
-                ax0.errorbar(points_data[0], points_data[1], yerr=np.sqrt(np.exp(self.toi.map_soln['log_sigma_lc'])**2 + np.median(self.yerr)**2), fmt='none', color='k', elinewidth=2, capsize=4)
-                if i == 0:
-                    ax0.text(points_data[0] + 0.2/24, points_data[1], 'Data pointwise error', fontsize=12)
+            if i == 0:
+                ax0.set_ylabel("Relative flux [ppt]", fontsize=14)
+                ax1.set_ylabel("Residuals", fontsize=14)
+            
+            ax0.set_xlim([-xlim, xlim])
+            ax1.set_xlim([-xlim, xlim])
+            axis_to_data = ax.transAxes + ax.transData.inverted()
+            points_data = axis_to_data.transform((0.035, 0.))
+            ax0.errorbar(points_data[0], points_data[1], yerr=np.sqrt(np.exp(self.toi.map_soln['log_sigma_lc'])**2 + np.median(self.yerr)**2), fmt='none', color='k', elinewidth=2, capsize=4)
+            if i == 0:
+                text = ax0.text(points_data[0] + 0.4/24, points_data[1], 'Data pointwise error', fontsize=12)
+                text.set_bbox(dict(facecolor='lightgray', alpha=0.65, edgecolor='lightgray'))
         
         # Make the y-axes range the same for all of the phase-folded transit plots
         for axes in [phase_folded_axes, phase_folded_resid_axes]:
