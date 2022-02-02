@@ -108,7 +108,7 @@ class TessSystem:
 
     def update_transiting_planet_props_to_map_soln(self):
         '''
-        Update the transiting planet properties to the MAP solution values.
+        Update the transiting planet properties to the MAP solution values. Is optionally automatically run after the MAP fitting procedure.
         '''
         assert self.map_soln is not None, "MAP Solution is none. Must run MAP fitting procedure first."
         for i,planet in enumerate(self.transiting_planets.values()):
@@ -116,7 +116,7 @@ class TessSystem:
             planet.t0 = self.map_soln["t0"][i]
             planet.dur = self.map_soln["dur"][i]
             planet.depth = (self.map_soln["ror"][i])**2 * 1e3 # Places in units of PPT
-        
+
     def search_for_tois(self):
         '''
         Look for TOIs in the TOI catalog.
@@ -551,7 +551,7 @@ class TessSystem:
         mask = np.abs(resid) < sigma_thresh * rms
         return mask
 
-    def flatten_light_curve(self, phase_lim=0.3, n_eval_points=500, sigma_thresh=7, max_iters=10):
+    def flatten_light_curve(self, phase_lim=0.3, n_eval_points=500, sigma_thresh=7, max_iters=10, update_planet_props_to_map_soln=True):
         '''
         Produce MAP fit of the photometry data, iteratively removing outliers until convergence to produce the flattened light curve.
         Will then extract the flattened data around each transit to produce a model of just the transits themselves to use during sampling. This should hopefully speedup sampling.
@@ -596,7 +596,11 @@ class TessSystem:
         self.map_soln = map_soln
         self.extras = extras
 
-        # TODO: Update planet properties with MAP values
+        # Update planet properties with MAP values
+        if update_planet_props_to_map_soln:
+            if self.verbose:
+                print("Updating transiting planet properties to MAP solution values")
+            self.update_transiting_planet_props_to_map_soln()
 
         return model, map_soln, extras
 
