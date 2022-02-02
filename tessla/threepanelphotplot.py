@@ -43,9 +43,7 @@ class ThreePanelPhotPlot:
     Should think about this plot in the context of TOIs with many sectors of data, since it might not make sense in that case e.g. TOI-1247. Will worry about that later.
     '''
     def __init__(self, 
-                toi, 
-                map_soln, 
-                extras,
+                toi,
                 use_broken_x_axis=False, # Whether or not to break up the x-axis to avoid large gaps between sectors
                 data_gap_thresh=10, # Days. If gap in data is larger than this threshold, consider it another chunk in the broken axis (need to have use_broken_x_axis=True)
                 figsize=(12,14), 
@@ -63,9 +61,7 @@ class ThreePanelPhotPlot:
         self.x = toi.cleaned_time.values
         self.y = toi.cleaned_flux.values
         self.yerr = toi.cleaned_flux_err.values
-
-        self.map_soln = map_soln
-        self.extras = extras
+        
         self.use_broken_x_axis = use_broken_x_axis
         self.data_gap_thresh = data_gap_thresh
         self.plot_random_transit_draws = plot_random_transit_draws
@@ -79,21 +75,6 @@ class ThreePanelPhotPlot:
         self.d = d
         self.save_format = save_format
         self.save_dpi = save_dpi
-
-    def __plot_top_panel(self):
-        '''
-        Plot the flux and GP noise model.
-        '''
-        
-
-    def __plot_middle_panel(self):
-        pass
-    
-    def __plot_bottom_panel(self):
-        pass
-
-    def __plot_phase_folded_transit(self):
-        pass
     
     def plot(self, save_fname=None, overwrite=False):
         '''

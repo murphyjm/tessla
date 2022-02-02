@@ -118,14 +118,12 @@ def main():
 
     # Plot the results
     use_broken_x_axis = len(find_breaks(toi.cleaned_time.values)) > 0 # If breaks in the x-axis, then use the broken x-axis plot
-    phot_plot = ThreePanelPhotPlot(toi, 
-                                   toi.map_soln,
-                                   toi.extras,
+    phot_plot = ThreePanelPhotPlot(toi,
                                    use_broken_x_axis=use_broken_x_axis, 
                                    plot_random_transit_draws=(not args.no_sampling),
                                    num_random_transit_draws=args.num_transit_draws)
     fig, ax = phot_plot.plot(save_fname=f"{toi.name}_phot_model" + args.plot_fname_suffix, overwrite=args.overwrite_plot)
-
+    
     # TODO: Make additional plots e.g. corner plots
 
     # TODO: Save specific attributes e.g. toi.map_soln
