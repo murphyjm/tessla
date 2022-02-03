@@ -123,9 +123,9 @@ def main():
                                    plot_random_transit_draws=(not args.no_sampling),
                                    num_random_transit_draws=args.num_transit_draws)
     fig, ax = phot_plot.plot(save_fname=f"{toi.name}_phot_model" + args.plot_fname_suffix, overwrite=args.overwrite_plot)
-    
-    # TODO: Make additional plots e.g. corner plots
 
+    # TODO: Make additional plots e.g. corner plots
+    
     # TODO: Save specific attributes e.g. toi.map_soln
 
     # For now: pickle the toi object
