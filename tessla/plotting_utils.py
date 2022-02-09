@@ -39,7 +39,8 @@ def sg_smoothing_plot(toi):
         if not os.path.isdir(out_dir):
             os.makedirs(out_dir)
         fig.savefig(os.path.join(out_dir, f'sg_filtering_sector_{sector:02}.png'), bbox_inches='tight', dpi=300)
-    
+        plt.close()
+
     if toi.verbose:
         print(f"SG smoothing plots saved to {out_dir}")
 
@@ -109,13 +110,22 @@ def plot_periodogram(out_dir, title, xo_ls, transiting_planets, label_peaks=True
     if not os.path.isdir(out_dir):
         os.makedirs(out_dir)
     fig.savefig(os.path.join(out_dir, f'{title}_ls_periodogram.png'), bbox_inches='tight', dpi=300)
-    
+    plt.close()
+
     if verbose:
         print(f"Periodogram plot saved to {out_dir}")
 
     return fig, ax
 
 def quick_transit_plot(toi, map_soln, extras):
+    '''
+    Make a plot of what the MAP transit fit looks like for each planet before moving on to the sampling.
+    '''
+    
+    out_dir = os.path.join(toi.phot_dir, 'plotting')
+    if not os.path.isdir(out_dir):
+        os.makedirs(out_dir)
+
     for i,planet in enumerate(toi.transiting_planets.values()):
         fig, ax = plt.subplots()
         x, y = toi.cleaned_time, toi.cleaned_flux
@@ -134,4 +144,9 @@ def quick_transit_plot(toi, map_soln, extras):
         ax.set_title(f"{toi.name} {planet.pl_letter}")
         ax.text(0.1, 0.1, f"$P =$ {map_soln['period'][i]:.1f} d", transform=ax.transAxes)
         ax.text(0.1, 0.05, f"$R_\mathrm{{p}}/R_* =$ {map_soln['ror'][i]:.4f}", transform=ax.transAxes)
-        plt.show()
+        
+        fig.savefig(os.path.join(out_dir, f'initial_transit_fit_{toi.name}_{planet.pl_letter}.png', bbox_inches='tight', dpi=300))
+        plt.close()
+
+    if toi.verbose:
+        print(f"Initial transit fit plots saved to {out_dir}")

@@ -97,10 +97,10 @@ class ThreePanelPhotPlot:
                 warnings.warn("Exiting before plotting to avoid overwriting exisiting plot file.")
                 return None
             
-            fig, axes = self.__broken_three_panel_plot()
+            fig = self.__broken_three_panel_plot()
             fig.savefig(save_fname, bbox_inches='tight', dpi=self.save_dpi)
             print(f"Photometry model plot saved to {save_fname}")
-            return fig, axes
+            plt.close()
         else:
             self.__three_panel_plot()
 
@@ -499,7 +499,7 @@ class ThreePanelPhotPlot:
             for i in range(len(axes)):
                 axes[i].set_ylim(y_phase_lim)
         
-        return fig, (bax1, bax2, bax3)
+        return fig
 
 
     def __three_panel_plot(self):

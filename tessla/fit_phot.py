@@ -126,7 +126,7 @@ def main():
 
     # TODO: Make additional plots e.g. corner plots
     
-    # TODO: Save specific attributes e.g. toi.map_soln
+    # TODO: Save specific attributes as a pickled object or json file e.g. the dictionary with the MAP values: toi.map_soln 
 
     # For now: pickle the toi object
     with open(os.path.join(toi.output_dir, f"{toi.name}_toi_obj.pkl"), "wb") as toi_fname:
