@@ -145,7 +145,8 @@ def quick_transit_plot(toi, map_soln, extras):
         ax.text(0.1, 0.1, f"$P =$ {map_soln['period'][i]:.1f} d", transform=ax.transAxes)
         ax.text(0.1, 0.05, f"$R_\mathrm{{p}}/R_* =$ {map_soln['ror'][i]:.4f}", transform=ax.transAxes)
         
-        fig.savefig(os.path.join(out_dir, f'initial_transit_fit_{toi.name}_{planet.pl_letter}.png', bbox_inches='tight', dpi=300))
+        save_fname = os.path.join(out_dir, f'initial_transit_fit_{toi.name}_{planet.pl_letter}.png')
+        fig.savefig(save_fname, bbox_inches='tight', dpi=300)
         plt.close()
 
     if toi.verbose:

@@ -584,7 +584,7 @@ class TessSystem:
             if i == max_iters - 1:
                 print("Maximum number of iterations reached. MAP fitting loop did not converge.")
             print(f"MAP fitting and {sigma_thresh}-sigma outlier removal converged in {i + 1} iterations.")
-            print(f"{tot_map_outliers} outliers removed.")
+            print(f"{tot_map_outliers} outlier(s) removed.")
 
         # Save the cleaned timestamps and flux as attributes
         self.cleaned_time, self.cleaned_flux, self.cleaned_flux_err = x, y, yerr

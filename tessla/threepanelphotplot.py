@@ -24,17 +24,8 @@ from brokenaxes import brokenaxes
 from matplotlib import gridspec
 from matplotlib.gridspec import GridSpec
 
-########################################
-# Need all of these????
 import datetime
-import calendar
-import matplotlib.dates as mdates
-import matplotlib.cbook as cbook
-import matplotlib.units as munits
 from astropy.time import Time
-import matplotlib.gridspec as gridspec
-import string
-########################################
 
 class ThreePanelPhotPlot:
     '''

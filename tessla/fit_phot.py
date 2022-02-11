@@ -53,7 +53,7 @@ def fix_tois(toi, args):
     '''
     planet_dir = args.planet_objs_dir
     assert os.path.isdir(planet_dir), f"{planet_dir} is not a valid path."
-
+    
     if not args.quiet:
         print(f"Loading {len(os.listdir(planet_dir))} non-TOI transiting planet(s) from {planet_dir}")
     for fname in os.listdir(planet_dir):
