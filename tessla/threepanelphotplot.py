@@ -325,6 +325,11 @@ class ThreePanelPhotPlot:
         # Plot housekeeping
         bax3.set_ylabel("Residuals", fontsize=14, labelpad=self.ylabelpad)
         bax3.set_xlabel(f"Time [BJD - {self.toi.bjd_ref:.1f}]", fontsize=14, labelpad=30)
+        
+        # If there are more than 3 chunks, make the x-axis ticklabel font smaller so that the numbers don't overlap
+        # if len(break_inds) > 2:
+        #     bax3.tick_params(axis='x', which='major', labelsize=12)
+
         ax_left, ax_right = bax3.axs[0], bax3.axs[-1]
         for ax in [ax_left, ax_right]:
             ax.yaxis.set_major_locator(MultipleLocator(2))
@@ -345,6 +350,9 @@ class ThreePanelPhotPlot:
             # Left-most
             ax_left = bax.axs[0]
             ax_left.xaxis.set_major_locator(MultipleLocator(10))
+            # If there are more than 3 chunks, make the x-axis ticklabels spacing larger so that the numbers don't overlap
+            if len(break_inds) > 2:
+                ax_left.xaxis.set_major_locator(MultipleLocator(20))
             ax_left.xaxis.set_minor_locator(MultipleLocator(5))
             ax_left.tick_params(axis="y", direction="in", which="both", left=True, right=False)
             ax_left.tick_params(axis="x", direction="in", which="both", top=True, bottom=True)
@@ -354,12 +362,18 @@ class ThreePanelPhotPlot:
                 ax_mid = bax.axs[j]
                 ax_mid.tick_params(axis="y", which="both", left=False, right=False)
                 ax_mid.xaxis.set_major_locator(MultipleLocator(10))
+                # If there are more than 3 chunks, make the x-axis ticklabels spacing larger so that the numbers don't overlap
+                if len(break_inds) > 2:
+                    ax_mid.xaxis.set_major_locator(MultipleLocator(20))
                 ax_mid.xaxis.set_minor_locator(MultipleLocator(5))
                 ax_mid.tick_params(axis="x", direction="in", which="both", top=True, bottom=True)
             
             # Right-most
             ax_right = bax.axs[-1]
             ax_right.xaxis.set_major_locator(MultipleLocator(10))
+            # If there are more than 3 chunks, make the x-axis ticklabels spacing larger so that the numbers don't overlap
+            if len(break_inds) > 2:
+                ax_right.xaxis.set_major_locator(MultipleLocator(20))
             ax_right.xaxis.set_minor_locator(MultipleLocator(5))
             ax_right.tick_params(axis="x", direction="in", which="both", top=True, bottom=True)
             ax_right.tick_params(axis="y", direction="in", which="both", left=False, right=True)
