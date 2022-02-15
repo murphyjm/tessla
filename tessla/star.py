@@ -15,7 +15,6 @@ def pickle_star_from_isoclassify_output(id_starname_list, isoclassify_csv_path, 
     
     df = pd.read_csv(isoclassify_csv_path)
     assert all([starname in df.id_starname.values for starname in id_starname_list]), "At least one of the star id's you requested is not in the output .csv file."
-    star_objs = {}
 
     for starname in id_starname_list:
         star_props = {}
