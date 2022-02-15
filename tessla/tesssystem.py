@@ -77,7 +77,7 @@ class TessSystem:
 
         # Organize the output directory structure
         if output_dir is None:
-            self.output_dir = self.name
+            self.output_dir = self.name.replace(' ', '_')
         if not os.path.isdir(self.output_dir):
             os.makedirs(self.output_dir)
         
@@ -644,12 +644,12 @@ class TessSystem:
         
         # Do some output directory housekeeping
         assert os.path.isdir(self.phot_sampling_dir), "Output directory does not exist." # This should be redundant, but just in case.
-        chains_output_fname = os.path.join(self.phot_sampling_dir, f"{self.name}_phot_chains{output_fname_suffix}.csv.gz")
+        chains_output_fname = os.path.join(self.phot_sampling_dir, f"{self.name.replace(' ', '_')}_phot_chains{output_fname_suffix}.csv.gz")
         if not overwrite and os.path.isfile(chains_output_fname):
             warnings.warn("Exiting before starting the sampling to avoid overwriting exisiting chains file.")
             return None, None
 
-        trace_summary_output_fname = os.path.join(self.phot_sampling_dir, f'{self.name}_trace_summary{output_fname_suffix}.csv')
+        trace_summary_output_fname = os.path.join(self.phot_sampling_dir, f"{self.name.replace(' ', '_')}_trace_summary{output_fname_suffix}.csv")
         if not overwrite and os.path.isfile(trace_summary_output_fname):
             warnings.warn("Exiting before starting the sampling to avoid overwriting exisiting trace summary file.")
             return None, None

@@ -80,7 +80,7 @@ class ThreePanelPhotPlot:
 
         # Save fname housekeeping and overwrite handling.
         if save_fname is None:
-            default_save_fname = f"{self.toi.name}_phot_model"
+            default_save_fname = f"{self.toi.name.replace(' ', '_')}_phot_model"
             save_fname = os.path.join(out_dir, default_save_fname + self.save_format)
         else:
             save_fname = os.path.join(out_dir, save_fname + self.save_format)

@@ -122,7 +122,7 @@ def main():
                                    use_broken_x_axis=use_broken_x_axis, 
                                    plot_random_transit_draws=(not args.no_sampling),
                                    num_random_transit_draws=args.num_transit_draws)
-    phot_plot.plot(save_fname=f"{toi.name}_phot_model" + args.plot_fname_suffix, overwrite=args.overwrite_plot)
+    phot_plot.plot(save_fname=f"{toi.name.replace(' ', '_')}_phot_model" + args.plot_fname_suffix, overwrite=args.overwrite_plot)
 
     # TODO: Make additional plots e.g. corner plots
     
@@ -130,7 +130,7 @@ def main():
 
     # For now: pickle the toi object
     # Can maybe get rid of this step since it takes up a lot of memory?
-    with open(os.path.join(toi.output_dir, f"{toi.name}_toi_obj.pkl"), "wb") as toi_fname:
+    with open(os.path.join(toi.output_dir, f"{toi.name.replace(' ', '_')}_toi_obj.pkl"), "wb") as toi_fname:
         pickle.dump(toi, toi_fname, protocol=pickle.HIGHEST_PROTOCOL)
     
     if not args.quiet:
