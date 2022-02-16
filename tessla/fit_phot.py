@@ -102,8 +102,8 @@ def main():
     
     # Run the MAP fitting loop
     model = toi.flatten_light_curve()
-    quick_transit_plot(toi, toi.map_soln, toi.extras)
-
+    quick_transit_plot(toi)
+    
     # Run the sampling
     if not args.no_sampling:
         flat_samps, trace = toi.run_sampling(model, 

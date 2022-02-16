@@ -109,15 +109,15 @@ def plot_periodogram(out_dir, title, xo_ls, transiting_planets, label_peaks=True
     out_dir = os.path.join(out_dir, 'periodograms')
     if not os.path.isdir(out_dir):
         os.makedirs(out_dir)
-    fig.savefig(os.path.join(out_dir, f'{title}_ls_periodogram.png'), bbox_inches='tight', dpi=300)
+    fig.savefig(os.path.join(out_dir, f'{title.replace(" ", "_")}_ls_periodogram.png'), bbox_inches='tight', dpi=300)
     plt.close()
-
+    
     if verbose:
         print(f"Periodogram plot saved to {out_dir}")
 
     return fig, ax
 
-def quick_transit_plot(toi, map_soln, extras):
+def quick_transit_plot(toi):
     '''
     Make a plot of what the MAP transit fit looks like for each planet before moving on to the sampling.
     '''
@@ -129,12 +129,12 @@ def quick_transit_plot(toi, map_soln, extras):
     for i,planet in enumerate(toi.transiting_planets.values()):
         fig, ax = plt.subplots()
         x, y = toi.cleaned_time, toi.cleaned_flux
-        x_fold = ((x - map_soln["t0"][i] + 0.5 * map_soln["period"][i]) % map_soln[
+        x_fold = ((x - toi.map_soln["t0"][i] + 0.5 * toi.map_soln["period"][i]) % toi.map_soln[
             "period"
-        ][i] - 0.5 * map_soln["period"][i]).values
-        ax.scatter(x_fold, y - extras['gp_pred'] - map_soln['mean'], c=x, s=3)
-        phase = np.linspace(-0.3, 0.3, len(extras['lc_phase_pred'][:, i]))
-        ax.plot(phase, extras['lc_phase_pred'][:, i], 'r', lw=5)
+        ][i] - 0.5 * toi.map_soln["period"][i]).values
+        ax.scatter(x_fold, y - toi.extras['gp_pred'] - toi.map_soln['mean'], c=x, s=3)
+        phase = np.linspace(-0.3, 0.3, len(toi.extras['lc_phase_pred'][:, i]))
+        ax.plot(phase, toi.extras['lc_phase_pred'][:, i], 'r', lw=5)
         ax.set_xlim(-6/24, 6/24)
         ax.xaxis.set_major_locator(MultipleLocator(3/24))
         ax.xaxis.set_minor_locator(MultipleLocator(1.5/24))
@@ -142,8 +142,8 @@ def quick_transit_plot(toi, map_soln, extras):
         ax.set_xlabel("time since transit [hours]")
         ax.set_ylabel("relative flux [ppt]")
         ax.set_title(f"{toi.name} {planet.pl_letter}")
-        ax.text(0.1, 0.1, f"$P =$ {map_soln['period'][i]:.1f} d", transform=ax.transAxes)
-        ax.text(0.1, 0.05, f"$R_\mathrm{{p}}/R_* =$ {map_soln['ror'][i]:.4f}", transform=ax.transAxes)
+        ax.text(0.1, 0.1, f"$P =$ {toi.map_soln['period'][i]:.1f} d", transform=ax.transAxes)
+        ax.text(0.1, 0.05, f"$R_\mathrm{{p}}/R_* =$ {toi.map_soln['ror'][i]:.4f}", transform=ax.transAxes)
         
         save_fname = os.path.join(out_dir, f"initial_transit_fit_{toi.name.replace(' ', '_')}_{planet.pl_letter}.png")
         fig.savefig(save_fname, bbox_inches='tight', dpi=300)
@@ -151,3 +151,14 @@ def quick_transit_plot(toi, map_soln, extras):
 
     if toi.verbose:
         print(f"Initial transit fit plots saved to {out_dir}")
+
+def corner_plot_fit_params(toi):
+    '''
+
+    '''
+    pass
+
+def corner_plot_derived_params(toi):
+    '''
+    '''
+    pass

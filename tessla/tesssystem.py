@@ -43,7 +43,7 @@ class TessSystem:
                 n_transiting=1, # Number of transiting planets
                 n_keplerians=None, # Number of Keplerian signals to include in models of the RVs. This will include transiting planets and any potentially non-transiting planet signals.
                 bjd_ref=2457000, # BJD offset
-                phot_gp_kernel='activity', # What GP kernel to use to flatten the light curve. 
+                phot_gp_kernel='exp_decay', # What GP kernel to use to flatten the light curve. 
                                             # Options are: ['activity', 'exp_decay', 'rotation']. Activity is exp_decay + rotation. See celerite2 documentation.
                 verbose=True, # Print out messages
                 plotting=True, # Create plots as you go
@@ -150,7 +150,7 @@ class TessSystem:
         for i,row in self.toi_catalog.iterrows():
             pl_toi_suffix = str(row['Full TOI ID'])[-3:]
             pl_letter = pl_letter_mapper[pl_toi_suffix]
-            planet = Planet(self, 
+            planet = Planet(self.bjd_ref,
                             pl_letter=pl_letter, 
                             pl_toi_suffix=pl_toi_suffix, 
                             per=row['Orbital Period Value'], 
@@ -400,7 +400,7 @@ class TessSystem:
 
         fig, ax = None, None
         if self.plotting:
-            fig, ax = plot_periodogram(self.output_dir, f"{self.name} OoT Photometry LS Periodogram", 
+            fig, ax = plot_periodogram(self.output_dir, f"{self.name.replace(' ', '_')} OoT Photometry LS Periodogram", 
                         xo_ls, 
                         self.transiting_planets,
                         verbose=self.verbose,

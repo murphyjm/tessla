@@ -7,6 +7,10 @@ from tessla.data_utils import get_density
 def pickle_star_from_isoclassify_output(id_starname_list, isoclassify_csv_path, output_dir, specmatch_version='emp'):
     '''
     Create a star object using output from isoclassify.
+
+    Example of calling this function:
+    pickle_star_from_isoclassify_output([x[:-1] for x in glob("*/")], 'isoclassify_output_all_gaiadr2.csv', 'iso_star_pickles')
+    # Where [x[:-1] for x in glob("*/")] gets the names of the subdirectories in the current directory, which are assumed to be the star ids of the targets for which isoclassify was run. 
     '''
     assert os.path.isfile(isoclassify_csv_path), "Invalid isoclassify output file path."
     
