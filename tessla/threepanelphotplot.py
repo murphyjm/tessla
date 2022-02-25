@@ -95,7 +95,7 @@ class ThreePanelPhotPlot:
             fig = self.__three_panel_plot()
         
         # Save the figure!
-        fig.savefig(save_fname, bbox_inches='tight', dpi=self.save_dpi)
+        fig.savefig(save_fname, facecolor='white', bbox_inches='tight', dpi=self.save_dpi)
         print(f"Photometry model plot saved to {save_fname}")
         plt.close()
 
