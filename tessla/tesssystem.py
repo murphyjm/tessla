@@ -677,7 +677,7 @@ class TessSystem:
         self.__flat_samps_to_csv(model, flat_samps, chains_output_fname)
         self.chains_path = chains_output_fname
 
-        return flat_samps, trace
+        return flat_samps
 
     def add_ecc_and_omega_to_chains(self, flat_samps, rho_circ_param_name='rho_circ'):
         '''

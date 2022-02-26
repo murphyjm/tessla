@@ -11,11 +11,14 @@ from tessla.star import Star
 from tessla.data_utils import find_breaks
 from tessla.plotting_utils import sg_smoothing_plot, quick_transit_plot
 from tessla.threepanelphotplot import ThreePanelPhotPlot
+from tessla.tesslacornerplot import TesslaCornerPlot
 
 # Script imports
 import os
 import pickle
 import argparse
+
+import numpy as np
 
 def parse_args():
     '''
@@ -40,6 +43,7 @@ def parse_args():
     parser.add_argument("--nchains", type=int, default=2, help="Number of chains for the HMC sampler.")
 
     # Plotting hyperparameters
+    parser.add_argument("--no_plotting", action="store_true", help="If included, don't do any of the plotting.")
     parser.add_argument("--num_transit_draws", type=int, default=25, help="Number of random transit draws to plot in the 3-panel plot.")
     parser.add_argument("--plot_fname_suffix", type=str, default='', help="Suffix to append to the save name of the 3-panel plot.")
     parser.add_argument("--overwrite_plot", action="store_true", help="If included, overwrite an existing file when saving the 3-panel plot.")
@@ -77,7 +81,7 @@ def main():
     assert os.path.isfile(args.star_obj_fname), f"Invalid Star object file name: {args.star_obj_fname}"
 
     # Create the TessSystem object, download the photometry, and add TOIs that appear in the TOI catalog.
-    toi = TessSystem(args.name, tic=args.tic, toi=args.toi, phot_gp_kernel=args.phot_gp_kernel)
+    toi = TessSystem(args.name, tic=args.tic, toi=args.toi, phot_gp_kernel=args.phot_gp_kernel, plotting=(not args.no_plotting))
     toi.get_tess_phot()
     toi.search_for_tois()
     toi.add_tois_from_catalog()
@@ -90,7 +94,8 @@ def main():
     toi.initial_outlier_removal(positive_outliers_only=False, max_iters=10, sigma_thresh=3, time_window=1)
 
     # Plot and save the initial outlier removal
-    sg_smoothing_plot(toi)
+    if toi.plotting:
+        sg_smoothing_plot(toi)
     
     # This isn't strictly necessary, but estimate the rotation period using a periodogram OoT photometry
     toi.oot_periodogram(**{'label_peaks':False})
@@ -105,28 +110,55 @@ def main():
     quick_transit_plot(toi)
     
     # Run the sampling
+    flat_samps = None
     if not args.no_sampling:
-        flat_samps, trace = toi.run_sampling(model, 
-                                        toi.map_soln, 
-                                        tune=args.ntune, 
-                                        draws=args.draws, 
-                                        chains=args.nchains)
-    
+        flat_samps = toi.run_sampling(model, 
+                                    toi.map_soln, 
+                                    tune=args.ntune, 
+                                    draws=args.draws, 
+                                    chains=args.nchains)
+
         # Add eccentricity and omega to the chains
         toi.add_ecc_and_omega_to_chains(flat_samps)
         toi.add_derived_quantities_to_chains()
 
-    # Plot the results
-    use_broken_x_axis = len(find_breaks(toi.cleaned_time.values)) > 0 # If breaks in the x-axis, then use the broken x-axis plot
-    phot_plot = ThreePanelPhotPlot(toi,
-                                   use_broken_x_axis=use_broken_x_axis, 
-                                   plot_random_transit_draws=(not args.no_sampling),
-                                   num_random_transit_draws=args.num_transit_draws)
-    phot_plot.plot(save_fname=f"{toi.name.replace(' ', '_')}_phot_model" + args.plot_fname_suffix, overwrite=args.overwrite_plot)
+    if toi.plotting:
+        # Plot the results
+        use_broken_x_axis = len(find_breaks(toi.cleaned_time.values)) > 0 # If breaks in the x-axis, then use the broken x-axis plot
+        phot_plot = ThreePanelPhotPlot(toi,
+                                    use_broken_x_axis=use_broken_x_axis, 
+                                    plot_random_transit_draws=(not args.no_sampling),
+                                    num_random_transit_draws=args.num_transit_draws)
+        phot_plot.plot(save_fname=f"{toi.name.replace(' ', '_')}_phot_model" + args.plot_fname_suffix, overwrite=args.overwrite_plot)
 
-    # TODO: Make additional plots e.g. corner plots
     
-    # TODO: Save specific attributes as a pickled object or json file e.g. the dictionary with the MAP values: toi.map_soln 
+    if flat_samps is not None:
+        
+        # TODO: Make additional plots e.g. corner plots
+        if toi.plotting:
+            
+            if toi.phot_gp_kernel == "exp_decay":
+            
+                # Corner plot for star properties and noise parameters
+                star_labels = ['$\mu$ [ppt]', '$u_1$, $u_2$']
+                noise_labels = ['$\sigma_\mathrm{jitter}$ [ppt]', '$\sigma_\mathrm{GP}$ [PPT]', r'$\rho$ [d]']
+                star_noise_chains = np.vstack([flat_samps['mean'], 
+                                                flat_samps['u'], 
+                                                np.exp(flat_samps['log_sigma_lc']),
+                                                np.exp(flat_samps['log_sigma_dec_gp']),
+                                                np.exp(flat_samps['log_rho_gp'])]).T
+                star_noise_corner = TesslaCornerPlot(toi, star_labels + noise_labels, star_noise_chains, )
+            else:
+                # TODO: Fix? Or just leave it like this and people can make corner plots on their own if they use a different kernel.
+                print("NOTE: Right now automated corner plot generation only works if phot_gp_kernel == 'exp_decay'")
+
+        # TODO: Save output tables with derived physical parameters in useful units e.g. planet radius in earth radii
+
+    
+    # Save specific attributes as a pickled object or json file e.g. the dictionary with the MAP values: toi.map_soln. 
+    # Can add to this list if wanted.
+    with open(os.path.join(toi.output_dir, f"{toi.name.replace(' ', '_')}_map_soln.pkl"), "wb") as map_soln_fname:
+        pickle.dump(toi.map_soln, map_soln_fname, protocol=pickle.HIGHEST_PROTOCOL)
 
     # For now: pickle the toi object
     # Can maybe get rid of this step since it takes up a lot of memory?
