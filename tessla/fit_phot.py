@@ -8,10 +8,9 @@ If something in the results looks funky, refer to the example notebooks for a mo
 from tessla.tesssystem import TessSystem
 from tessla.planet import Planet
 from tessla.star import Star
-from tessla.data_utils import find_breaks
-from tessla.plotting_utils import sg_smoothing_plot, quick_transit_plot
+from tessla.data_utils import find_breaks, quick_look_summary
+from tessla.plotting_utils import sg_smoothing_plot, quick_transit_plot, plot_corners
 from tessla.threepanelphotplot import ThreePanelPhotPlot
-from tessla.tesslacornerplot import TesslaCornerPlot
 
 # Script imports
 import os
@@ -19,6 +18,7 @@ import pickle
 import argparse
 
 import numpy as np
+import pandas as pd
 
 def parse_args():
     '''
@@ -131,30 +131,19 @@ def main():
                                     num_random_transit_draws=args.num_transit_draws)
         phot_plot.plot(save_fname=f"{toi.name.replace(' ', '_')}_phot_model" + args.plot_fname_suffix, overwrite=args.overwrite_plot)
 
-    
+    # If the sampling was run...
     if flat_samps is not None:
-        
-        # TODO: Make additional plots e.g. corner plots
+
+        # Read this into data for derived corner plots and output summary table.
+        df_derived_chains = pd.read_csv(toi.chains_derived_path)
+
+        # Make the corner plots
         if toi.plotting:
-            
-            if toi.phot_gp_kernel == "exp_decay":
-            
-                # Corner plot for star properties and noise parameters
-                star_labels = ['$\mu$ [ppt]', '$u_1$, $u_2$']
-                noise_labels = ['$\sigma_\mathrm{jitter}$ [ppt]', '$\sigma_\mathrm{GP}$ [PPT]', r'$\rho$ [d]']
-                star_noise_chains = np.vstack([flat_samps['mean'], 
-                                                flat_samps['u'], 
-                                                np.exp(flat_samps['log_sigma_lc']),
-                                                np.exp(flat_samps['log_sigma_dec_gp']),
-                                                np.exp(flat_samps['log_rho_gp'])]).T
-                star_noise_corner = TesslaCornerPlot(toi, star_labels + noise_labels, star_noise_chains, )
-            else:
-                # TODO: Fix? Or just leave it like this and people can make corner plots on their own if they use a different kernel.
-                print("NOTE: Right now automated corner plot generation only works if phot_gp_kernel == 'exp_decay'")
-
-        # TODO: Save output tables with derived physical parameters in useful units e.g. planet radius in earth radii
-
-    
+            plot_corners(toi, flat_samps, df_derived_chains)
+        
+        # Save an output table with derived physical parameters in useful units for quickly checking on the sampling results.
+        quick_look_summary(toi, df_derived_chains)
+        
     # Save specific attributes as a pickled object or json file e.g. the dictionary with the MAP values: toi.map_soln. 
     # Can add to this list if wanted.
     with open(os.path.join(toi.output_dir, f"{toi.name.replace(' ', '_')}_map_soln.pkl"), "wb") as map_soln_fname:

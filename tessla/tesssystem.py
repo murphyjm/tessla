@@ -4,6 +4,7 @@ import warnings
 import numpy as np
 import pandas as pd
 import lightkurve as lk
+from astropy import units
 
 # Data utils
 from tessla.data_utils import time_delta_to_data_delta, convert_negative_angles, get_semimajor_axis, get_sinc, get_aor, get_teq
@@ -716,6 +717,8 @@ class TessSystem:
         rstar_samples = np.random.normal(self.star.rstar, self.star.rstar_err, N)
         teff_samples = np.random.normal(self.star.teff, self.star.teff_err, N)
         for letter in self.transiting_planets.keys():
+            df_chains[f"rp_{letter}"] = units.R_sun.to(units.R_earth, df_chains[f"ror_{letter}"] * rstar_samples) # Planet radius in earth radius
+            df_chains[f"dur_hr_{letter}"] = df_chains[f"dur_{letter}"] * 24 # Transit duration in hours
             df_chains[f"omega_folded_{letter}"] = df_chains[f"omega_{letter}"].apply(convert_negative_angles)
             df_chains[f"omega_folded_deg_{letter}"] = df_chains[f"omega_folded_{letter}"].values * 180 / np.pi # Convert omega from radians to degrees to have for convenience
             df_chains[f"a_{letter}"] = get_semimajor_axis(df_chains[f"period_{letter}"].values, mstar_samples)
