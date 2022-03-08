@@ -57,6 +57,8 @@ class TesslaCornerPlot:
             return None
 
         # Make the plot!
+        # TODO: Fix label for T0 so that it fits
+        # TODO: Make Rp/R* title have more decimal places
         fig = corner.corner(self.chains, 
                             labels=self.chain_labels,
                             label_kwargs={'fontsize':14},
@@ -65,7 +67,7 @@ class TesslaCornerPlot:
                             show_titles=True,
                             title_kwargs={'fontsize':12}
                             )
-        fig.suptitle(self.title, fontsize=14, y=1.05)
+        fig.suptitle(self.title, fontsize=14, y=1.01)
 
         # Save the figure!
         fig.savefig(save_fname, facecolor='white', bbox_inches='tight', dpi=self.save_dpi)
