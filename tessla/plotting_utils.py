@@ -178,26 +178,26 @@ def plot_corners(toi, df_derived_chains, overwrite=False):
         for i,letter in enumerate(toi.transiting_planets.keys()):
             planet_labels = [
                 '$P$ [d]',
-                '$T_\mathrm{c}$ ' + f'[BJD - {toi.bjd_ref:.1f}]',
-                '$R_\mathrm{p}/R_*$',
+                '$T_\mathrm{c}$ ' + f'[BJD - {toi.bjd_ref:.1f}]\n', # Add new line so top of title doesn't overlap with Period corner plot?
+                '$R_\mathrm{p}/R_*$ [$\%$]',
                 '$b$',
                 '$T_\mathrm{dur}$ [hr]'
             ]
             planet_chains = np.vstack([
                 df_derived_chains[f'period_{letter}'],
                 df_derived_chains[f't0_{letter}'],
-                df_derived_chains[f'ror_{letter}'],
+                df_derived_chains[f'ror_{letter}'] * 100, # Put in units of percent to make the decimals easier to see
                 df_derived_chains[f'b_{letter}'],
                 df_derived_chains[f'dur_hr_{letter}']
             ]).T
             planet_corner = TesslaCornerPlot(toi, planet_labels, planet_chains, f"{toi.name} {letter} measured parameters")
             planet_corner.plot(overwrite=overwrite)
 
-            # TODO: Create a corner plot with derived planet parameters? e.g. planet radius, eccentricity, and omega?
+            # Corner plot for derived planet parameters
             derived_labels = [
                 '$R_\mathrm{p}$ [$R_\mathrm{\oplus}$]',
                 '$e$',
-                '$\omega$ [Deg]'
+                '$\omega$ [$^{\circ}$]'
             ]
             derived_chains = np.vstack([
                 df_derived_chains[f"rp_{letter}"],

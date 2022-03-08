@@ -512,7 +512,7 @@ class ThreePanelPhotPlot:
             phase_folded_axes.append(ax0)
 
             # Plot the folded data
-            # TODO: Could use MAP values here instead of the ones store in the planet object since they haven't been updated yet.
+            # TODO: Could use MAP values here instead of the ones stored in the planet object since they haven't been updated yet.
             x_fold = (self.x - planet.t0 + 0.5 * planet.per) % planet.per - 0.5 * planet.per
             ax0.plot(x_fold, self.y - gp_mod, ".k", label="Data", zorder=-1000, alpha=0.3)
 
