@@ -46,7 +46,7 @@ def parse_args():
     parser.add_argument("--no_plotting", action="store_true", help="If included, don't do any of the plotting.")
     parser.add_argument("--num_transit_draws", type=int, default=25, help="Number of random transit draws to plot in the 3-panel plot.")
     parser.add_argument("--plot_fname_suffix", type=str, default='', help="Suffix to append to the save name of the 3-panel plot.")
-    parser.add_argument("--overwrite_plot", action="store_true", help="If included, overwrite an existing file when saving the 3-panel plot.")
+    parser.add_argument("--overwrite_plot", action="store_true", help="If included, overwrite an existing file when saving the 3-panel and corner plots.")
     # Bonus stuff
     parser.add_argument("--quiet", action="store_true", help="Disable print statements.")
     return parser.parse_args()
@@ -139,7 +139,7 @@ def main():
 
         # Make the corner plots
         if toi.plotting:
-            plot_corners(toi, flat_samps, df_derived_chains)
+            plot_corners(toi, df_derived_chains, overwrite=args.overwrite_plot)
         
         # Save an output table with derived physical parameters in useful units for quickly checking on the sampling results.
         quick_look_summary(toi, df_derived_chains)

@@ -1,6 +1,7 @@
 import numpy as np
 from astropy import units
 import pandas as pd
+import os
 
 def find_breaks(time, diff_threshold=10, verbose=False):
     '''
@@ -95,4 +96,7 @@ def quick_look_summary(toi, df_derived_chains):
     for letter in toi.transiting_planets.keys():
         for param in ['period', 't0', 'rp', 'dur_hr', 'b', 'ecc', 'omega_folded_deg']:
             df.loc[f"{param}_{letter}"] = __get_summary_info(df_derived_chains[f"{param}_{letter}"])
-    df.to_csv(toi.output_dir, f"{toi.name.replace(' ', '_')}_quick_look_summary.csv")
+    save_fname = f"{toi.name.replace(' ', '_')}_quick_look_summary.csv"
+    save_path = os.path.join(toi.output_dir, save_fname)
+    df.to_csv(save_path)
+    print(f"Quick look summary table saved to {save_path}.")

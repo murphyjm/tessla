@@ -65,9 +65,9 @@ class TesslaCornerPlot:
                             show_titles=True,
                             title_kwargs={'fontsize':12}
                             )
-        fig.suptitle(self.plot_title, fontsize=14)
+        fig.suptitle(self.title, fontsize=14, y=1.05)
 
         # Save the figure!
         fig.savefig(save_fname, facecolor='white', bbox_inches='tight', dpi=self.save_dpi)
-        print(f"Corner plot saved to {save_fname}")
+        print(f"{self.title} corner plot saved to {save_fname}")
         plt.close()

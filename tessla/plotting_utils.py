@@ -154,22 +154,25 @@ def quick_transit_plot(toi):
     if toi.verbose:
         print(f"Initial transit fit plots saved to {out_dir}")
 
-def plot_corners(toi, flat_samps, df_derived_chains):
+def plot_corners(toi, df_derived_chains, overwrite=False):
     '''
     Make the corner plots!
     '''
     if toi.phot_gp_kernel == "exp_decay":
 
         # Corner plot for star properties and noise parameters
-        star_labels = ['$\mu$ [ppt]', '$u_1$, $u_2$']
+        star_labels = ['$\mu$ [ppt]', '$u_1$', '$u_2$']
         noise_labels = ['$\sigma_\mathrm{jitter}$ [ppt]', '$\sigma_\mathrm{GP}$ [PPT]', r'$\rho$ [d]']
-        star_noise_chains = np.vstack([flat_samps['mean'], 
-                                        flat_samps['u'], 
-                                        np.exp(flat_samps['log_sigma_lc']),
-                                        np.exp(flat_samps['log_sigma_dec_gp']),
-                                        np.exp(flat_samps['log_rho_gp'])]).T
-        star_noise_corner = TesslaCornerPlot(toi, star_labels + noise_labels, star_noise_chains, f"{toi.name.replace(' ', '_')}")
-        star_noise_corner.plot()
+        star_noise_chains = np.vstack([
+            df_derived_chains['mean'], 
+            df_derived_chains['u_0'],
+            df_derived_chains['u_1'],
+            np.exp(df_derived_chains['log_sigma_lc']),
+            np.exp(df_derived_chains['log_sigma_dec_gp']),
+            np.exp(df_derived_chains['log_rho_gp'])
+        ]).T
+        star_noise_corner = TesslaCornerPlot(toi, star_labels + noise_labels, star_noise_chains, toi.name)
+        star_noise_corner.plot(overwrite=overwrite)
 
         # Corner plot for each planet's transit parameters
         for i,letter in enumerate(toi.transiting_planets.keys()):
@@ -178,17 +181,17 @@ def plot_corners(toi, flat_samps, df_derived_chains):
                 '$T_\mathrm{c}$ ' + f'[BJD - {toi.bjd_ref:.1f}]',
                 '$R_\mathrm{p}/R_*$',
                 '$b$',
-                '$T_\mathrm{dur}$ [hr]$'
+                '$T_\mathrm{dur}$ [hr]'
             ]
             planet_chains = np.vstack([
-                flat_samps['period'][i, :],
-                flat_samps['t0'][i, :],
-                flat_samps['ror'][i, :],
-                flat_samps['b'][i, :],
-                flat_samps['dur'][i, :] * 24
+                df_derived_chains[f'period_{letter}'],
+                df_derived_chains[f't0_{letter}'],
+                df_derived_chains[f'ror_{letter}'],
+                df_derived_chains[f'b_{letter}'],
+                df_derived_chains[f'dur_hr_{letter}']
             ]).T
-            planet_corner = TesslaCornerPlot(toi, planet_labels, planet_chains, f"{toi.name.replace(' ', '_')} {letter} measured parameters")
-            planet_corner.plot()
+            planet_corner = TesslaCornerPlot(toi, planet_labels, planet_chains, f"{toi.name} {letter} measured parameters")
+            planet_corner.plot(overwrite=overwrite)
 
             # TODO: Create a corner plot with derived planet parameters? e.g. planet radius, eccentricity, and omega?
             derived_labels = [
@@ -201,8 +204,8 @@ def plot_corners(toi, flat_samps, df_derived_chains):
                 df_derived_chains[f"ecc_{letter}"],
                 df_derived_chains[f"omega_folded_deg_{letter}"]
             ]).T
-            derived_corner = TesslaCornerPlot(toi, derived_labels, derived_chains, f"{toi.name.replace(' ', '_')} {letter} derived parameters")
-            derived_corner.plot()
+            derived_corner = TesslaCornerPlot(toi, derived_labels, derived_chains, f"{toi.name} {letter} derived parameters")
+            derived_corner.plot(overwrite=overwrite)
     else:
         # TODO: Fix? Or just leave it like this and people can make corner plots on their own if they use a different kernel.
         print("NOTE: Right now automated corner plot generation only works if phot_gp_kernel == 'exp_decay'")
