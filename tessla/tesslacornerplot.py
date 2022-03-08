@@ -18,7 +18,7 @@ class TesslaCornerPlot:
                 toi, 
                 chain_labels,
                 chains=None,
-                plot_title='',
+                title='',
                 save_format='.png',
                 save_dpi=400) -> None:
 
@@ -33,7 +33,7 @@ class TesslaCornerPlot:
             chains = pd.read_csv(toi.chains_path)
         self.chains = chains
 
-        self.plot_title = plot_title
+        self.title = title
 
         # Save/output hyperparameters
         self.save_format = save_format
