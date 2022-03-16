@@ -33,6 +33,9 @@ def parse_args():
     parser.add_argument("star_obj_fname", type=str, help="Path to the .pkl file containing the tessla.star.Star object.")
     parser.add_argument("--planet_objs_dir", type=str, default=None, help="If there are transiting planets that are not TOIs in the system or the TOIs in the catalog have incorrect properties, this is the path to the directory with the .pkl files that contain the tessla.planet.Planet objects.")
     
+    # Data
+    parser.add_argument("--flux_origin", type=str, default="sap_flux", help="Either pdcsap_flux or sap_flux. Default is SAP.")
+
     # Model hyperparameters
     parser.add_argument("--phot_gp_kernel", type=str, default="exp_decay", help="Kernel to use for the photometry flattening.")
 
@@ -81,7 +84,7 @@ def main():
     assert os.path.isfile(args.star_obj_fname), f"Invalid Star object file name: {args.star_obj_fname}"
 
     # Create the TessSystem object, download the photometry, and add TOIs that appear in the TOI catalog.
-    toi = TessSystem(args.name, tic=args.tic, toi=args.toi, phot_gp_kernel=args.phot_gp_kernel, plotting=(not args.no_plotting))
+    toi = TessSystem(args.name, tic=args.tic, toi=args.toi, phot_gp_kernel=args.phot_gp_kernel, plotting=(not args.no_plotting), flux_origin=args.flux_origin)
     toi.get_tess_phot()
     toi.search_for_tois()
     toi.add_tois_from_catalog()
