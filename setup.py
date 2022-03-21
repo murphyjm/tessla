@@ -1,3 +1,4 @@
+from importlib_metadata import entry_points
 from setuptools import setup
 
 setup(name='tessla',
@@ -5,6 +6,10 @@ setup(name='tessla',
       # list folders, not files
       packages=['tessla',
                 'test'],
-      scripts=['bin/fit_phot.py'],
       package_data={'tessla': ['data/toi_list.csv']},
-      )
+      # scripts=['bin/fit_phot.py'],
+      entry_points={
+            'console_scripts':['tessla_fit_phot=tessla.fit_phot:main'],
+      }
+
+)

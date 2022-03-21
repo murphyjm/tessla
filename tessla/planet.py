@@ -13,7 +13,7 @@ class Planet:
     Object to house data related to a planet in a tess system.
     '''
     def __init__(self, 
-                toi, # TessSystem object.
+                toi_bjd_ref,
                 pl_letter='b',
                 pl_toi_suffix='.01',
                 per=None,
@@ -35,9 +35,9 @@ class Planet:
         # A little janky. But make sure that t0 uses the same time reference offset.
         self.t0 = t0
         self.t0_err = t0_err
-        if bjd_ref != toi.bjd_ref:
-            self.bjd_ref = toi.bjd_ref
-            self.t0 = self.t0 + bjd_ref - toi.bjd_ref
+        if bjd_ref != toi_bjd_ref:
+            self.bjd_ref = toi_bjd_ref
+            self.t0 = self.t0 + bjd_ref - toi_bjd_ref
 
         self.dur = dur
         self.dur_err = dur_err

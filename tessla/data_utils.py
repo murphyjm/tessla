@@ -1,5 +1,7 @@
 import numpy as np
 from astropy import units
+import pandas as pd
+import os
 
 def find_breaks(time, diff_threshold=10, verbose=False):
     '''
@@ -78,3 +80,23 @@ def get_teq(a_samples, teff_samples, rstar_samples, bond_albedo=0):
     '''
     a_samples_sun = (a_samples * units.AU).to(units.R_sun).value
     return teff_samples * (1 - bond_albedo)**(0.25) * np.sqrt(rstar_samples / (2 * a_samples_sun))
+
+def __get_summary_info(chain):
+    median = np.median(chain)
+    std = np.std(chain)
+    q = np.quantile(chain, [0.16, 0.84]) - median
+    err16, err84 = q[0], q[-1]
+    min = np.min(chain)
+    max = np.max(chain)
+    return [median, std, err16, err84, min, max]
+
+def quick_look_summary(toi, df_derived_chains):
+    columns = ['median', 'std', 'err16', 'err84', 'min', 'max']
+    df = pd.DataFrame(columns=columns)
+    for letter in toi.transiting_planets.keys():
+        for param in ['period', 't0', 'rp', 'dur_hr', 'b', 'ecc', 'omega_folded_deg']:
+            df.loc[f"{param}_{letter}"] = __get_summary_info(df_derived_chains[f"{param}_{letter}"])
+    save_fname = f"{toi.name.replace(' ', '_')}_quick_look_summary.csv"
+    save_path = os.path.join(toi.output_dir, save_fname)
+    df.to_csv(save_path)
+    print(f"Quick look summary table saved to {save_path}.")

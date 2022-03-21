@@ -24,17 +24,8 @@ from brokenaxes import brokenaxes
 from matplotlib import gridspec
 from matplotlib.gridspec import GridSpec
 
-########################################
-# Need all of these????
 import datetime
-import calendar
-import matplotlib.dates as mdates
-import matplotlib.cbook as cbook
-import matplotlib.units as munits
 from astropy.time import Time
-import matplotlib.gridspec as gridspec
-import string
-########################################
 
 class ThreePanelPhotPlot:
     '''
@@ -43,9 +34,7 @@ class ThreePanelPhotPlot:
     Should think about this plot in the context of TOIs with many sectors of data, since it might not make sense in that case e.g. TOI-1247. Will worry about that later.
     '''
     def __init__(self, 
-                toi, 
-                map_soln, 
-                extras,
+                toi,
                 use_broken_x_axis=False, # Whether or not to break up the x-axis to avoid large gaps between sectors
                 data_gap_thresh=10, # Days. If gap in data is larger than this threshold, consider it another chunk in the broken axis (need to have use_broken_x_axis=True)
                 figsize=(12,14), 
@@ -63,9 +52,7 @@ class ThreePanelPhotPlot:
         self.x = toi.cleaned_time.values
         self.y = toi.cleaned_flux.values
         self.yerr = toi.cleaned_flux_err.values
-
-        self.map_soln = map_soln
-        self.extras = extras
+        
         self.use_broken_x_axis = use_broken_x_axis
         self.data_gap_thresh = data_gap_thresh
         self.plot_random_transit_draws = plot_random_transit_draws
@@ -79,21 +66,6 @@ class ThreePanelPhotPlot:
         self.d = d
         self.save_format = save_format
         self.save_dpi = save_dpi
-
-    def __plot_top_panel(self):
-        '''
-        Plot the flux and GP noise model.
-        '''
-        
-
-    def __plot_middle_panel(self):
-        pass
-    
-    def __plot_bottom_panel(self):
-        pass
-
-    def __plot_phase_folded_transit(self):
-        pass
     
     def plot(self, save_fname=None, overwrite=False):
         '''
@@ -106,22 +78,26 @@ class ThreePanelPhotPlot:
         if not os.path.isdir(out_dir):
             os.makedirs(out_dir)
 
-        if self.use_broken_x_axis:
-            if save_fname is None:
-                default_save_fname = f"{self.toi.name}_phot_model"
-                save_fname = os.path.join(out_dir, default_save_fname + self.save_format)
-            else:
-                save_fname = os.path.join(out_dir, save_fname + self.save_format)
-            if not overwrite and os.path.isfile(save_fname):
-                warnings.warn("Exiting before plotting to avoid overwriting exisiting plot file.")
-                return None
-            
-            fig, axes = self.__broken_three_panel_plot()
-            fig.savefig(save_fname, bbox_inches='tight', dpi=self.save_dpi)
-            print(f"Photometry model plot saved to {save_fname}")
-            return fig, axes
+        # Save fname housekeeping and overwrite handling.
+        if save_fname is None:
+            default_save_fname = f"{self.toi.name.replace(' ', '_')}_phot_model"
+            save_fname = os.path.join(out_dir, default_save_fname + self.save_format)
         else:
-            self.__three_panel_plot()
+            save_fname = os.path.join(out_dir, save_fname + self.save_format)
+        if not overwrite and os.path.isfile(save_fname):
+            warnings.warn("Exiting before plotting to avoid overwriting exisiting plot file.")
+            return None
+        
+        # Use broken axis plotting or regular plotting
+        if self.use_broken_x_axis:
+            fig = self.__broken_three_panel_plot()
+        else:
+            fig = self.__three_panel_plot()
+        
+        # Save the figure!
+        fig.savefig(save_fname, facecolor='white', bbox_inches='tight', dpi=self.save_dpi)
+        print(f"Photometry model plot saved to {save_fname}")
+        plt.close()
 
     def __get_xlim_tuple(self, break_inds):
         '''
@@ -353,6 +329,11 @@ class ThreePanelPhotPlot:
         # Plot housekeeping
         bax3.set_ylabel("Residuals", fontsize=14, labelpad=self.ylabelpad)
         bax3.set_xlabel(f"Time [BJD - {self.toi.bjd_ref:.1f}]", fontsize=14, labelpad=30)
+        
+        # If there are more than 3 chunks, make the x-axis ticklabel font smaller so that the numbers don't overlap
+        # if len(break_inds) > 2:
+        #     bax3.tick_params(axis='x', which='major', labelsize=12)
+
         ax_left, ax_right = bax3.axs[0], bax3.axs[-1]
         for ax in [ax_left, ax_right]:
             ax.yaxis.set_major_locator(MultipleLocator(2))
@@ -373,6 +354,9 @@ class ThreePanelPhotPlot:
             # Left-most
             ax_left = bax.axs[0]
             ax_left.xaxis.set_major_locator(MultipleLocator(10))
+            # If there are more than 3 chunks, make the x-axis ticklabels spacing larger so that the numbers don't overlap
+            if len(break_inds) > 2:
+                ax_left.xaxis.set_major_locator(MultipleLocator(20))
             ax_left.xaxis.set_minor_locator(MultipleLocator(5))
             ax_left.tick_params(axis="y", direction="in", which="both", left=True, right=False)
             ax_left.tick_params(axis="x", direction="in", which="both", top=True, bottom=True)
@@ -382,29 +366,140 @@ class ThreePanelPhotPlot:
                 ax_mid = bax.axs[j]
                 ax_mid.tick_params(axis="y", which="both", left=False, right=False)
                 ax_mid.xaxis.set_major_locator(MultipleLocator(10))
+                # If there are more than 3 chunks, make the x-axis ticklabels spacing larger so that the numbers don't overlap
+                if len(break_inds) > 2:
+                    ax_mid.xaxis.set_major_locator(MultipleLocator(20))
                 ax_mid.xaxis.set_minor_locator(MultipleLocator(5))
                 ax_mid.tick_params(axis="x", direction="in", which="both", top=True, bottom=True)
             
             # Right-most
             ax_right = bax.axs[-1]
             ax_right.xaxis.set_major_locator(MultipleLocator(10))
+            # If there are more than 3 chunks, make the x-axis ticklabels spacing larger so that the numbers don't overlap
+            if len(break_inds) > 2:
+                ax_right.xaxis.set_major_locator(MultipleLocator(20))
             ax_right.xaxis.set_minor_locator(MultipleLocator(5))
             ax_right.tick_params(axis="x", direction="in", which="both", top=True, bottom=True)
             ax_right.tick_params(axis="y", direction="in", which="both", left=False, right=True)
 
         ################################################################################################
+        ############################ PHASE-FOLDED TRANSIT AND RESIDUALS ################################
+        ################################################################################################
+        fig = self.__plot_phase_folded_transits(fig, gs1)
+        
+        return fig
+
+
+    def __three_panel_plot(self):
+        '''
+        Make a three panel plot but don't have to worry about breaks in the axis. E.g. if there's only one sector of photometry or all sectors are consecutive.
+        '''
+        # Create the figure object
+        fig = plt.figure(figsize=self.figsize)
+
+        # Create the GridSpec objects
+        gs0, gs1 = GridSpec(2, 1, figure=fig, height_ratios=[1, 0.5])
+        heights = [1, 1, 0.33]
+        sps1, sps2, sps3 = gridspec.GridSpecFromSubplotSpec(3, 1, subplot_spec=gs0, height_ratios=heights, hspace=0.1)
+        
+        ################################################################################################
+        ################################# TOP PANEL: Data and GP model #################################
+        ################################################################################################
+        ax1 = fig.add_subplot(sps1)
+        ax1.set_title(self.toi.name, pad=10)
+        
+        # Plot the data
+        ax1.plot(self.x, self.y, '.k', alpha=0.3, label="Data")
+
+        # Plot the GP model and mark the transits
+        gp_mod = self.toi.extras["gp_pred"] + self.toi.map_soln["mean"]
+        assert len(self.x) == len(gp_mod), "Different lengths for data being plotted and GP model"
+        ax1.plot(self.x, gp_mod, color="C2", label="GP model")
+        self.__plot_transit_markers(ax1, np.min(self.x), np.max(self.x))
+
+        # Annotate the top of the plot with the sector number
+        self.__annotate_sector_marker(ax1, np.min(self.x), 0, -1)
+
+        # Add label for years to the upper axis
+        self.__add_ymd_label(fig, ax1, (np.min(self.x), np.max(self.x)), 'left')
+        self.__add_ymd_label(fig, ax1, (np.min(self.x), np.max(self.x)), 'right')
+        
+        # Top panel housekeeping
+        ax1.set_xticklabels([])
+        ax1.set_ylabel("Relative flux [ppt]", fontsize=14, labelpad=self.ylabelpad)
+        ax1.yaxis.set_major_locator(MultipleLocator(2))
+        ax1.yaxis.set_minor_locator(MultipleLocator(1))
+
+        ################################################################################################
         ################################################################################################
         ################################################################################################
 
+        ################################################################################################
+        ####################### MIDDLE PANEL: Flattened data and orbital model #########################
+        ################################################################################################
+        ax2 = fig.add_subplot(sps2)
+        ax2.plot(self.x, self.y - gp_mod, ".k", alpha=0.3, label="Flattened data")
+        for k, planet in enumerate(self.toi.transiting_planets.values()):
+            ax2.plot(self.x, self.toi.extras["light_curves"][:, k], color=planet.color, label=f"{self.toi.name} {planet.pl_letter}", alpha=1.0, zorder=2000 - k)
+        
+        # Plot housekeeping
+        ax2.set_xticklabels([])
+        ax2.set_ylabel("Relative flux [ppt]", fontsize=14, labelpad=self.ylabelpad)
+        ax2.yaxis.set_major_locator(MultipleLocator(1))
+
+        ################################################################################################
+        ################################################################################################
+        ################################################################################################
+
+        ################################################################################################
+        ################################## BOTTOM PANEL: Residuals #####################################
+        ################################################################################################
+        ax3 = fig.add_subplot(sps3)
+
+        # Plot the residuals about the full model
+        residuals = self.y - gp_mod - np.sum(self.toi.extras["light_curves"], axis=-1)
+        ax3.plot(self.x, residuals, ".k", alpha=0.3)
+        ax3.axhline(0, color="#aaaaaa", lw=1)
+
+        # Plot housekeeping
+        ax3.set_ylabel("Residuals", fontsize=14, labelpad=self.ylabelpad)
+        ax3.set_xlabel(f"Time [BJD - {self.toi.bjd_ref:.1f}]", fontsize=14)
+        ax3.yaxis.set_major_locator(MultipleLocator(2))
+        bottom = -1 * np.max(ax3.get_ylim())
+        ax3.set_ylim(bottom=bottom)
+
+        ################################################################################################
+        ################################################################################################
+        ################################################################################################
+
+        ################################################################################################
+        ############################ HOUSEKEEPING FOR TOP THREE PANELS #################################
+        ################################################################################################
+        fig.align_ylabels()
+
+        # Make ticks go inward and set multiple locator for x-axis
+        for ax in [ax1, ax2, ax3]:
+            ax.xaxis.set_major_locator(MultipleLocator(5))
+            ax.xaxis.set_minor_locator(MultipleLocator(2.5))
+            ax.tick_params(axis='y', direction='in', which='both', left=True, right=True)
+            ax.tick_params(axis='x', direction='in', which='both', top=True, bottom=True)
+        
         ################################################################################################
         ############################ PHASE-FOLDED TRANSIT AND RESIDUALS ################################
         ################################################################################################
+        fig = self.__plot_phase_folded_transits(fig, gs1)
 
-        ################################################################################################
-        ################################################################################################
-        ################################################################################################
+        return fig
+    
+    def __plot_phase_folded_transits(self, fig, gs1):
+        '''
+        Plot the folded transits for each planet.
+        '''
         heights = [1, 0.33]
         sps = gridspec.GridSpecFromSubplotSpec(2, len(self.toi.transiting_planets), subplot_spec=gs1, height_ratios=heights, hspace=0.05)
+
+        gp_mod = self.toi.extras["gp_pred"] + self.toi.map_soln["mean"]
+        residuals = self.y - gp_mod - np.sum(self.toi.extras["light_curves"], axis=-1)
 
         chains = None
         if self.plot_random_transit_draws:
@@ -417,7 +512,6 @@ class ThreePanelPhotPlot:
             phase_folded_axes.append(ax0)
 
             # Plot the folded data
-            # TODO: Could use MAP values here instead of the ones store in the planet object since they haven't been updated yet.
             x_fold = (self.x - planet.t0 + 0.5 * planet.per) % planet.per - 0.5 * planet.per
             ax0.plot(x_fold, self.y - gp_mod, ".k", label="Data", zorder=-1000, alpha=0.3)
 
@@ -517,11 +611,5 @@ class ThreePanelPhotPlot:
             y_phase_lim = (y_phase_min, y_phase_max)
             for i in range(len(axes)):
                 axes[i].set_ylim(y_phase_lim)
-        
-        return fig, (bax1, bax2, bax3)
 
-
-    def __three_panel_plot(self):
-        '''
-        '''
-        pass
+        return fig

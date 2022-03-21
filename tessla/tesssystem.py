@@ -4,6 +4,7 @@ import warnings
 import numpy as np
 import pandas as pd
 import lightkurve as lk
+from astropy import units
 
 # Data utils
 from tessla.data_utils import time_delta_to_data_delta, convert_negative_angles, get_semimajor_axis, get_sinc, get_aor, get_teq
@@ -43,7 +44,7 @@ class TessSystem:
                 n_transiting=1, # Number of transiting planets
                 n_keplerians=None, # Number of Keplerian signals to include in models of the RVs. This will include transiting planets and any potentially non-transiting planet signals.
                 bjd_ref=2457000, # BJD offset
-                phot_gp_kernel='activity', # What GP kernel to use to flatten the light curve. 
+                phot_gp_kernel='exp_decay', # What GP kernel to use to flatten the light curve. 
                                             # Options are: ['activity', 'exp_decay', 'rotation']. Activity is exp_decay + rotation. See celerite2 documentation.
                 verbose=True, # Print out messages
                 plotting=True, # Create plots as you go
@@ -77,7 +78,7 @@ class TessSystem:
 
         # Organize the output directory structure
         if output_dir is None:
-            self.output_dir = self.name
+            self.output_dir = self.name.replace(' ', '_')
         if not os.path.isdir(self.output_dir):
             os.makedirs(self.output_dir)
         
@@ -150,7 +151,7 @@ class TessSystem:
         for i,row in self.toi_catalog.iterrows():
             pl_toi_suffix = str(row['Full TOI ID'])[-3:]
             pl_letter = pl_letter_mapper[pl_toi_suffix]
-            planet = Planet(self, 
+            planet = Planet(self.bjd_ref,
                             pl_letter=pl_letter, 
                             pl_toi_suffix=pl_toi_suffix, 
                             per=row['Orbital Period Value'], 
@@ -400,7 +401,7 @@ class TessSystem:
 
         fig, ax = None, None
         if self.plotting:
-            fig, ax = plot_periodogram(self.output_dir, f"{self.name} OoT Photometry LS Periodogram", 
+            fig, ax = plot_periodogram(self.output_dir, f"{self.name.replace(' ', '_')} OoT Photometry LS Periodogram", 
                         xo_ls, 
                         self.transiting_planets,
                         verbose=self.verbose,
@@ -584,7 +585,7 @@ class TessSystem:
             if i == max_iters - 1:
                 print("Maximum number of iterations reached. MAP fitting loop did not converge.")
             print(f"MAP fitting and {sigma_thresh}-sigma outlier removal converged in {i + 1} iterations.")
-            print(f"{tot_map_outliers} outliers removed.")
+            print(f"{tot_map_outliers} outlier(s) removed.")
 
         # Save the cleaned timestamps and flux as attributes
         self.cleaned_time, self.cleaned_flux, self.cleaned_flux_err = x, y, yerr
@@ -602,7 +603,7 @@ class TessSystem:
                 print("Updating transiting planet properties to MAP solution values")
             self.update_transiting_planet_props_to_map_soln()
 
-        return model, map_soln, extras
+        return model
 
     def __flat_samps_to_csv(self, model, flat_samps, chains_output_fname):
         '''
@@ -644,12 +645,12 @@ class TessSystem:
         
         # Do some output directory housekeeping
         assert os.path.isdir(self.phot_sampling_dir), "Output directory does not exist." # This should be redundant, but just in case.
-        chains_output_fname = os.path.join(self.phot_sampling_dir, f"{self.name}_phot_chains{output_fname_suffix}.csv.gz")
+        chains_output_fname = os.path.join(self.phot_sampling_dir, f"{self.name.replace(' ', '_')}_phot_chains{output_fname_suffix}.csv.gz")
         if not overwrite and os.path.isfile(chains_output_fname):
             warnings.warn("Exiting before starting the sampling to avoid overwriting exisiting chains file.")
             return None, None
 
-        trace_summary_output_fname = os.path.join(self.phot_sampling_dir, f'{self.name}_trace_summary{output_fname_suffix}.csv')
+        trace_summary_output_fname = os.path.join(self.phot_sampling_dir, f"{self.name.replace(' ', '_')}_trace_summary{output_fname_suffix}.csv")
         if not overwrite and os.path.isfile(trace_summary_output_fname):
             warnings.warn("Exiting before starting the sampling to avoid overwriting exisiting trace summary file.")
             return None, None
@@ -677,7 +678,7 @@ class TessSystem:
         self.__flat_samps_to_csv(model, flat_samps, chains_output_fname)
         self.chains_path = chains_output_fname
 
-        return flat_samps, trace
+        return flat_samps
 
     def add_ecc_and_omega_to_chains(self, flat_samps, rho_circ_param_name='rho_circ'):
         '''
@@ -716,6 +717,8 @@ class TessSystem:
         rstar_samples = np.random.normal(self.star.rstar, self.star.rstar_err, N)
         teff_samples = np.random.normal(self.star.teff, self.star.teff_err, N)
         for letter in self.transiting_planets.keys():
+            df_chains[f"rp_{letter}"] = units.R_sun.to(units.R_earth, df_chains[f"ror_{letter}"] * rstar_samples) # Planet radius in earth radius
+            df_chains[f"dur_hr_{letter}"] = df_chains[f"dur_{letter}"] * 24 # Transit duration in hours
             df_chains[f"omega_folded_{letter}"] = df_chains[f"omega_{letter}"].apply(convert_negative_angles)
             df_chains[f"omega_folded_deg_{letter}"] = df_chains[f"omega_folded_{letter}"].values * 180 / np.pi # Convert omega from radians to degrees to have for convenience
             df_chains[f"a_{letter}"] = get_semimajor_axis(df_chains[f"period_{letter}"].values, mstar_samples)
