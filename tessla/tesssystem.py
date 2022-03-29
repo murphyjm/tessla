@@ -567,7 +567,7 @@ class TessSystem:
         for i in range(max_iters):
             if self.verbose:
                 print("====================")
-                print(f"Optimation and outlier rejection iteration number {i + 1}.")
+                print(f"Optimization and outlier rejection iteration number {i + 1}.")
                 print("====================")
             model, map_soln, extras = self.__build_full_phot_model(x, y, yerr, mask=old_mask, start=map_soln, phase_lim=phase_lim, n_eval_points=n_eval_points)
             new_mask = self.__mark_resid_outliers(y, old_mask, map_soln, extras, sigma_thresh=sigma_thresh)
