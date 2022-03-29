@@ -59,7 +59,9 @@ def fix_tois(toi, args):
     Fix incorrect entries in the TOI catalog or manually add planets that don't appear there.
     '''
     planet_dir = args.planet_objs_dir
-    assert os.path.isdir(planet_dir), f"{planet_dir} is not a valid path."
+    if not os.path.isdir(planet_dir):
+        print(f"{planet_dir} is not a valid path. Assuming there are no TOI entries to fix or manual planets to add. Continuing.")
+        return
     
     if not args.quiet:
         print(f"Loading {len(os.listdir(planet_dir))} non-TOI transiting planet(s) from {planet_dir}")
