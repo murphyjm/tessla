@@ -10,7 +10,8 @@ from astropy import units
 from tessla.data_utils import time_delta_to_data_delta, convert_negative_angles, get_semimajor_axis, get_sinc, get_aor, get_teq
 from scipy.signal import savgol_filter
 
-# Enables sampling with multiple cores.
+# Enables sampling with multiple cores on Mac.
+import platform
 import multiprocessing as mp
 
 # Plotting utils
@@ -610,6 +611,9 @@ class TessSystem:
         HACK
 
         Ugly hacky function to extract the concatenated chains and save them to a compressed .csv file.
+
+        Something is going wrong in this function, at least when running on Expanse. 
+        Not correctly converting from flat samples to .csv files.
         '''
         df_chains = pd.DataFrame()
         for param in model.named_vars.keys():
@@ -634,14 +638,14 @@ class TessSystem:
         '''
         
         # Enables parallel processing on Mac OS. 
-        # TODO: Maybe update this to check if the OS is Darwin, to avoid setting context on clusters.
-        try:
-            mp.set_start_method("fork")
-        except RuntimeError:
-            if self.verbose:
-                print("Multiprocessing context has already been set. Continuing.")
-            else:
-                pass
+        if platform.system().lower() == 'darwin':
+            try:
+                mp.set_start_method("fork")
+            except RuntimeError:
+                if self.verbose:
+                    print("Multiprocessing context has already been set. Continuing.")
+                else:
+                    pass
         
         # Do some output directory housekeeping
         assert os.path.isdir(self.phot_sampling_dir), "Output directory does not exist." # This should be redundant, but just in case.
