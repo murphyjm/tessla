@@ -679,7 +679,6 @@ class TessSystem:
 
         # Save the concatenated samples.
         flat_samps =  trace.posterior.stack(sample=("chain", "draw"))
-        import pdb; pdb.set_trace()
         self.__flat_samps_to_csv(model, flat_samps, chains_output_fname)
         self.chains_path = chains_output_fname
 
