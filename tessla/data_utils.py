@@ -83,15 +83,16 @@ def get_teq(a_samples, teff_samples, rstar_samples, bond_albedo=0):
 
 def __get_summary_info(chain):
     median = np.median(chain)
+    mean = np.mean(chain)
     std = np.std(chain)
     q = np.quantile(chain, [0.16, 0.84]) - median
     err16, err84 = q[0], q[-1]
     min = np.min(chain)
     max = np.max(chain)
-    return [median, std, err16, err84, min, max]
+    return [median, mean, std, err16, err84, min, max]
 
 def quick_look_summary(toi, df_derived_chains):
-    columns = ['median', 'std', 'err16', 'err84', 'min', 'max']
+    columns = ['median', 'mean', 'std', 'err16', 'err84', 'min', 'max']
     df = pd.DataFrame(columns=columns)
     for letter in toi.transiting_planets.keys():
         for param in ['period', 't0', 'rp', 'dur_hr', 'b', 'ecc', 'omega_folded_deg']:

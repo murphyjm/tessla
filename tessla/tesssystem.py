@@ -402,7 +402,7 @@ class TessSystem:
 
         fig, ax = None, None
         if self.plotting:
-            fig, ax = plot_periodogram(self.output_dir, f"{self.name.replace(' ', '_')} OoT Photometry LS Periodogram", 
+            fig, ax = plot_periodogram(self.output_dir, f"{self.name} OoT Photometry LS Periodogram", 
                         xo_ls, 
                         self.transiting_planets,
                         verbose=self.verbose,
@@ -623,12 +623,12 @@ class TessSystem:
                 msg = "Chains and number of transiting planets have shape mismatch."
                 assert len(self.transiting_planets) == flat_samps[param].shape[0], msg
                 for i, pl_letter in enumerate(self.transiting_planets.keys()):
-                    df_chains[f"{param}_{pl_letter}"] = flat_samps[param][i, :]
+                    df_chains[f"{param}_{pl_letter}"] = flat_samps[param][i, :].data
             elif param == 'u':
                 for i in range(flat_samps[param].shape[0]):
-                    df_chains[f"u_{i}"] = flat_samps[param][i, :]
+                    df_chains[f"u_{i}"] = flat_samps[param][i, :].data
             else:
-                df_chains[param] = flat_samps[param]
+                df_chains[param] = flat_samps[param].data
             
         df_chains.to_csv(chains_output_fname, index=False, compression="gzip")
 
@@ -694,7 +694,7 @@ class TessSystem:
         omega = np.random.uniform(-np.pi, np.pi, size=flat_samps[rho_circ_param_name].shape) # Radians
 
         g = (1 + ecc * np.sin(omega)) / np.sqrt(1 - ecc**2)
-        rho = flat_samps[rho_circ_param_name] / g**3
+        rho = flat_samps[rho_circ_param_name].data / g**3
 
         log_weights = -0.5 * ((rho - self.star.rhostar) / self.star.rhostar_err) **2 # Like a chi-square likelihood
         weights = np.exp(log_weights - np.max(log_weights))

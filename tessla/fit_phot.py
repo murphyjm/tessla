@@ -139,7 +139,7 @@ def main():
     # If the sampling was run...
     if flat_samps is not None:
 
-        # Read this into data for derived corner plots and output summary table.
+        # Read this data for derived corner plots and output summary table.
         df_derived_chains = pd.read_csv(toi.chains_derived_path)
 
         # Make the corner plots
