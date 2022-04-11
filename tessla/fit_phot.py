@@ -9,7 +9,7 @@ from tessla.tesssystem import TessSystem
 from tessla.planet import Planet
 from tessla.star import Star
 from tessla.data_utils import find_breaks, quick_look_summary
-from tessla.plotting_utils import sg_smoothing_plot, quick_transit_plot, plot_corners
+from tessla.plotting_utils import sg_smoothing_plot, quick_transit_plot, plot_individual_transits, plot_corners
 from tessla.threepanelphotplot import ThreePanelPhotPlot
 
 # Script imports
@@ -44,7 +44,7 @@ def parse_args():
     parser.add_argument("--ntune", type=int, default=1000, help="Number of tuning steps per HMC chain.")
     parser.add_argument("--draws", type=int, default=1000, help="Number of draws per HMC chain.")
     parser.add_argument("--nchains", type=int, default=2, help="Number of chains for the HMC sampler.")
-
+    
     # Plotting hyperparameters
     parser.add_argument("--no_plotting", action="store_true", help="If included, don't do any of the plotting.")
     parser.add_argument("--num_transit_draws", type=int, default=25, help="Number of random transit draws to plot in the 3-panel plot.")
@@ -112,6 +112,9 @@ def main():
     # Run the MAP fitting loop
     model = toi.flatten_light_curve()
     quick_transit_plot(toi)
+
+    # Make plots of the individual transits
+    plot_individual_transits(toi)
     
     # Run the sampling
     flat_samps = None

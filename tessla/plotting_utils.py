@@ -2,6 +2,7 @@ import matplotlib.pyplot as plt
 from matplotlib.ticker import FuncFormatter, MultipleLocator
 import os
 import numpy as np
+from scipy.stats import binned_statistic
 from scipy.signal import savgol_filter, find_peaks
 from tqdm import tqdm
 
@@ -155,7 +156,7 @@ def quick_transit_plot(toi):
     if toi.verbose:
         print(f"Initial transit fit plots saved to {out_dir}")
 
-def plot_individual_transits(toi, xlim=0.3, N_EVAL_POINTS=500):
+def plot_individual_transits(toi, xlim=0.3):
     '''
     Make a plot of each individual transit for each planet.
     '''
@@ -169,7 +170,7 @@ def plot_individual_transits(toi, xlim=0.3, N_EVAL_POINTS=500):
     # Loop over each planet
     for i, planet in enumerate(toi.transiting_planets.values()):
         
-        save_dir = os.path.join(out_dir, f'individual_transits/planet_{planet.letter}')
+        save_dir = os.path.join(out_dir, f'individual_transits/planet_{planet.pl_letter}')
         if not os.path.isdir(save_dir):
             os.makedirs(save_dir)
         if toi.verbose:
@@ -196,6 +197,13 @@ def plot_individual_transits(toi, xlim=0.3, N_EVAL_POINTS=500):
                 slice_obj = slice(start_ind, None)
             fig, ax = plt.subplots()
             ax.plot(x_fold[mask][slice_obj], y[mask][slice_obj], ".k", ms=4, label="Data")
+            # Plot the binned flux in bins of 30 minutes
+            bin_duration = 0.5 / 24 # 30 minutes in units of days
+            bins = (np.max(x_fold[mask]) - np.min(x_fold[mask])) / bin_duration
+            binned_flux, binned_edges, _ = binned_statistic(x_fold[mask][slice_obj], y[mask][slice_obj], statistic="mean", bins=bins)
+            binned_edge_diff = np.ediff1d(binned_edges) / 2
+            binned_locs = binned_edges[:-1] + binned_edge_diff
+            ax.scatter(binned_locs, binned_flux, s=20, color='tomato', edgecolor='red')
             ax.plot(x_fold[mask][slice_obj], noise_model[mask][slice_obj], color="C2", alpha=0.5, ls='--', label="GP prediction + mean")
             ax.plot(x_fold[mask][slice_obj], lc_model[mask][slice_obj] +  noise_model[mask][slice_obj], color=planet.color, label='MAP transit model')
 
@@ -211,7 +219,7 @@ def plot_individual_transits(toi, xlim=0.3, N_EVAL_POINTS=500):
             ax_top.tick_params(axis='x', which='major', labelsize=10)
             ax.legend(loc="lower left", fontsize=10, framealpha=0.5, fancybox=True)
             
-            save_fname = f'{toi.name.replace(" ", "_")}_{planet.letter}_transit_{transit_num}.png'
+            save_fname = f'{toi.name.replace(" ", "_")}_{planet.pl_letter}_transit_{transit_num}.png'
             fig.savefig(os.path.join(save_dir, save_fname), facecolor='white', bbox_inches='tight', dpi=300)
             plt.close()
         
@@ -225,7 +233,7 @@ def plot_individual_transits(toi, xlim=0.3, N_EVAL_POINTS=500):
     
     if toi.verbose:
         print(f"Individual transit plots saved to {out_dir}/individual_transits/")
-    
+
 def plot_corners(toi, df_derived_chains, overwrite=False):
     '''
     Make the corner plots!
