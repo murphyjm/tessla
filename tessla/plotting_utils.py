@@ -3,6 +3,7 @@ from matplotlib.ticker import FuncFormatter, MultipleLocator
 import os
 import numpy as np
 from scipy.signal import savgol_filter, find_peaks
+from tqdm import tqdm
 
 from tessla.tesslacornerplot import TesslaCornerPlot
 
@@ -154,6 +155,77 @@ def quick_transit_plot(toi):
     if toi.verbose:
         print(f"Initial transit fit plots saved to {out_dir}")
 
+def plot_individual_transits(toi, xlim=0.3, N_EVAL_POINTS=500):
+    '''
+    Make a plot of each individual transit for each planet.
+    '''
+    out_dir = os.path.join(toi.phot_dir, 'plotting')
+    if not os.path.isdir(out_dir):
+        os.makedirs(out_dir)
+    
+    x = toi.cleaned_time.values
+    y = toi.cleaned_flux.values
+
+    # Loop over each planet
+    for i, planet in enumerate(toi.transiting_planets.values()):
+        
+        save_dir = os.path.join(out_dir, f'individual_transits/planet_{planet.letter}')
+        if not os.path.isdir(save_dir):
+            os.makedirs(save_dir)
+        if toi.verbose:
+            print(f"Plotting individual transits for {toi.name} {planet.pl_letter}")
+
+        # Get the relevant phase-folded time array, transit inds, noise model, and transit model for this planet
+        t0 = toi.map_soln["t0"][i]
+        per = toi.map_soln["period"][i]
+        x_fold = (x - t0 + 0.5 * per) % per - 0.5 * per
+        x_fold = np.ascontiguousarray(x_fold, dtype=float)
+        mask = np.abs(x_fold) < xlim
+        transit_inds = np.argwhere(np.abs(np.ediff1d(x_fold[mask])) > 0.5)
+
+        noise_model = toi.extras["gp_pred"] + toi.map_soln["mean"]
+        lc_model = toi.extras["light_curves"][:, i]
+
+        def plot_transit(start_ind, end_ind, transit_num):
+            '''
+            Convenience function.
+            '''
+            if end_ind is not None:
+                slice_obj = slice(start_ind, end_ind + 1)
+            else:
+                slice_obj = slice(start_ind, None)
+            fig, ax = plt.subplots()
+            ax.plot(x_fold[mask][slice_obj], y[mask][slice_obj], ".k", ms=4, label="Data")
+            ax.plot(x_fold[mask][slice_obj], noise_model[mask][slice_obj], color="C2", alpha=0.5, ls='--', label="GP prediction + mean")
+            ax.plot(x_fold[mask][slice_obj], lc_model[mask][slice_obj] +  noise_model[mask][slice_obj], color=planet.color, label='MAP transit model')
+
+            ax.set_xlabel("Time since transit [days]")
+            ax.set_ylabel("Relative flux [ppt]")
+            ax.set_title(f"{toi.name} {planet.pl_letter} transit {transit_num}")
+
+            # Re-plot the data with the non-phase-folded time on the top x-axis so you know what transit this is.
+            ax_top = ax.twiny()
+            ax_top.plot(x[mask][slice_obj], y[mask][slice_obj], ".k", ms=4)
+            ax_top.set_xlabel(f"Time [BJD - {toi.bjd_ref:.1f}]")
+            ax_top.ticklabel_format(useOffset=False)
+            ax_top.tick_params(axis='x', which='major', labelsize=10)
+            ax.legend(loc="lower left", fontsize=10, framealpha=0.5, fancybox=True)
+            
+            save_fname = f'{toi.name.replace(" ", "_")}_{planet.letter}_transit_{transit_num}.png'
+            fig.savefig(os.path.join(save_dir, save_fname), facecolor='white', bbox_inches='tight', dpi=300)
+            plt.close()
+        
+        start_ind = 0
+        transit_num = 1
+        for end_ind in tqdm(transit_inds[:, 0]):
+            plot_transit(start_ind, end_ind, transit_num)
+            start_ind = end_ind + 1
+            transit_num += 1
+        plot_transit(start_ind, None, transit_num)
+    
+    if toi.verbose:
+        print(f"Individual transit plots saved to {out_dir}/individual_transits/")
+    
 def plot_corners(toi, df_derived_chains, overwrite=False):
     '''
     Make the corner plots!
