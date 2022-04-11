@@ -49,7 +49,8 @@ class TessSystem:
                                             # Options are: ['activity', 'exp_decay', 'rotation']. Activity is exp_decay + rotation. See celerite2 documentation.
                 verbose=True, # Print out messages
                 plotting=True, # Create plots as you go
-                output_dir=None) -> None: # Output directory. Will default to CPS Name if non is provided.
+                output_dir=None, # Output directory. Will default to CPS Name if non is provided.
+                output_dir_suffix='') -> None:  # Suffix for output directory. E.g. TOI-1824_test_01
         
         # System-level attributes
         self.name = name
@@ -79,7 +80,7 @@ class TessSystem:
 
         # Organize the output directory structure
         if output_dir is None:
-            self.output_dir = self.name.replace(' ', '_')
+            self.output_dir = self.name.replace(' ', '_') + output_dir_suffix
         if not os.path.isdir(self.output_dir):
             os.makedirs(self.output_dir)
         

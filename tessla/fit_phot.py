@@ -32,7 +32,8 @@ def parse_args():
     parser.add_argument("toi", type=int, help="TOI number.")
     parser.add_argument("star_obj_fname", type=str, help="Path to the .pkl file containing the tessla.star.Star object.")
     parser.add_argument("--planet_objs_dir", type=str, default=None, help="If there are transiting planets that are not TOIs in the system or the TOIs in the catalog have incorrect properties, this is the path to the directory with the .pkl files that contain the tessla.planet.Planet objects.")
-    
+    parser.add_argument("--output_dir_suffix", type=str, default='', help="Suffix for output directory. Default is empty string. E.g. '_test_01' for TOI-1824_test_01.")
+
     # Data
     parser.add_argument("--flux_origin", type=str, default="sap_flux", help="Either pdcsap_flux or sap_flux. Default is SAP.")
 
@@ -44,7 +45,7 @@ def parse_args():
     parser.add_argument("--ntune", type=int, default=1000, help="Number of tuning steps per HMC chain.")
     parser.add_argument("--draws", type=int, default=1000, help="Number of draws per HMC chain.")
     parser.add_argument("--nchains", type=int, default=2, help="Number of chains for the HMC sampler.")
-    
+
     # Plotting hyperparameters
     parser.add_argument("--no_plotting", action="store_true", help="If included, don't do any of the plotting.")
     parser.add_argument("--num_transit_draws", type=int, default=25, help="Number of random transit draws to plot in the 3-panel plot.")
@@ -85,7 +86,13 @@ def main():
     assert os.path.isfile(args.star_obj_fname), f"Invalid Star object file name: {args.star_obj_fname}"
 
     # Create the TessSystem object, download the photometry, and add TOIs that appear in the TOI catalog.
-    toi = TessSystem(args.name, tic=args.tic, toi=args.toi, phot_gp_kernel=args.phot_gp_kernel, plotting=(not args.no_plotting), flux_origin=args.flux_origin)
+    toi = TessSystem(args.name, 
+                    tic=args.tic, 
+                    toi=args.toi, 
+                    phot_gp_kernel=args.phot_gp_kernel, 
+                    plotting=(not args.no_plotting), 
+                    flux_origin=args.flux_origin, 
+                    output_dir_suffix=args.output_dir_suffix)
     toi.get_tess_phot()
     toi.search_for_tois()
     toi.add_tois_from_catalog()
