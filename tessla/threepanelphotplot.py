@@ -328,7 +328,7 @@ class ThreePanelPhotPlot:
         residuals = self.y - gp_mod - np.sum(self.toi.extras["light_curves"], axis=-1)
         bax3.plot(self.x, residuals, ".k", alpha=0.3)
         bax3.axhline(0, color="#aaaaaa", lw=1)
-        for ax in bax3[1:]:
+        for ax in bax3.axs[1:]:
             ax.tick_params(axis='y', label1On=False) # Avoid y-axis labels popping up.
         bax3.set_ylim([-2.5, 2.5]) # Can change this probably.
         self.residuals = residuals # Save these
