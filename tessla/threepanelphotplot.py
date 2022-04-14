@@ -9,6 +9,8 @@ from tessla.data_utils import find_breaks
 # Exoplanet stuff
 import exoplanet as xo
 import theano
+
+from tessla.plotting_utils import plot_periodogram
 theano.config.gcc.cxxflags = "-Wno-c++11-narrowing" # Not exactly sure what this flag change does.
 import aesara_theano_fallback.tensor as tt
 
@@ -52,6 +54,7 @@ class ThreePanelPhotPlot:
         self.x = toi.cleaned_time.values
         self.y = toi.cleaned_flux.values
         self.yerr = toi.cleaned_flux_err.values
+        self.residuals = None
         
         self.use_broken_x_axis = use_broken_x_axis
         self.data_gap_thresh = data_gap_thresh
@@ -325,6 +328,10 @@ class ThreePanelPhotPlot:
         residuals = self.y - gp_mod - np.sum(self.toi.extras["light_curves"], axis=-1)
         bax3.plot(self.x, residuals, ".k", alpha=0.3)
         bax3.axhline(0, color="#aaaaaa", lw=1)
+        for ax in bax3[1:]:
+            ax.tick_params(axis='y', label1On=False) # Avoid y-axis labels popping up.
+        bax3.set_ylim([-2.5, 2.5]) # Can change this probably.
+        self.residuals = residuals # Save these
 
         # Plot housekeeping
         bax3.set_ylabel("Residuals", fontsize=14, labelpad=self.ylabelpad)
@@ -613,3 +620,37 @@ class ThreePanelPhotPlot:
                 axes[i].set_ylim(y_phase_lim)
 
         return fig
+
+    def residuals_periodogram(self, save_fname=None, overwrite=False, min_per=1, max_per=50, samples_per_peak=1000, **kwargs):
+        '''
+        Make a plot of the residuals of the photometric model.
+        '''
+        if self.toi.verbose:
+            print("Creating periodogram of photometric model residuals...")
+        
+        out_dir = os.path.join(self.toi.phot_dir, 'plotting')
+        if not os.path.isdir(out_dir):
+            os.makedirs(out_dir)
+
+        # Save fname housekeeping and overwrite handling.
+        if save_fname is None:
+            default_save_fname = f"{self.toi.name.replace(' ', '_')}_phot_residuals_periodogram"
+            save_fname = os.path.join(out_dir, default_save_fname + self.save_format)
+        else:
+            save_fname = os.path.join(out_dir, save_fname + self.save_format)
+        if not overwrite and os.path.isfile(save_fname):
+            warnings.warn("Exiting before plotting to avoid overwriting exisiting plot file.")
+            return None
+        
+        # Make and plot the periodogram 
+        xo_ls = xo.estimators.lomb_scargle_estimator(self.x, self.residuals, self.yerr, 
+                                                    min_period=min_per, max_period=max_per, samples_per_peak=samples_per_peak)
+        fig, ax = plot_periodogram(self.output_dir, f"{self.toi.name} Photometric Residuals LS Periodogram", 
+                        xo_ls, 
+                        self.toi.transiting_planets,
+                        verbose=self.toi.verbose,
+                        **kwargs) # What to do with figure and ax that is returned?
+        # Save the figure!
+        fig.savefig(save_fname, facecolor='white', bbox_inches='tight', dpi=self.save_dpi)
+        print(f"Photometric model residuals periodogram plot saved to {save_fname}")
+        plt.close()

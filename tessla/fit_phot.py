@@ -144,6 +144,9 @@ def main():
                                     plot_random_transit_draws=(not args.no_sampling),
                                     num_random_transit_draws=args.num_transit_draws)
         phot_plot.plot(save_fname=f"{toi.name.replace(' ', '_')}_phot_model" + args.plot_fname_suffix, overwrite=args.overwrite_plot)
+        
+        # Create a LS periodogram of the residuals about the full model. This should hopefully be white noise
+        phot_plot.residuals_periodogram(overwrite=args.overwrite_plot)
 
     # If the sampling was run...
     if flat_samps is not None:
