@@ -113,6 +113,7 @@ def main():
     # Add the star properties
     with open(args.star_obj_fname, 'rb') as star_fname:
         star = pickle.load(star_fname)
+        star.inflate_star_mass_and_rad_errs() # Inflate the error bars on stellar mass and radius according to 
         toi.add_star_props(star)
     
     # Run the MAP fitting loop
