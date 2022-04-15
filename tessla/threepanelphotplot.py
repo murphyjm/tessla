@@ -650,7 +650,4 @@ class ThreePanelPhotPlot:
                         self.toi.transiting_planets,
                         verbose=self.toi.verbose,
                         **kwargs) # What to do with figure and ax that is returned?
-        # Save the figure!
-        fig.savefig(save_fname, facecolor='white', bbox_inches='tight', dpi=self.save_dpi)
-        print(f"Photometric model residuals periodogram plot saved to {save_fname}")
-        plt.close()
+        return fig, ax

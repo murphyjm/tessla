@@ -299,6 +299,11 @@ def phase_plot(out_dir, title, ylabel, x, y, per, t0, **kwargs):
     x_phase = ((x - t0) % per) / per
     
     ax.plot(x_phase, y, '.k', alpha=0.3, **kwargs)
+    # Plot the binned data as well
+    binned_y, binned_edges, _ = binned_statistic(x_phase, y, statistic="mean", bins=12) # Number of bins in phase
+    binned_edge_diff = np.ediff1d(binned_edges) / 2
+    binned_locs = binned_edges[:-1] + binned_edge_diff
+    ax.scatter(binned_locs, binned_y, s=20, color='tomato', edgecolor='red', zorder=1000)
     ax.text(0.7, 0.9, f"$P =$ {per:.2f} d", ha='left', va='center', transform=ax.transAxes)
     ax.set_xlabel('Phase')
     ax.set_ylabel(ylabel)
