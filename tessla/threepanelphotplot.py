@@ -331,7 +331,7 @@ class ThreePanelPhotPlot:
         for ax in bax3.axs[1:]:
             ax.tick_params(axis='y', label1On=False) # Avoid y-axis labels popping up.
         bax3.set_ylim([-2.5, 2.5]) # Can change this probably.
-        self.residuals = residuals # Save these
+        self.residuals = residuals.value # Save these
 
         # Plot housekeeping
         bax3.set_ylabel("Residuals", fontsize=14, labelpad=self.ylabelpad)
@@ -642,10 +642,10 @@ class ThreePanelPhotPlot:
             warnings.warn("Exiting before plotting to avoid overwriting exisiting plot file.")
             return None
         
-        # Make and plot the periodogram 
-        xo_ls = xo.estimators.lomb_scargle_estimator(self.x, self.residuals, self.yerr, 
+        # Make and plot the periodogram
+        xo_ls = xo.estimators.lomb_scargle_estimator(self.x, self.residuals, self.yerr.value, 
                                                     min_period=min_per, max_period=max_per, samples_per_peak=samples_per_peak)
-        fig, ax = plot_periodogram(self.output_dir, f"{self.toi.name} Photometric Residuals LS Periodogram", 
+        fig, ax = plot_periodogram(self.toi.output_dir, f"{self.toi.name} Photometric Residuals LS Periodogram", 
                         xo_ls, 
                         self.toi.transiting_planets,
                         verbose=self.toi.verbose,

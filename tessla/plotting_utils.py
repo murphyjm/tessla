@@ -289,3 +289,24 @@ def plot_corners(toi, df_derived_chains, overwrite=False):
     else:
         # TODO: Fix? Or just leave it like this and people can make corner plots on their own if they use a different kernel.
         print("NOTE: Right now automated corner plot generation only works if phot_gp_kernel == 'exp_decay'")
+
+def phase_plot(out_dir, title, ylabel, x, y, per, t0, **kwargs):
+    '''
+    Plot the data folded to the period specified. For e.g. folding the light curve at the stellar rotation period.
+    '''
+    fig, ax = plt.subplots()
+
+    x_phase = ((x - t0) % per) / per
+    
+    ax.plot(x_phase, y, '.k', alpha=0.3, **kwargs)
+    ax.text(0.7, 0.9, f"$P =$ {per:.2f} d", ha='left', va='center', transform=ax.transAxes)
+    ax.set_xlabel('Phase')
+    ax.set_ylabel(ylabel)
+    ax.set_title(title)
+    
+    if not os.path.isdir(out_dir):
+        os.makedirs(out_dir)
+    save_fname = f'{title.replace(" ", "_")}_phase_plot.png'
+    fig.savefig(os.path.join(out_dir, save_fname), facecolor='white', bbox_inches='tight', dpi=300)
+    plt.close()
+    print(f"Phase plot saved to {out_dir}/{save_fname}")

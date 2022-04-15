@@ -9,7 +9,7 @@ from tessla.tesssystem import TessSystem
 from tessla.planet import Planet
 from tessla.star import Star
 from tessla.data_utils import find_breaks, quick_look_summary
-from tessla.plotting_utils import sg_smoothing_plot, quick_transit_plot, plot_individual_transits, plot_corners
+from tessla.plotting_utils import sg_smoothing_plot, quick_transit_plot, plot_individual_transits, phase_plot, plot_corners
 from tessla.threepanelphotplot import ThreePanelPhotPlot
 
 # Script imports
@@ -122,6 +122,12 @@ def main():
 
     # Make plots of the individual transits
     plot_individual_transits(toi)
+
+    # Create a phase-folded plot of the light curve at the presumed stellar rotation period
+    phase_plot(os.path.join(toi.phot_dir, 'plotting'), 
+                f"{toi.name} {toi.flux_origin.replace('_', ' ')}", 
+                'Relative flux [ppt]', 
+                toi.cleaned_time.values, toi.cleaned_flux.values, toi.rot_per, 0)
     
     # Run the sampling
     flat_samps = None
