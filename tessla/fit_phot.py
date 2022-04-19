@@ -90,7 +90,7 @@ def main():
                     toi=args.toi, 
                     phot_gp_kernel=args.phot_gp_kernel, 
                     plotting=(not args.no_plotting), 
-                    flux_origin=args.flux_origin, 
+                    flux_origin=args.flux_origin,
                     output_dir_suffix=args.output_dir_suffix)
     toi.get_tess_phot()
     toi.search_for_tois()
