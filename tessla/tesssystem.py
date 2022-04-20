@@ -461,10 +461,10 @@ class TessSystem:
             t0 = pm.Normal("t0", mu=np.array([planet.t0 for planet in self.transiting_planets.values()]), sd=1, shape=self.n_transiting)
             log_period = pm.Normal("log_period", mu=np.log(np.array([planet.per for planet in self.transiting_planets.values()])), sd=1, shape=self.n_transiting)
             period = pm.Deterministic("period", tt.exp(log_period))
-            log_ror = pm.Normal("log_ror", mu=0.5 * np.log(1e-3 * np.array([planet.depth for planet in self.transiting_planets.values()])), sigma=10.0, shape=self.n_transiting)
+            log_ror = pm.Normal("log_ror", mu=0.5 * np.log(1e-3 * np.array([planet.depth for planet in self.transiting_planets.values()])), sigma=np.log(10), shape=self.n_transiting)
             ror = pm.Deterministic("ror", tt.exp(log_ror))
-            b = xo.distributions.ImpactParameter("b", ror=ror, shape=self.n_transiting)
-            log_dur = pm.Normal("log_dur", mu=np.log([planet.dur for planet in self.transiting_planets.values()]), sigma=10, shape=self.n_transiting)
+            b = pm.Uniform("b", 0, 1, shape=self.n_transiting)
+            log_dur = pm.Normal("log_dur", mu=np.log([planet.dur for planet in self.transiting_planets.values()]), sigma=np.log(10), shape=self.n_transiting)
             dur = pm.Deterministic("dur", tt.exp(log_dur))
             
             # Light curve jitter
