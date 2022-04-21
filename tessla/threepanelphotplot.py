@@ -643,11 +643,14 @@ class ThreePanelPhotPlot:
             return None
         
         # Make and plot the periodogram
-        xo_ls = xo.estimators.lomb_scargle_estimator(self.x, self.residuals, self.yerr.value, 
-                                                    min_period=min_per, max_period=max_per, samples_per_peak=samples_per_peak)
-        fig, ax = plot_periodogram(self.toi.output_dir, f"{self.toi.name} Photometric Residuals LS Periodogram", 
+        try:
+            xo_ls = xo.estimators.lomb_scargle_estimator(self.x, self.residuals, self.yerr.value, 
+                                                        min_period=min_per, max_period=max_per, samples_per_peak=samples_per_peak)
+            fig, ax = plot_periodogram(self.toi.output_dir, f"{self.toi.name} Photometric Residuals LS Periodogram", 
                         xo_ls, 
                         self.toi.transiting_planets,
                         verbose=self.toi.verbose,
                         **kwargs) # What to do with figure and ax that is returned?
-        return fig, ax
+            return fig, ax
+        except:
+            print("Error when constructing periodogram of residuals. Continuing.")
