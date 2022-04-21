@@ -228,15 +228,15 @@ class TessSystem:
         
         # Pick out the data of the correct cadence and mission. If self.use_long_cadence_data is True, download 30-min cadence data if there is no 2-min cadence data for that sector.
         mask = search_result.exptime.value == self.cadence
-        long_cadence_mask = (search_result.exptime.value == 1800) & (search_result.author == "TESS-SPOC")
-        # If there's a sector where there's only 1800s cadence data and no 120s cadence data, download the 1800s cadence data
-        for i in range(len(mask)):
-            mission_str = search_result[i].mission[0]
-            if mission_str in search_result[mask].mission:
-                continue
-            elif long_cadence_mask[i]:
-                mask[i] = True
-
+        if self.use_long_cadence_data:
+            long_cadence_mask = (search_result.exptime.value == 1800) & (search_result.author == "TESS-SPOC")
+            # If there's a sector where there's only 1800s cadence data and no 120s cadence data, download the 1800s cadence data
+            for i in range(len(mask)):
+                mission_str = search_result[i].mission[0]
+                if mission_str in search_result[mask].mission:
+                    continue
+                elif long_cadence_mask[i]:
+                    mask[i] = True
         mission_series = pd.Series(search_result.mission)
         mask &= mission_series.str.contains(self.mission, case=False, regex=False).values # Only use data from the same mission.
         assert np.sum(mask) > 0, "No data fits the cadence and mission criteria for this target."
