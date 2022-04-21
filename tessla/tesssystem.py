@@ -226,11 +226,11 @@ class TessSystem:
             print(search_result)
             print(f"Extracting all {self.cadence} s cadence data...")
         
-        # Pick out the data of the correct cadence and mission. If self.use_long_cadence_data is True, download 30-min cadence data if there is no 2-min cadence data for that sector.
+        # Pick out the data of the correct cadence and mission.
         mask = search_result.exptime.value == self.cadence
+        # If self.use_long_cadence_data is True, download 30-min cadence data if there is no 2-min cadence data for that sector.
         if self.use_long_cadence_data:
             long_cadence_mask = (search_result.exptime.value == 1800) & (search_result.author == "TESS-SPOC")
-            # If there's a sector where there's only 1800s cadence data and no 120s cadence data, download the 1800s cadence data
             for i in range(len(mask)):
                 mission_str = search_result[i].mission[0]
                 if mission_str in search_result[mask].mission:
