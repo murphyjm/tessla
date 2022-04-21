@@ -654,3 +654,4 @@ class ThreePanelPhotPlot:
             return fig, ax
         except:
             print("Error when constructing periodogram of residuals. Continuing.")
+            return None, None
