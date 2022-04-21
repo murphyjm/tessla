@@ -1,7 +1,6 @@
 # Core packages
 import os
 import warnings
-# from jmespath import search
 import numpy as np
 import pandas as pd
 import lightkurve as lk
