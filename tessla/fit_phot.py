@@ -35,7 +35,8 @@ def parse_args():
 
     # Data
     parser.add_argument("--flux_origin", type=str, default="sap_flux", help="Either pdcsap_flux or sap_flux. Default is SAP.")
-
+    parser.add_argument("--use_long_cadence_data", action="store_true", help="If included, it's okay to use 30-minute cadence data if no other data is available for that sector.")
+    
     # Model hyperparameters
     parser.add_argument("--phot_gp_kernel", type=str, default="exp_decay", help="Kernel to use for the photometry flattening.")
 
@@ -90,7 +91,8 @@ def main():
                     toi=args.toi, 
                     phot_gp_kernel=args.phot_gp_kernel, 
                     plotting=(not args.no_plotting), 
-                    flux_origin=args.flux_origin,
+                    flux_origin=args.flux_origin, 
+                    use_long_cadence_data=args.use_long_cadence_data,
                     output_dir_suffix=args.output_dir_suffix)
     toi.get_tess_phot()
     toi.search_for_tois()

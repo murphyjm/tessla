@@ -40,6 +40,7 @@ class TessSystem:
                 toi=None, # TOI Number
                 mission='TESS', # Only use TESS data by default. Could also specify other missions like "Kepler" or "all".
                 cadence=120, # By default, extract the 2-minute cadence data.
+                use_long_cadence_data=False, # By default, don't use the 30-min cadence data if it's the only data available for a sector. If true, treat it as a different instrument.
                 flux_origin='sap_flux', # By default, use the SAP flux. Can also specify "pdcsap_flux" but this may not be available for all sectors.
                 star=None, # Star object containing stellar properties
                 n_transiting=1, # Number of transiting planets
