@@ -40,6 +40,7 @@ class TessSystem:
                 toi=None, # TOI Number
                 mission='TESS', # Only use TESS data by default. Could also specify other missions like "Kepler" or "all".
                 cadence=120, # By default, extract the 2-minute cadence data.
+                use_long_cadence_data=False, # By default, don't use the 30-min cadence data if it's the only data available for a sector. If true, treat it as a different instrument.
                 flux_origin='sap_flux', # By default, use the SAP flux. Can also specify "pdcsap_flux" but this may not be available for all sectors.
                 star=None, # Star object containing stellar properties
                 n_transiting=1, # Number of transiting planets
@@ -61,7 +62,8 @@ class TessSystem:
         self.flux_origin = flux_origin
         self.star = star
         self.toi_catalog_csv_path = '~/code/tessla/data/toi_list.csv'
-        
+        self.use_long_cadence_data = use_long_cadence_data
+
         # Planet-related attributes
         self.n_transiting = n_transiting # Should get rid of this attribute eventually, and just go by the length of the dictionary self.transiting_planets.
         self.n_keplerians = n_transiting
@@ -224,9 +226,17 @@ class TessSystem:
             print(search_result)
             print(f"Extracting all {self.cadence} s cadence data...")
         
-        # Pick out the data of the correct cadence and mission. Could update both of these options later.
-        # E.g. at the moment, you can't ask for data from both Kepler and TESS, and/or 2-min data and 30-min data.
-        mask = search_result.exptime.value == self.cadence # Only use data with the same exposure time. Could change this if wanted.
+        # Pick out the data of the correct cadence and mission.
+        mask = search_result.exptime.value == self.cadence
+        # If self.use_long_cadence_data is True, download 30-min cadence data if there is no 2-min cadence data for that sector.
+        if self.use_long_cadence_data:
+            long_cadence_mask = (search_result.exptime.value == 1800) & (search_result.author == "TESS-SPOC")
+            for i in range(len(mask)):
+                mission_str = search_result[i].mission[0]
+                if mission_str in search_result[mask].mission:
+                    continue
+                elif long_cadence_mask[i]:
+                    mask[i] = True
         mission_series = pd.Series(search_result.mission)
         mask &= mission_series.str.contains(self.mission, case=False, regex=False).values # Only use data from the same mission.
         assert np.sum(mask) > 0, "No data fits the cadence and mission criteria for this target."
@@ -461,10 +471,10 @@ class TessSystem:
             t0 = pm.Normal("t0", mu=np.array([planet.t0 for planet in self.transiting_planets.values()]), sd=1, shape=self.n_transiting)
             log_period = pm.Normal("log_period", mu=np.log(np.array([planet.per for planet in self.transiting_planets.values()])), sd=1, shape=self.n_transiting)
             period = pm.Deterministic("period", tt.exp(log_period))
-            log_ror = pm.Normal("log_ror", mu=0.5 * np.log(1e-3 * np.array([planet.depth for planet in self.transiting_planets.values()])), sigma=10.0, shape=self.n_transiting)
+            log_ror = pm.Normal("log_ror", mu=0.5 * np.log(1e-3 * np.array([planet.depth for planet in self.transiting_planets.values()])), sigma=np.log(10), shape=self.n_transiting)
             ror = pm.Deterministic("ror", tt.exp(log_ror))
-            b = xo.distributions.ImpactParameter("b", ror=ror, shape=self.n_transiting)
-            log_dur = pm.Normal("log_dur", mu=np.log([planet.dur for planet in self.transiting_planets.values()]), sigma=10, shape=self.n_transiting)
+            b = pm.Uniform("b", 0, 1, shape=self.n_transiting)
+            log_dur = pm.Normal("log_dur", mu=np.log([planet.dur for planet in self.transiting_planets.values()]), sigma=np.log(10), shape=self.n_transiting)
             dur = pm.Deterministic("dur", tt.exp(log_dur))
             
             # Light curve jitter
