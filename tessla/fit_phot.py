@@ -35,7 +35,7 @@ def parse_args():
 
     # Data
     parser.add_argument("--flux_origin", type=str, default="sap_flux", help="Either pdcsap_flux or sap_flux. Default is SAP.")
-    parser.add_argument("--use_long_cadence_data", action="store_true", help="If included, it's okay to use 30-minute cadence data if no other data is available for that sector.")
+    parser.add_argument("--use_long_cadence_data", action="store_true", help="WARNING: Don't use this feature quite yet save for testing. If included, it's okay to use 30-minute cadence data if no other data is available for that sector.")
     
     # Model hyperparameters
     parser.add_argument("--phot_gp_kernel", type=str, default="exp_decay", help="Kernel to use for the photometry flattening.")
