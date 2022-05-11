@@ -612,14 +612,15 @@ class ThreePanelPhotPlot:
                 ax1.set_ylabel("Residuals", fontsize=14)
             
             ax0.set_xlim([-xlim, xlim])
+            ax0.set_ylim([-3, 3])
             ax1.set_xlim([-xlim, xlim])
             ax1.set_ylim([-3, 3])
             axis_to_data = ax.transAxes + ax.transData.inverted()
-            points_data = axis_to_data.transform((0.035, 0.1))
+            points_data = axis_to_data.transform((0.035, 0.2))
             ax0.errorbar(points_data[0], points_data[1], yerr=np.sqrt(np.exp(self.toi.map_soln['log_sigma_lc'])**2 + np.median(self.yerr)**2), fmt='none', color='k', elinewidth=2, capsize=4)
             if i == 0:
                 text = ax0.text(points_data[0] + 0.2/24, points_data[1], 'Data uncert.', fontsize=12)
-                text.set_bbox(dict(facecolor='none', alpha=0.65, edgecolor='none'))
+                text.set_bbox(dict(facecolor='lightgray', alpha=0.8, edgecolor='lightgray'))
             
             if self.df_summary is not None:
                 per_str = f"$P =$ {self.df_summary.loc[f'period_{planet.pl_letter}', 'median']:.2f} d"
@@ -627,7 +628,8 @@ class ThreePanelPhotPlot:
                 rp_err = self.df_summary.loc[f'rp_{planet.pl_letter}', 'std']
                 rp_str = f"$R_\mathrm{{p}} = {rp_med:.2f} \pm {rp_err:.2f}$ $R_\oplus$"
                 planet_str = per_str + '\n' + rp_str
-                ax0.text(0.98, 0.02, planet_str, ha='right', va='bottom', transform=ax0.transAxes)
+                text = ax0.text(0.98, 0.05, planet_str, ha='right', va='bottom', transform=ax0.transAxes)
+                text.set_bbox(dict(facecolor='lightgray', alpha=0.8, edgecolor='lightgray'))
         
         # Make the y-axes range the same for all of the phase-folded transit plots
         for axes in [phase_folded_axes, phase_folded_resid_axes]:

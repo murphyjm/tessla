@@ -228,6 +228,7 @@ class TessSystem:
         
         # Pick out the data of the correct cadence and mission.
         mask = search_result.exptime.value == self.cadence
+        mask &= search_result.author == 'SPOC'
         # If self.use_long_cadence_data is True, download 30-min cadence data if there is no 2-min cadence data for that sector.
         if self.use_long_cadence_data:
             long_cadence_mask = (search_result.exptime.value == 1800) & (search_result.author == "TESS-SPOC")
