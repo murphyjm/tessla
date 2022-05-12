@@ -35,19 +35,26 @@ class TessSystem:
     Container object that holds meta information about a system.
     '''
     def __init__(self, 
+                # System stuff
                 name, # CPS ID or common name if not in Jump.
                 tic=None, # TIC ID
                 toi=None, # TOI Number
+                star=None, # Star object containing stellar properties
+
+                # Photometry stuff
                 mission='TESS', # Only use TESS data by default. Could also specify other missions like "Kepler" or "all".
                 cadence=120, # By default, extract the 2-minute cadence data.
                 use_long_cadence_data=False, # By default, don't use the 30-min cadence data if it's the only data available for a sector. If true, treat it as a different instrument.
                 flux_origin='sap_flux', # By default, use the SAP flux. Can also specify "pdcsap_flux" but this may not be available for all sectors.
-                star=None, # Star object containing stellar properties
                 n_transiting=1, # Number of transiting planets
-                n_keplerians=None, # Number of Keplerian signals to include in models of the RVs. This will include transiting planets and any potentially non-transiting planet signals.
                 bjd_ref=2457000, # BJD offset
                 phot_gp_kernel='exp_decay', # What GP kernel to use to flatten the light curve. 
                                             # Options are: ['activity', 'exp_decay', 'rotation']. Activity is exp_decay + rotation. See celerite2 documentation.
+                # RV stuff
+                n_keplerians=1, # Number of Keplerian signals to include in models of the RVs. This will include transiting planets and any potentially non-transiting planet signals.
+                rv_data_path=None, # Path to RV data .csv. Must contain columns: "time", "mnvel" [m/s], "errvel" [m/s], "tel"
+                
+                # General stuff
                 verbose=True, # Print out messages
                 plotting=True, # Create plots as you go
                 output_dir=None, # Output directory. Will default to CPS Name if non is provided.
@@ -66,8 +73,9 @@ class TessSystem:
 
         # Planet-related attributes
         self.n_transiting = n_transiting # Should get rid of this attribute eventually, and just go by the length of the dictionary self.transiting_planets.
-        self.n_keplerians = n_transiting
+        self.n_keplerians = n_keplerians
         self.transiting_planets = {}
+        self.nontransiting_planets = {}
         self.all_transits_mask = None
         self.toi_catalog = None
 
@@ -85,18 +93,38 @@ class TessSystem:
             self.output_dir = self.name.replace(' ', '_') + output_dir_suffix
         if not os.path.isdir(self.output_dir):
             os.makedirs(self.output_dir)
-        
-        # Sub-directory for photometry
-        phot_out_dir = os.path.join(self.output_dir, 'photometry')
-        if not os.path.isdir(phot_out_dir):
-            os.makedirs(phot_out_dir) # TODO: Some sort of warning re: overwriting.
-        self.phot_dir = phot_out_dir
 
-        # Sub-directory for sampling
-        phot_sampling_out_dir = os.path.join(self.output_dir, 'phot_sampling')
-        if not os.path.isdir(phot_sampling_out_dir):
-            os.makedirs(phot_sampling_out_dir)
-        self.phot_sampling_dir = phot_sampling_out_dir
+        # If RVs were included so creating a joint model
+        if rv_data_path is not None:
+            if self.verbose:
+                print("RV dataset detected. This will be a joint photometry-RV model.")
+            joint_model_out_dir = os.path.join(self.output_dir, 'joint_model')
+            if not os.path.isdir(joint_model_out_dir):
+                os.makedirs(joint_model_out_dir)
+            self.joint_dir = joint_model_out_dir
+
+            joint_sampling_out_dir = os.path.join(self.output_dir, 'joint_sampling')
+            if not os.path.isdir(joint_sampling_out_dir):
+                os.makedirs(joint_sampling_out_dir)
+            self.joint_sampling_dir = joint_sampling_out_dir
+
+            self.is_joint_model = True
+
+        # Photometry-only
+        else:
+            # Sub-directory for photometry
+            phot_out_dir = os.path.join(self.output_dir, 'photometry')
+            if not os.path.isdir(phot_out_dir):
+                os.makedirs(phot_out_dir) # TODO: Some sort of warning re: overwriting.
+            self.phot_dir = phot_out_dir
+
+            # Sub-directory for sampling
+            phot_sampling_out_dir = os.path.join(self.output_dir, 'phot_sampling')
+            if not os.path.isdir(phot_sampling_out_dir):
+                os.makedirs(phot_sampling_out_dir)
+            self.phot_sampling_dir = phot_sampling_out_dir
+
+            self.is_joint_model = False
 
     def add_transiting_planet(self, planet) -> None:
         '''
@@ -121,7 +149,25 @@ class TessSystem:
             planet.t0 = self.map_soln["t0"][i]
             planet.dur = self.map_soln["dur"][i]
             planet.depth = (self.map_soln["ror"][i])**2 * 1e3 # Places in units of PPT
+            if self.is_joint_model:
+                planet.kamp = self.map_soln["kamp"][i]
 
+    def add_nontransiting_planet(self, planet) -> None:
+        '''
+        Add a nontransiting planet.
+        '''
+        self.nontransiting_planets[planet.pl_letter] = planet
+        self.n_keplerians = len(self.nontransiting_planets)
+
+    def update_nontransiting_planet_props_to_map_soln(self):
+        '''
+        Update nontransiting planet properties to the MAP solution values. 
+        '''
+        assert self.map_soln is not None, "MAP Solution is none. Must run MAP fitting procedure first."
+        for i,planet in enumerate(self.nontransiting_planets.values()):
+            planet.per = self.map_soln["period"][i + self.n_transiting] # THIS INDEXING MEANS NONTRANSITING PLANETS MUST ALWAYS BE ADDED AFTER TRANSITING ONES
+            planet.kamp = self.map_soln["kamp"][i + self.n_transiting]
+        
     def search_for_tois(self):
         '''
         Look for TOIs in the TOI catalog.
