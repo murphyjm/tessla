@@ -77,7 +77,7 @@ class ThreePanelPhotPlot:
         if self.toi.verbose:
             print("Creating three panel plot...")
         
-        out_dir = os.path.join(self.toi.phot_dir, 'plotting')
+        out_dir = os.path.join(self.toi.model_dir, 'plotting')
         if not os.path.isdir(out_dir):
             os.makedirs(out_dir)
 
@@ -628,7 +628,7 @@ class ThreePanelPhotPlot:
         if self.toi.verbose:
             print("Creating periodogram of photometric model residuals...")
         
-        out_dir = os.path.join(self.toi.phot_dir, 'plotting')
+        out_dir = os.path.join(self.toi.model_dir, 'plotting')
         if not os.path.isdir(out_dir):
             os.makedirs(out_dir)
 

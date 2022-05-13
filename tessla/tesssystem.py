@@ -30,6 +30,13 @@ from celerite2.theano import terms, GaussianProcess
 
 import arviz as az
 
+'''
+NOTE: Right now, nontransiting planets won't work, so don't add them!
+
+Problem: How to have different length period vectors for the exoplanet orbit model. E.g. 3 transiting planet periods and 2 additional nontransiting planets. 
+Might just make sense to use RadVel in that case.
+'''
+
 class TessSystem:
     '''
     Container object that holds meta information about a system.
@@ -51,7 +58,6 @@ class TessSystem:
                 phot_gp_kernel='exp_decay', # What GP kernel to use to flatten the light curve. 
                                             # Options are: ['activity', 'exp_decay', 'rotation']. Activity is exp_decay + rotation. See celerite2 documentation.
                 # RV stuff
-                n_keplerians=1, # Number of Keplerian signals to include in models of the RVs. This will include transiting planets and any potentially non-transiting planet signals.
                 rv_data_path=None, # Path to RV data .csv. Must contain columns: "time", "mnvel" [m/s], "errvel" [m/s], "tel"
                 
                 # General stuff
@@ -73,9 +79,7 @@ class TessSystem:
 
         # Planet-related attributes
         self.n_transiting = n_transiting # Should get rid of this attribute eventually, and just go by the length of the dictionary self.transiting_planets.
-        self.n_keplerians = n_keplerians
         self.transiting_planets = {}
-        self.nontransiting_planets = {}
         self.all_transits_mask = None
         self.toi_catalog = None
 
@@ -95,36 +99,59 @@ class TessSystem:
             os.makedirs(self.output_dir)
 
         # If RVs were included so creating a joint model
-        if rv_data_path is not None:
+        self.rv_data_path = rv_data_path
+        self.rv_df = None
+        if self.rv_data_path is not None:
             if self.verbose:
                 print("RV dataset detected. This will be a joint photometry-RV model.")
-            joint_model_out_dir = os.path.join(self.output_dir, 'joint_model')
-            if not os.path.isdir(joint_model_out_dir):
-                os.makedirs(joint_model_out_dir)
-            self.joint_dir = joint_model_out_dir
-
-            joint_sampling_out_dir = os.path.join(self.output_dir, 'joint_sampling')
-            if not os.path.isdir(joint_sampling_out_dir):
-                os.makedirs(joint_sampling_out_dir)
-            self.joint_sampling_dir = joint_sampling_out_dir
-
+            model_out_dir = os.path.join(self.output_dir, 'joint_model')
+            sampling_out_dir = os.path.join(self.output_dir, 'joint_sampling')
             self.is_joint_model = True
 
         # Photometry-only
         else:
             # Sub-directory for photometry
-            phot_out_dir = os.path.join(self.output_dir, 'photometry')
-            if not os.path.isdir(phot_out_dir):
-                os.makedirs(phot_out_dir) # TODO: Some sort of warning re: overwriting.
-            self.phot_dir = phot_out_dir
-
-            # Sub-directory for sampling
-            phot_sampling_out_dir = os.path.join(self.output_dir, 'phot_sampling')
-            if not os.path.isdir(phot_sampling_out_dir):
-                os.makedirs(phot_sampling_out_dir)
-            self.phot_sampling_dir = phot_sampling_out_dir
-
+            model_out_dir = os.path.join(self.output_dir, 'photometry')
+            sampling_out_dir = os.path.join(self.output_dir, 'phot_sampling')
             self.is_joint_model = False
+
+        # Make these subdirectories
+        if not os.path.isdir(model_out_dir):
+            os.makedirs(model_out_dir) # TODO: Some sort of warning re: overwriting.
+        if not os.path.isdir(sampling_out_dir):
+            os.makedirs(sampling_out_dir)
+
+        self.model_dir = model_out_dir
+        self.sampling_dir = sampling_out_dir
+
+    def add_rv_data(self):
+        '''
+        Read in the RV data from file.
+        '''
+        rv_df = pd.read_csv(self.rv_data_path, comment='#')
+        cols = rv_df.columns.tolist()
+        msg = 'RV .csv file must have the following columns: ["time", "mnvel", "errvel", "tel"], where "mnvel" and "errvel" are in m/s.'
+        assert all([col in cols for col in ['time', 'mnvel', 'errvel', 'tel']]), msg
+        rv_df.time = rv_df.time.copy() - self.bjd_ref
+        self.rv_df = rv_df
+        self.rv_inst_names = np.unique(rv_df['tel'])
+        self.num_rv_inst = len(self.rv_inst_names)
+
+    def get_msini_estimate(self):
+        '''
+        Estimate the minimum msini values for the planets. 
+        '''
+        assert self.rv_df is not None, "No RV data set detected."
+        msini = xo.estimate_minimum_mass(
+            [planet.per for planet in self.transiting_planets.values()], 
+             self.rv_df.time, 
+             self.rv_df.mnvel, 
+             self.rv_df.errvel, 
+             t0s=[planet.t0 for planet in self.transiting_planets.values()], 
+             m_star=self.star.mstar
+        )
+        msini = msini.to(units.M_earth)
+        return msini
 
     def add_transiting_planet(self, planet) -> None:
         '''
@@ -151,22 +178,8 @@ class TessSystem:
             planet.depth = (self.map_soln["ror"][i])**2 * 1e3 # Places in units of PPT
             if self.is_joint_model:
                 planet.kamp = self.map_soln["kamp"][i]
-
-    def add_nontransiting_planet(self, planet) -> None:
-        '''
-        Add a nontransiting planet.
-        '''
-        self.nontransiting_planets[planet.pl_letter] = planet
-        self.n_keplerians = len(self.nontransiting_planets)
-
-    def update_nontransiting_planet_props_to_map_soln(self):
-        '''
-        Update nontransiting planet properties to the MAP solution values. 
-        '''
-        assert self.map_soln is not None, "MAP Solution is none. Must run MAP fitting procedure first."
-        for i,planet in enumerate(self.nontransiting_planets.values()):
-            planet.per = self.map_soln["period"][i + self.n_transiting] # THIS INDEXING MEANS NONTRANSITING PLANETS MUST ALWAYS BE ADDED AFTER TRANSITING ONES
-            planet.kamp = self.map_soln["kamp"][i + self.n_transiting]
+                planet.ecc  = self.map_soln["ecc"][i]
+                planet.omega = self.map_soln["omega"][i]
         
     def search_for_tois(self):
         '''
@@ -652,6 +665,139 @@ class TessSystem:
         self.cleaned_flat_flux = y - (extras["gp_pred"] + map_soln["mean"])
         
         # Save these dictionaries as attributes. TODO: Also save model object?
+        self.map_soln = map_soln
+        self.extras = extras
+
+        # Update planet properties with MAP values
+        if update_planet_props_to_map_soln:
+            if self.verbose:
+                print("Updating transiting planet properties to MAP solution values")
+            self.update_transiting_planet_props_to_map_soln()
+
+        return model
+
+    def __get_rv_model(self, t, orbit, trend_rv, name=""):
+        planet_rv = orbit.get_radial_velocity(t)
+        pm.Deterministic("planet_rv" + name, planet_rv)
+
+        # Background model
+        if self.rv_trend:
+            A = np.vander(t, self.rv_trend_order + 1)
+        else:
+            A = np.zeros((t, self.rv_trend_order + 1))
+        bkg_rv = pm.Deterministic("bkg_rv" + name, tt.dot(A, trend_rv))
+
+        return pm.Deterministic("rv_model" + name, tt.sum(planet_rv, axis=-1) + bkg_rv)
+
+    def __build_joint_model(self, x_phot, y_phot, yerr_phot, start=None, phase_lim=0.3, n_eval_points=500, t_rv_buffer=5):
+        '''
+        '''
+        t_rv = np.linspace(self.rv_df.time.min() - t_rv_buffer, self.rv_df.time.max() + t_rv_buffer, n_eval_points)
+        phase_rv = np.linspace(-phase_lc, phase_lc, n_eval_points)
+
+        with pm.Model() as model:
+            mean_flux = pm.Normal("mean_flux", 0.0, sd=10.)
+            u = xo.QuadLimbDark("u")
+            xo_star = xo.LimbDarkLightCurve(u)
+            BoundedNormal = pm.Bound(pm.Normal, lower=0, upper=3)
+            mstar = BoundedNormal("mstar", mu=self.star.mstar, sd=self.star.mstar_err)
+            rstar = BoundedNormal("rstar", mu=self.star.rstar, sd=self.star.rstar_err)
+            
+            # Orbital parameters for the transiting planets
+            assert_msg = "Not all of the transiting planets use the same BJD reference date as the TOI object so the t0 value will be incorrect."
+            assert all([planet.bjd_ref == self.bjd_ref for planet in self.transiting_planets.values()]), assert_msg
+            t0 = pm.Normal("t0", mu=np.array([planet.t0 for planet in self.transiting_planets.values()]), sd=1, shape=self.n_transiting)
+            msini = self.get_msini_estimate()
+            log_m_pl = pm.Normal("log_m_pl", mu=np.log(msini.value), sd=1, shape=self.n_transiting)
+            m_pl = pm.Deterministic("m_pl", tt.exp(log_m_pl))
+            log_period = pm.Normal("log_period", mu=np.log(np.array([planet.per for planet in self.transiting_planets.values()])), sd=1, shape=self.n_transiting)
+            period = pm.Deterministic("period", tt.exp(log_period))
+            log_ror = pm.Normal("log_ror", mu=0.5 * np.log(1e-3 * np.array([planet.depth for planet in self.transiting_planets.values()])), sigma=np.log(10), shape=self.n_transiting)
+            ror = pm.Deterministic("ror", tt.exp(log_ror))
+            b = pm.Uniform("b", 0, 1, shape=self.n_transiting)
+
+            # Eccentricity and omega
+            ecs = pmx.UnitDisk("ecs", shape=(self.n_transiting, self.n_transiting), testval=0.01 * np.ones((self.n_transiting, self.n_transiting)))
+            ecc = pm.Deterministic("ecc", tt.sum(ecs**2, axis=0))
+            omega = pm.Deterministic("omega", tt.arctan2(ecs[1], ecs[0]))
+            xo.eccentricity.vaneylen19("ecc_prior", multi=(self.n_transiting > 1), shape=self.n_transiting, fixed=True, observed=ecc)
+
+            # Light curve jitter
+            log_sigma_lc = pm.Normal("log_sigma_lc", mu=np.log(np.median(yerr_phot.values)), sd=2)
+
+            # Orbit model
+            orbit = xo.orbits.KeplerianOrbit(r_star=rstar, m_star=mstar, period=period, t0=t0, b=b, m_planet=xo.units.with_units(m_pl, msini.unit), ecc=ecc, omega=omega)
+
+            # Light curves
+            light_curves = xo_star.get_light_curve(orbit=orbit, r=ror, t=x_phot.values, texp=self.cadence/60/60/24) * 1e3 # Converts self.cadence from seconds to days.
+
+            # Build the RV model
+            if self.rv_trend:
+                # Optionally add a polynomial trend as the RV background
+                trend_rv = pm.Normal("trend", mu=0, sd=10 ** -np.arange(self.rv_trend_order + 1)[::-1], shape=self.rv_trend_order + 1)
+            
+            gamma_rv = pm.Normal("gamma_rv", mu=np.array([np.median(self.rv_df[self.rv_df['tel'] == tel]) for tel in self.rv_inst_names]), sigma=50, shape=self.num_rv_inst)
+            sigma_rv = pm.HalfNormal("sigma_rv", sigma=10, shape=self.num_rv_inst)
+            mean_rv = tt.zeros(len(self.rv_df))
+            diag_rv = tt.zeros(len(self.rv_df))
+            for i, tel in enumerate(self.rv_inst_names):
+                mean_rv += gamma_rv[i] * np.array(self.rv_df['tel'] == tel, dtype=int)
+                diag_rv += (self.rv_df.errvel**2 + sigma_rv[i]**2) * np.array(self.rv_df['tel'] == tel, dtype=int)
+            pm.Deterministic("mean_rv", mean_rv)
+            pm.Deterministic("diag_rv", diag_rv)
+            
+            # RV model
+            rv_model = self.__get_rv_model(self.rv_df.time, orbit, trend_rv)
+            self.__get_rv_model(t_rv, orbit, trend_rv, name="_pred")
+            resid_rv = self.rv_df.mnvel - mean_rv - rv_model
+            pm.Normal("obs_rv", mu=0, sd=tt.sqrt(diag_rv), observed=resid_rv)
+
+            # Compute and save the phased light curve models
+            phase_lc = np.linspace(-phase_lim, phase_lim, n_eval_points)
+            lc_phase_pred = 1e3 * tt.stack(
+                                    [
+                                        xo_star.get_light_curve(
+                                            orbit=orbit, r=ror, t=t0[n] + phase_lc, texp=self.cadence/60/60/24)[..., n]
+                                            for n in range(self.n_transiting)
+                                    ],
+                                    axis=-1,
+            )
+
+            # Perform the MAP fitting
+            if start is None:
+                start = model.test_point
+            # Order of parameters to be optimized is a bit arbitrary
+            map_soln = pmx.optimize(start=start, vars=[log_sigma_lc])
+            map_soln = pmx.optimize(start=map_soln, vars=[sigma_rv])
+            map_soln = pmx.optimize(start=map_soln, vars=[gamma_rv])
+            if self.rv_trend:
+                map_soln = pmx.optimize(start=map_soln, vars=[trend_rv])
+            map_soln = pmx.optimize(start=map_soln, vars=[log_ror])
+            map_soln = pmx.optimize(start=map_soln, vars=[b])
+            map_soln = pmx.optimize(start=map_soln, vars=[log_period, t0])
+            map_soln = pmx.optimize(start=map_soln, vars=[u])
+            map_soln = pmx.optimize(start=map_soln, vars=[log_ror])
+            map_soln = pmx.optimize(start=map_soln, vars=[b])
+            map_soln = pmx.optimize(start=map_soln, vars=[log_sigma_lc])
+            map_soln = pmx.optimize(start=map_soln)
+
+            extras = dict(
+                zip(
+                    ["light_curves", "lc_phase_pred", "rv_phase_pred"],
+                    pmx.eval_in_model([light_curves, lc_phase_pred, self.__get_rv_model(period * phase_rv + t0, orbit, trend_rv)], map_soln)
+                )
+            )
+            return model, map_soln, extras
+
+    def fit_phot_and_rvs(self, rv_trend=False, rv_trend_order=1, update_planet_props_to_map_soln=True):
+        '''
+        Build a joint RV and photometry model.
+        '''
+        self.rv_trend = rv_trend
+        self.rv_trend_order = rv_trend_order
+        phot_model = self.flatten_light_curve() # First, flatten the light curve. Then we'll do the joint fit.
+        model, map_soln, extras = self.__build_joint_model(self.cleaned_time, self.cleaned_flat_flux, self.cleaned_flux_err, start=self.map_soln)
+
         self.map_soln = map_soln
         self.extras = extras
 

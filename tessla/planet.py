@@ -31,7 +31,6 @@ class Planet:
                 ecc_err=None,
                 omega=None, # In degrees
                 omega_err=None, # In degrees
-                is_transiting=True
                 ) -> None:
     
         self.pl_letter = pl_letter
@@ -62,8 +61,6 @@ class Planet:
         self.omega = omega
         self.omega_err = omega_err
 
-        # Transiting or non-transiting?
-        self.is_transiting = is_transiting
 
     def __create_transit_mask(self, time):
         '''
@@ -76,7 +73,6 @@ class Planet:
         '''
         Create a mask for the in-transit data for this planet.
         '''
-        assert self.is_transiting, "Attempting to get a transit mask for a non-transiting planet"
         self.transit_mask = self.__create_transit_mask(time)
         return self.transit_mask
     

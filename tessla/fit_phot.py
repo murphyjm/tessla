@@ -126,7 +126,7 @@ def main():
     plot_individual_transits(toi)
 
     # Create a phase-folded plot of the light curve at the presumed stellar rotation period
-    phase_plot(os.path.join(toi.phot_dir, 'plotting'), 
+    phase_plot(os.path.join(toi.model_dir, 'plotting'), 
                 f"{toi.name} {toi.flux_origin.replace('_', ' ')}", 
                 'Relative flux [ppt]', 
                 toi.cleaned_time.values, toi.cleaned_flux.values, toi.rot_per, 0)
