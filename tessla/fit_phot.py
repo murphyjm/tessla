@@ -9,7 +9,7 @@ from tessla.tesssystem import TessSystem
 from tessla.planet import Planet
 from tessla.star import Star
 from tessla.data_utils import find_breaks, quick_look_summary
-from tessla.plotting_utils import sg_smoothing_plot, quick_transit_plot, plot_individual_transits, phase_plot, plot_corners
+from tessla.plotting_utils import sg_smoothing_plot, quick_transit_plot, plot_individual_transits, phase_plot, plot_phot_only_corners, plot_joint_corners
 from tessla.threepanelphotplot import ThreePanelPhotPlot
 
 # Script imports
@@ -173,7 +173,10 @@ def main():
 
         # Make the corner plots
         if toi.plotting:
-            plot_corners(toi, df_derived_chains, overwrite=args.overwrite_plot)
+            if args.rv_data_path is None:
+                plot_phot_only_corners(toi, df_derived_chains, overwrite=args.overwrite_plot)
+            else:
+                plot_joint_corners(toi, df_derived_chains, overwrite=args.overwrite_plot)
         
         # Save an output table with derived physical parameters in useful units for quickly checking on the sampling results.
         quick_look_summary(toi, df_derived_chains)
