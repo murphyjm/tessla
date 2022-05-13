@@ -7,7 +7,7 @@ import lightkurve as lk
 from astropy import units
 
 # Data utils
-from tessla.data_utils import time_delta_to_data_delta, convert_negative_angles, get_semimajor_axis, get_sinc, get_aor, get_teq
+from tessla.data_utils import time_delta_to_data_delta, convert_negative_angles, get_semimajor_axis, get_sinc, get_aor, get_teq, get_density
 from scipy.signal import savgol_filter
 
 # Enables sampling with multiple cores on Mac.
@@ -90,6 +90,7 @@ class TessSystem:
 
         # Set this at the start
         self.chains_path = None # TODO: Could instantiate the object with a chains path from a previous run
+        self.chains_derived_path = None
         self.map_soln = None
 
         # Organize the output directory structure
@@ -708,8 +709,8 @@ class TessSystem:
             assert all([planet.bjd_ref == self.bjd_ref for planet in self.transiting_planets.values()]), assert_msg
             t0 = pm.Normal("t0", mu=np.array([planet.t0 for planet in self.transiting_planets.values()]), sd=1, shape=self.n_transiting)
             msini = self.get_msini_estimate()
-            log_m_pl = pm.Normal("log_m_pl", mu=np.log(msini.value), sd=1, shape=self.n_transiting)
-            m_pl = pm.Deterministic("m_pl", tt.exp(log_m_pl))
+            log_mp = pm.Normal("log_mp", mu=np.log(msini.value), sd=1, shape=self.n_transiting)
+            mp = pm.Deterministic("mp", tt.exp(log_mp))
             log_period = pm.Normal("log_period", mu=np.log(np.array([planet.per for planet in self.transiting_planets.values()])), sd=1, shape=self.n_transiting)
             period = pm.Deterministic("period", tt.exp(log_period))
             log_ror = pm.Normal("log_ror", mu=0.5 * np.log(1e-3 * np.array([planet.depth for planet in self.transiting_planets.values()])), sigma=np.log(10), shape=self.n_transiting)
@@ -726,10 +727,37 @@ class TessSystem:
             log_sigma_lc = pm.Normal("log_sigma_lc", mu=np.log(np.median(yerr_phot.values)), sd=2)
 
             # Orbit model
-            orbit = xo.orbits.KeplerianOrbit(r_star=rstar, m_star=mstar, period=period, t0=t0, b=b, m_planet=xo.units.with_units(m_pl, msini.unit), ecc=ecc, omega=omega)
+            orbit = xo.orbits.KeplerianOrbit(r_star=rstar, m_star=mstar, period=period, t0=t0, b=b, m_planet=xo.units.with_units(mp, msini.unit), ecc=ecc, omega=omega)
 
             # Light curves
             light_curves = xo_star.get_light_curve(orbit=orbit, r=ror, t=x_phot.values, texp=self.cadence/60/60/24) * 1e3 # Converts self.cadence from seconds to days.
+            light_curve = tt.sum(light_curves, axis=-1) + mean_flux
+            resid_phot = y_phot.values - light_curve
+
+            # Build the GP kernel
+            gp_params = None
+            kernel = None
+            if self.phot_gp_kernel == 'exp_decay':
+                exp_decay_params, exp_decay_kernel = self.__get_exp_decay_kernel()
+                gp_params = exp_decay_params
+                kernel = exp_decay_kernel
+            elif self.phot_gp_kernel == 'rotation':
+                rotation_params, rotation_kernel = self.__get_rotation_kernel()
+                gp_params = rotation_params
+                kernel = rotation_kernel
+            elif self.phot_gp_kernel == 'activity':
+                exp_decay_params, exp_decay_kernel = self.__get_exp_decay_kernel()
+                gp_params = exp_decay_params
+                kernel = exp_decay_kernel
+
+                rotation_params, rotation_kernel = self.__get_rotation_kernel()
+                gp_params += rotation_params
+                kernel += rotation_kernel
+
+            self.phot_gp_params = gp_params
+            # Compute the GP model for the light curve
+            gp = GaussianProcess(kernel, t=x_phot.values, diag=yerr_phot.values**2 + tt.exp(2 * log_sigma_lc)) # diag= is the variance of the observational model.
+            gp.marginal("gp", observed=resid_phot)
 
             # Build the RV model
             if self.rv_trend:
@@ -778,13 +806,15 @@ class TessSystem:
             map_soln = pmx.optimize(start=map_soln, vars=[u])
             map_soln = pmx.optimize(start=map_soln, vars=[log_ror])
             map_soln = pmx.optimize(start=map_soln, vars=[b])
+            map_soln = pmx.optimize(start=map_soln, vars=[mean_flux])
             map_soln = pmx.optimize(start=map_soln, vars=[log_sigma_lc])
+            map_soln = pmx.optimize(start=map_soln, vars=gp_params)
             map_soln = pmx.optimize(start=map_soln)
 
             extras = dict(
                 zip(
-                    ["light_curves", "lc_phase_pred", "rv_phase_pred"],
-                    pmx.eval_in_model([light_curves, lc_phase_pred, self.__get_rv_model(period * phase_rv + t0, orbit, trend_rv)], map_soln)
+                    ["light_curves", "gp_pred" "lc_phase_pred", "rv_phase_pred"],
+                    pmx.eval_in_model([light_curves, gp.predict(resid_phot), lc_phase_pred, self.__get_rv_model(period * phase_rv + t0, orbit, trend_rv)], map_soln)
                 )
             )
             return model, map_soln, extras
@@ -796,7 +826,7 @@ class TessSystem:
         self.rv_trend = rv_trend
         self.rv_trend_order = rv_trend_order
         phot_model = self.flatten_light_curve() # First, flatten the light curve. Then we'll do the joint fit.
-        model, map_soln, extras = self.__build_joint_model(self.cleaned_time, self.cleaned_flat_flux, self.cleaned_flux_err, start=self.map_soln)
+        model, map_soln, extras = self.__build_joint_model(self.cleaned_time, self.cleaned_flux, self.cleaned_flux_err, start=self.map_soln)
 
         self.map_soln = map_soln
         self.extras = extras
@@ -918,7 +948,13 @@ class TessSystem:
         '''
         Add some useful derived quantities to the chains.
         '''
-        df_chains = pd.read_csv(self.chains_derived_path)
+        if self.chains_derived_path is None:
+            extension = '.csv.gz'
+            chains_derived_path = self.chains_path[:self.chains_path.find(extension)] + '_derived' + extension
+            self.chains_derived_path = chains_derived_path
+            df_chains = pd.read_csv(self.chains_path)
+        else:
+            df_chains = pd.read_csv(self.chains_derived_path)
         N = len(df_chains)
         mstar_samples = np.random.normal(self.star.mstar, self.star.mstar_err, N)
         rstar_samples = np.random.normal(self.star.rstar, self.star.rstar_err, N)
@@ -932,4 +968,6 @@ class TessSystem:
             df_chains[f"aor_{letter}"] = get_aor(df_chains[f"a_{letter}"].values, rstar_samples)
             df_chains[f"sinc_{letter}"] = get_sinc(df_chains[f"a_{letter}"].values, teff_samples, rstar_samples)
             df_chains[f"teq_{letter}"] = get_teq(df_chains[f"a_{letter}"].values, teff_samples, rstar_samples) # Calculated assuming zero Bond albedo
+            if "mp" in df_chains.columns.tolist():
+                df_chains[f"rho_{letter}"] = get_density(df_chains[f"mp_{letter}"], df_chains[f"rp_{letter}"], 'earthMass', 'earthRad', 'g', 'cm')
         df_chains.to_csv(self.chains_derived_path, index=False, compression="gzip")

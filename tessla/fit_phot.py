@@ -32,6 +32,10 @@ def parse_args():
     parser.add_argument("star_obj_fname", type=str, help="Path to the .pkl file containing the tessla.star.Star object.")
     parser.add_argument("--planet_objs_dir", type=str, default=None, help="If there are transiting planets that are not TOIs in the system or the TOIs in the catalog have incorrect properties, this is the path to the directory with the .pkl files that contain the tessla.planet.Planet objects.")
     parser.add_argument("--output_dir_suffix", type=str, default='', help="Suffix for output directory. Default is empty string. E.g. '_test_01' for TOI-1824_test_01.")
+    
+    # Joint photometry-RV model?
+    parser.add_argument("--rv_data_path", type=str, default=None, help="Path to RV data set to include in modeling.")
+    parser.add_argument("--rv_trend", action="store_true", help="Include a linear trend in the background RV model.")
 
     # Data
     parser.add_argument("--flux_origin", type=str, default="sap_flux", help="Either pdcsap_flux or sap_flux. Default is SAP.")
@@ -89,7 +93,8 @@ def main():
     toi = TessSystem(args.name, 
                     tic=args.tic, 
                     toi=args.toi, 
-                    phot_gp_kernel=args.phot_gp_kernel, 
+                    phot_gp_kernel=args.phot_gp_kernel,
+                    rv_data_path=args.rv_data_path,
                     plotting=(not args.no_plotting), 
                     flux_origin=args.flux_origin, 
                     use_long_cadence_data=args.use_long_cadence_data,
@@ -130,6 +135,9 @@ def main():
                 f"{toi.name} {toi.flux_origin.replace('_', ' ')}", 
                 'Relative flux [ppt]', 
                 toi.cleaned_time.values, toi.cleaned_flux.values, toi.rot_per, 0)
+
+    if args.rv_data_path is not None:
+        model = toi.fit_phot_and_rvs(rv_trend=args.rv_trend)
     
     # Run the sampling
     flat_samps = None
@@ -139,9 +147,10 @@ def main():
                                     tune=args.ntune, 
                                     draws=args.draws, 
                                     chains=args.nchains)
-
-        # Add eccentricity and omega to the chains
-        toi.add_ecc_and_omega_to_chains(flat_samps)
+        
+        if args.rv_data_path is None:
+            # Add eccentricity and omega to the chains
+            toi.add_ecc_and_omega_to_chains(flat_samps)
         toi.add_derived_quantities_to_chains()
 
     if toi.plotting:
