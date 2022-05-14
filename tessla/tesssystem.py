@@ -109,6 +109,16 @@ class TessSystem:
             sampling_out_dir = os.path.join(self.output_dir, 'joint_sampling')
             self.is_joint_model = True
 
+            # Read in the RV data from file.
+            rv_df = pd.read_csv(self.rv_data_path, comment='#')
+            cols = rv_df.columns.tolist()
+            msg = 'RV .csv file must have the following columns: ["time", "mnvel", "errvel", "tel"], where "mnvel" and "errvel" are in m/s.'
+            assert all([col in cols for col in ['time', 'mnvel', 'errvel', 'tel']]), msg
+            rv_df.time = rv_df.time.copy() - self.bjd_ref
+            self.rv_df = rv_df
+            self.rv_inst_names = np.unique(rv_df['tel'])
+            self.num_rv_inst = len(self.rv_inst_names)
+
         # Photometry-only
         else:
             # Sub-directory for photometry
@@ -124,19 +134,6 @@ class TessSystem:
 
         self.model_dir = model_out_dir
         self.sampling_dir = sampling_out_dir
-
-    def add_rv_data(self):
-        '''
-        Read in the RV data from file.
-        '''
-        rv_df = pd.read_csv(self.rv_data_path, comment='#')
-        cols = rv_df.columns.tolist()
-        msg = 'RV .csv file must have the following columns: ["time", "mnvel", "errvel", "tel"], where "mnvel" and "errvel" are in m/s.'
-        assert all([col in cols for col in ['time', 'mnvel', 'errvel', 'tel']]), msg
-        rv_df.time = rv_df.time.copy() - self.bjd_ref
-        self.rv_df = rv_df
-        self.rv_inst_names = np.unique(rv_df['tel'])
-        self.num_rv_inst = len(self.rv_inst_names)
 
     def get_msini_estimate(self):
         '''
@@ -175,13 +172,10 @@ class TessSystem:
         for i,planet in enumerate(self.transiting_planets.values()):
             planet.per = self.map_soln["period"][i]
             planet.t0 = self.map_soln["t0"][i]
-            planet.dur = self.map_soln["dur"][i]
             planet.depth = (self.map_soln["ror"][i])**2 * 1e3 # Places in units of PPT
-            if self.is_joint_model:
-                planet.kamp = self.map_soln["kamp"][i]
-                planet.ecc  = self.map_soln["ecc"][i]
-                planet.omega = self.map_soln["omega"][i]
-        
+            if not self.is_joint_model:
+                planet.dur = self.map_soln["dur"][i]
+
     def search_for_tois(self):
         '''
         Look for TOIs in the TOI catalog.
@@ -519,7 +513,7 @@ class TessSystem:
         with pm.Model() as model:
 
             # Parameters for the star
-            mean = pm.Normal("mean", mu=0.0, sd=10.0)
+            mean_flux = pm.Normal("mean_flux", mu=0.0, sd=10.0)
             u = xo.QuadLimbDark("u")
             xo_star = xo.LimbDarkLightCurve(u)
 
@@ -548,7 +542,7 @@ class TessSystem:
 
             # Light curves
             light_curves = xo_star.get_light_curve(orbit=orbit, r=ror, t=x.values[mask], texp=self.cadence/60/60/24) * 1e3 # Converts self.cadence from seconds to days.
-            light_curve = tt.sum(light_curves, axis=-1) + mean
+            light_curve = tt.sum(light_curves, axis=-1) + mean_flux
             resid = y.values[mask] - light_curve
 
             # Build the GP kernel
@@ -601,7 +595,7 @@ class TessSystem:
             map_soln = pmx.optimize(start=map_soln, vars=[log_ror])
             map_soln = pmx.optimize(start=map_soln, vars=[b])
             map_soln = pmx.optimize(start=map_soln, vars=[log_dur])
-            map_soln = pmx.optimize(start=map_soln, vars=[mean])
+            map_soln = pmx.optimize(start=map_soln, vars=[mean_flux])
             map_soln = pmx.optimize(start=map_soln, vars=[log_sigma_lc])
             map_soln = pmx.optimize(start=map_soln, vars=gp_params)
             map_soln = pmx.optimize(start=map_soln)
@@ -618,7 +612,7 @@ class TessSystem:
         '''
         Mark outliers and create a mask that removes them.
         '''
-        mod = extras["gp_pred"] + np.sum(extras["light_curves"], axis=-1) + map_soln["mean"]
+        mod = extras["gp_pred"] + np.sum(extras["light_curves"], axis=-1) + map_soln["mean_flux"]
         resid = y.values[old_mask] - mod
         rms = np.sqrt(np.median(resid ** 2))
         mask = np.abs(resid) < sigma_thresh * rms
@@ -663,7 +657,7 @@ class TessSystem:
         self.cleaned_time, self.cleaned_flux, self.cleaned_flux_err = x, y, yerr
 
         # Save the cleaned and flattened flux as an attribute by subtracting out the GP and offset.
-        self.cleaned_flat_flux = y - (extras["gp_pred"] + map_soln["mean"])
+        self.cleaned_flat_flux = y - (extras["gp_pred"] + map_soln["mean_flux"])
         
         # Save these dictionaries as attributes. TODO: Also save model object?
         self.map_soln = map_soln
@@ -684,17 +678,17 @@ class TessSystem:
         # Background model
         if self.rv_trend:
             A = np.vander(t, self.rv_trend_order + 1)
+            bkg_rv = pm.Deterministic("bkg_rv" + name, tt.dot(A, trend_rv))
+            return pm.Deterministic("rv_model" + name, tt.sum(planet_rv, axis=-1) + bkg_rv)
         else:
-            A = np.zeros((t, self.rv_trend_order + 1))
-        bkg_rv = pm.Deterministic("bkg_rv" + name, tt.dot(A, trend_rv))
+            return pm.Deterministic("rv_model" + name, tt.sum(planet_rv, axis=-1))
 
-        return pm.Deterministic("rv_model" + name, tt.sum(planet_rv, axis=-1) + bkg_rv)
-
+        
     def __build_joint_model(self, x_phot, y_phot, yerr_phot, start=None, phase_lim=0.3, n_eval_points=500, t_rv_buffer=5):
         '''
         '''
         t_rv = np.linspace(self.rv_df.time.min() - t_rv_buffer, self.rv_df.time.max() + t_rv_buffer, n_eval_points)
-        phase_rv = np.linspace(-phase_lc, phase_lc, n_eval_points)
+        phase_rv = np.linspace(-phase_lim, phase_lim, n_eval_points)
 
         with pm.Model() as model:
             mean_flux = pm.Normal("mean_flux", 0.0, sd=10.)
@@ -707,16 +701,19 @@ class TessSystem:
             # Orbital parameters for the transiting planets
             assert_msg = "Not all of the transiting planets use the same BJD reference date as the TOI object so the t0 value will be incorrect."
             assert all([planet.bjd_ref == self.bjd_ref for planet in self.transiting_planets.values()]), assert_msg
-            t0 = pm.Normal("t0", mu=np.array([planet.t0 for planet in self.transiting_planets.values()]), sd=1, shape=self.n_transiting)
+            t0 = pm.Normal("t0", mu=np.array([planet.t0 for planet in self.transiting_planets.values()]), sd=np.log(1.2), shape=self.n_transiting)
             msini = self.get_msini_estimate()
-            log_mp = pm.Normal("log_mp", mu=np.log(msini.value), sd=1, shape=self.n_transiting)
+            mp_guess = msini.value
+            if not all(mp_guess > 0):
+                mp_guess = 5 * np.ones(self.n_transiting)
+            log_mp = pm.Normal("log_mp", mu=np.log(mp_guess), sd=1, shape=self.n_transiting)
             mp = pm.Deterministic("mp", tt.exp(log_mp))
-            log_period = pm.Normal("log_period", mu=np.log(np.array([planet.per for planet in self.transiting_planets.values()])), sd=1, shape=self.n_transiting)
+            log_period = pm.Normal("log_period", mu=np.log(np.array([planet.per for planet in self.transiting_planets.values()])), sd=np.log(1.2), shape=self.n_transiting)
             period = pm.Deterministic("period", tt.exp(log_period))
             log_ror = pm.Normal("log_ror", mu=0.5 * np.log(1e-3 * np.array([planet.depth for planet in self.transiting_planets.values()])), sigma=np.log(10), shape=self.n_transiting)
             ror = pm.Deterministic("ror", tt.exp(log_ror))
             b = pm.Uniform("b", 0, 1, shape=self.n_transiting)
-
+            
             # Eccentricity and omega
             ecs = pmx.UnitDisk("ecs", shape=(self.n_transiting, self.n_transiting), testval=0.01 * np.ones((self.n_transiting, self.n_transiting)))
             ecc = pm.Deterministic("ecc", tt.sum(ecs**2, axis=0))
@@ -727,7 +724,7 @@ class TessSystem:
             log_sigma_lc = pm.Normal("log_sigma_lc", mu=np.log(np.median(yerr_phot.values)), sd=2)
 
             # Orbit model
-            orbit = xo.orbits.KeplerianOrbit(r_star=rstar, m_star=mstar, period=period, t0=t0, b=b, m_planet=xo.units.with_units(mp, msini.unit), ecc=ecc, omega=omega)
+            orbit = xo.orbits.KeplerianOrbit(r_star=rstar, m_star=mstar, period=period, t0=t0, b=b, m_planet=mp, m_planet_units=units.earthMass, ecc=ecc, omega=omega)
 
             # Light curves
             light_curves = xo_star.get_light_curve(orbit=orbit, r=ror, t=x_phot.values, texp=self.cadence/60/60/24) * 1e3 # Converts self.cadence from seconds to days.
@@ -763,21 +760,26 @@ class TessSystem:
             if self.rv_trend:
                 # Optionally add a polynomial trend as the RV background
                 trend_rv = pm.Normal("trend", mu=0, sd=10 ** -np.arange(self.rv_trend_order + 1)[::-1], shape=self.rv_trend_order + 1)
-            
-            gamma_rv = pm.Normal("gamma_rv", mu=np.array([np.median(self.rv_df[self.rv_df['tel'] == tel]) for tel in self.rv_inst_names]), sigma=50, shape=self.num_rv_inst)
-            sigma_rv = pm.HalfNormal("sigma_rv", sigma=10, shape=self.num_rv_inst)
+            else:
+                trend_rv = None
+            gamma_rv_list = []
+            for tel in self.rv_inst_names:
+                mask = self.rv_df['tel'] == tel
+                gamma_rv_list.append(np.median(self.rv_df.loc[mask, 'mnvel']))
+            gamma_rv = pm.Normal("gamma_rv", mu=np.array(gamma_rv_list), sigma=50, shape=self.num_rv_inst)
+            sigma_rv = pm.HalfNormal("sigma_rv", sigma=10, shape=self.num_rv_inst,)
             mean_rv = tt.zeros(len(self.rv_df))
             diag_rv = tt.zeros(len(self.rv_df))
             for i, tel in enumerate(self.rv_inst_names):
                 mean_rv += gamma_rv[i] * np.array(self.rv_df['tel'] == tel, dtype=int)
-                diag_rv += (self.rv_df.errvel**2 + sigma_rv[i]**2) * np.array(self.rv_df['tel'] == tel, dtype=int)
+                diag_rv += ((self.rv_df.errvel.values)**2 + sigma_rv[i])**2 * np.array(self.rv_df['tel'] == tel, dtype=int)
             pm.Deterministic("mean_rv", mean_rv)
             pm.Deterministic("diag_rv", diag_rv)
             
             # RV model
             rv_model = self.__get_rv_model(self.rv_df.time, orbit, trend_rv)
             self.__get_rv_model(t_rv, orbit, trend_rv, name="_pred")
-            resid_rv = self.rv_df.mnvel - mean_rv - rv_model
+            resid_rv = self.rv_df.mnvel.values - mean_rv - rv_model
             pm.Normal("obs_rv", mu=0, sd=tt.sqrt(diag_rv), observed=resid_rv)
 
             # Compute and save the phased light curve models
@@ -810,11 +812,16 @@ class TessSystem:
             map_soln = pmx.optimize(start=map_soln, vars=[log_sigma_lc])
             map_soln = pmx.optimize(start=map_soln, vars=gp_params)
             map_soln = pmx.optimize(start=map_soln)
-
+            
             extras = dict(
                 zip(
-                    ["light_curves", "gp_pred" "lc_phase_pred", "rv_phase_pred"],
-                    pmx.eval_in_model([light_curves, gp.predict(resid_phot), lc_phase_pred, self.__get_rv_model(period * phase_rv + t0, orbit, trend_rv)], map_soln)
+                    ["light_curves", 
+                    "gp_pred",
+                    "lc_phase_pred"],
+                    pmx.eval_in_model([light_curves, 
+                                        gp.predict(resid_phot), 
+                                        lc_phase_pred], 
+                                        map_soln)
                 )
             )
             return model, map_soln, extras
@@ -825,7 +832,7 @@ class TessSystem:
         '''
         self.rv_trend = rv_trend
         self.rv_trend_order = rv_trend_order
-        phot_model = self.flatten_light_curve() # First, flatten the light curve. Then we'll do the joint fit.
+        # You may want to call self.flatten_light_curve() first because it will remove photometric outliers.
         model, map_soln, extras = self.__build_joint_model(self.cleaned_time, self.cleaned_flux, self.cleaned_flux_err, start=self.map_soln)
 
         self.map_soln = map_soln

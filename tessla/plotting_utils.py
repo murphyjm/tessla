@@ -39,7 +39,7 @@ def sg_smoothing_plot(toi):
         ax.set_xlabel(f'Time [BJD - {toi.bjd_ref:.1f}]')
         ax.set_ylabel(f'Relative flux [ppt]')
         
-        out_dir = os.path.join(toi.phot_dir, 'plotting')
+        out_dir = os.path.join(toi.model_dir, 'plotting')
         if not os.path.isdir(out_dir):
             os.makedirs(out_dir)
         fig.savefig(os.path.join(out_dir, f"{toi.name.replace(' ', '_')}_sg_filtering_sector_{sector:02}.png"), facecolor='white', bbox_inches='tight', dpi=300)
@@ -126,7 +126,7 @@ def quick_transit_plot(toi):
     Make a plot of what the MAP transit fit looks like for each planet before moving on to the sampling.
     '''
     
-    out_dir = os.path.join(toi.phot_dir, 'plotting')
+    out_dir = os.path.join(toi.model_dir, 'plotting')
     if not os.path.isdir(out_dir):
         os.makedirs(out_dir)
 
@@ -136,7 +136,7 @@ def quick_transit_plot(toi):
         x_fold = ((x - toi.map_soln["t0"][i] + 0.5 * toi.map_soln["period"][i]) % toi.map_soln[
             "period"
         ][i] - 0.5 * toi.map_soln["period"][i]).values
-        ax.scatter(x_fold, y - toi.extras['gp_pred'] - toi.map_soln['mean'], c=x, s=3)
+        ax.scatter(x_fold, y - toi.extras['gp_pred'] - toi.map_soln['mean_flux'], c=x, s=3)
         phase = np.linspace(-0.3, 0.3, len(toi.extras['lc_phase_pred'][:, i]))
         ax.plot(phase, toi.extras['lc_phase_pred'][:, i], 'r', lw=5)
         ax.set_xlim(-6/24, 6/24)
@@ -160,7 +160,7 @@ def plot_individual_transits(toi, xlim=0.3):
     '''
     Make a plot of each individual transit for each planet.
     '''
-    out_dir = os.path.join(toi.phot_dir, 'plotting')
+    out_dir = os.path.join(toi.model_dir, 'plotting')
     if not os.path.isdir(out_dir):
         os.makedirs(out_dir)
     
@@ -184,7 +184,7 @@ def plot_individual_transits(toi, xlim=0.3):
         mask = np.abs(x_fold) < xlim
         transit_inds = np.argwhere(np.abs(np.ediff1d(x_fold[mask])) > 0.5)
 
-        noise_model = toi.extras["gp_pred"] + toi.map_soln["mean"]
+        noise_model = toi.extras["gp_pred"] + toi.map_soln["mean_flux"]
         lc_model = toi.extras["light_curves"][:, i]
 
         def plot_transit(start_ind, end_ind, transit_num):
@@ -244,7 +244,7 @@ def plot_phot_only_corners(toi, df_derived_chains, overwrite=False):
         star_labels = ['$\mu$ [ppt]', '$u_1$', '$u_2$']
         noise_labels = ['$\sigma_\mathrm{jitter}$ [ppt]', '$\sigma_\mathrm{GP}$ [PPT]', r'$\rho$ [d]']
         star_noise_chains = np.vstack([
-            df_derived_chains['mean'], 
+            df_derived_chains['mean_flux'], 
             df_derived_chains['u_0'],
             df_derived_chains['u_1'],
             np.exp(df_derived_chains['log_sigma_lc']),
@@ -300,7 +300,7 @@ def plot_joint_corners(toi, df_derived_chains, overwrite=False):
         star_labels = ['$\mu$ [ppt]', '$u_1$', '$u_2$']
         noise_labels = ['$\sigma_\mathrm{jitter}$ [ppt]', '$\sigma_\mathrm{GP}$ [PPT]', r'$\rho$ [d]']
         star_noise_chains = np.vstack([
-            df_derived_chains['mean'], 
+            df_derived_chains['mean_flux'], 
             df_derived_chains['u_0'],
             df_derived_chains['u_1'],
             np.exp(df_derived_chains['log_sigma_lc']),

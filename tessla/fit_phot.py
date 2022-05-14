@@ -125,8 +125,12 @@ def main():
     
     # Run the MAP fitting loop
     model = toi.flatten_light_curve()
-    quick_transit_plot(toi)
 
+    # If there's an RV dataset, make a joint model of the photometry and RVs.
+    if args.rv_data_path is not None:
+        model = toi.fit_phot_and_rvs(rv_trend=args.rv_trend)
+    quick_transit_plot(toi)
+    
     # Make plots of the individual transits
     plot_individual_transits(toi)
 
@@ -135,9 +139,6 @@ def main():
                 f"{toi.name} {toi.flux_origin.replace('_', ' ')}", 
                 'Relative flux [ppt]', 
                 toi.cleaned_time.values, toi.cleaned_flux.values, toi.rot_per, 0)
-
-    if args.rv_data_path is not None:
-        model = toi.fit_phot_and_rvs(rv_trend=args.rv_trend)
     
     # Run the sampling
     flat_samps = None

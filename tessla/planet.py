@@ -25,8 +25,6 @@ class Planet:
                 dur_err=None,
                 depth=None,
                 depth_err=None,
-                kamp=None,
-                kamp_err=None,
                 ecc=None,
                 ecc_err=None,
                 omega=None, # In degrees
@@ -54,8 +52,6 @@ class Planet:
         self.color = planet_color_dict[pl_letter]
 
         # Additional quantities
-        self.kamp = kamp
-        self.kamp_err = kamp_err
         self.ecc = ecc
         self.ecc_err = ecc_err
         self.omega = omega

@@ -229,7 +229,7 @@ class ThreePanelPhotPlot:
         
         # Plot the GP model on top chunk-by-chunk to avoid the lines that extend into the gaps
         # Also mark the transits in each chunk for each planet
-        gp_mod = self.toi.extras["gp_pred"] + self.toi.map_soln["mean"]
+        gp_mod = self.toi.extras["gp_pred"] + self.toi.map_soln["mean_flux"]
         assert len(self.x) == len(gp_mod), "Different lengths for data being plotted and GP model"
 
         # --------------- #
@@ -419,7 +419,7 @@ class ThreePanelPhotPlot:
         ax1.plot(self.x, self.y, '.k', alpha=0.3, label="Data")
 
         # Plot the GP model and mark the transits
-        gp_mod = self.toi.extras["gp_pred"] + self.toi.map_soln["mean"]
+        gp_mod = self.toi.extras["gp_pred"] + self.toi.map_soln["mean_flux"]
         assert len(self.x) == len(gp_mod), "Different lengths for data being plotted and GP model"
         ax1.plot(self.x, gp_mod, color="C2", label="GP model")
         self.__plot_transit_markers(ax1, np.min(self.x), np.max(self.x))
@@ -505,7 +505,7 @@ class ThreePanelPhotPlot:
         heights = [1, 0.33]
         sps = gridspec.GridSpecFromSubplotSpec(2, len(self.toi.transiting_planets), subplot_spec=gs1, height_ratios=heights, hspace=0.05)
 
-        gp_mod = self.toi.extras["gp_pred"] + self.toi.map_soln["mean"]
+        gp_mod = self.toi.extras["gp_pred"] + self.toi.map_soln["mean_flux"]
         residuals = self.y - gp_mod - np.sum(self.toi.extras["light_curves"], axis=-1)
 
         chains = None
