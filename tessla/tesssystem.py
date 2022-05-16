@@ -5,9 +5,10 @@ import numpy as np
 import pandas as pd
 import lightkurve as lk
 from astropy import units
+import pickle
 
 # Data utils
-from tessla.data_utils import time_delta_to_data_delta, convert_negative_angles, get_semimajor_axis, get_sinc, get_aor, get_teq, get_density
+from tessla.data_utils import get_inclination, time_delta_to_data_delta, convert_negative_angles, get_semimajor_axis, get_sinc, get_aor, get_teq, get_density, get_inclination
 from scipy.signal import savgol_filter
 
 # Enables sampling with multiple cores on Mac.
@@ -29,6 +30,9 @@ import aesara_theano_fallback.tensor as tt
 from celerite2.theano import terms, GaussianProcess
 
 import arviz as az
+
+# Radvel
+from radvel.utils import Msini
 
 '''
 NOTE: Right now, nontransiting planets won't work, so don't add them!
@@ -114,7 +118,6 @@ class TessSystem:
             cols = rv_df.columns.tolist()
             msg = 'RV .csv file must have the following columns: ["time", "mnvel", "errvel", "tel"], where "mnvel" and "errvel" are in m/s.'
             assert all([col in cols for col in ['time', 'mnvel', 'errvel', 'tel']]), msg
-            rv_df.time = rv_df.time.copy() - self.bjd_ref
             self.rv_df = rv_df
             self.rv_inst_names = np.unique(rv_df['tel'])
             self.num_rv_inst = len(self.rv_inst_names)
@@ -134,22 +137,6 @@ class TessSystem:
 
         self.model_dir = model_out_dir
         self.sampling_dir = sampling_out_dir
-
-    def get_msini_estimate(self):
-        '''
-        Estimate the minimum msini values for the planets. 
-        '''
-        assert self.rv_df is not None, "No RV data set detected."
-        msini = xo.estimate_minimum_mass(
-            [planet.per for planet in self.transiting_planets.values()], 
-             self.rv_df.time, 
-             self.rv_df.mnvel, 
-             self.rv_df.errvel, 
-             t0s=[planet.t0 for planet in self.transiting_planets.values()], 
-             m_star=self.star.mstar
-        )
-        msini = msini.to(units.M_earth)
-        return msini
 
     def add_transiting_planet(self, planet) -> None:
         '''
@@ -254,6 +241,9 @@ class TessSystem:
         t_start = np.min(lc['time'])
         lc['time'] -= t_start.value
         self.bjd_ref += t_start.value
+
+        if self.rv_df is not None:
+            self.rv_df.time = self.rv_df.time.values - self.bjd_ref
 
         self.lc = lc
 
@@ -671,24 +661,22 @@ class TessSystem:
 
         return model
 
-    def __get_rv_model(self, t, orbit, trend_rv, name=""):
-        planet_rv = orbit.get_radial_velocity(t)
-        pm.Deterministic("planet_rv" + name, planet_rv)
+    def __get_rv_model(self, t, K, orbit, trend_rv):
+
+        planet_rv = orbit.get_radial_velocity(t, K=K)
 
         # Background model
+        bkg = tt.zeros(len(t))
         if self.rv_trend:
             A = np.vander(t, self.rv_trend_order + 1)
-            bkg_rv = pm.Deterministic("bkg_rv" + name, tt.dot(A, trend_rv))
-            return pm.Deterministic("rv_model" + name, tt.sum(planet_rv, axis=-1) + bkg_rv)
-        else:
-            return pm.Deterministic("rv_model" + name, tt.sum(planet_rv, axis=-1))
-
+            bkg = tt.dot(A, trend_rv)
+            
+        return planet_rv, bkg, tt.sum(planet_rv, axis=-1) + bkg
         
     def __build_joint_model(self, x_phot, y_phot, yerr_phot, start=None, phase_lim=0.3, n_eval_points=500, t_rv_buffer=5):
         '''
         '''
         t_rv = np.linspace(self.rv_df.time.min() - t_rv_buffer, self.rv_df.time.max() + t_rv_buffer, n_eval_points)
-        phase_rv = np.linspace(-phase_lim, phase_lim, n_eval_points)
 
         with pm.Model() as model:
             mean_flux = pm.Normal("mean_flux", 0.0, sd=10.)
@@ -701,14 +689,10 @@ class TessSystem:
             # Orbital parameters for the transiting planets
             assert_msg = "Not all of the transiting planets use the same BJD reference date as the TOI object so the t0 value will be incorrect."
             assert all([planet.bjd_ref == self.bjd_ref for planet in self.transiting_planets.values()]), assert_msg
-            t0 = pm.Normal("t0", mu=np.array([planet.t0 for planet in self.transiting_planets.values()]), sd=np.log(1.2), shape=self.n_transiting)
-            msini = self.get_msini_estimate()
-            mp_guess = msini.value
-            if not all(mp_guess > 0):
-                mp_guess = 5 * np.ones(self.n_transiting)
-            log_mp = pm.Normal("log_mp", mu=np.log(mp_guess), sd=1, shape=self.n_transiting)
-            mp = pm.Deterministic("mp", tt.exp(log_mp))
-            log_period = pm.Normal("log_period", mu=np.log(np.array([planet.per for planet in self.transiting_planets.values()])), sd=np.log(1.2), shape=self.n_transiting)
+            t0 = pm.Normal("t0", mu=np.array([planet.t0 for planet in self.transiting_planets.values()]), sd=1, shape=self.n_transiting)
+            log_K = pm.Normal("log_K", mu=np.log(np.std(self.rv_df.mnvel) * np.ones(self.n_transiting)), sigma=10, shape=self.n_transiting)
+            K = pm.Deterministic("K", tt.exp(log_K))
+            log_period = pm.Normal("log_period", mu=np.log(np.array([planet.per for planet in self.transiting_planets.values()])), sd=1, shape=self.n_transiting)
             period = pm.Deterministic("period", tt.exp(log_period))
             log_ror = pm.Normal("log_ror", mu=0.5 * np.log(1e-3 * np.array([planet.depth for planet in self.transiting_planets.values()])), sigma=np.log(10), shape=self.n_transiting)
             ror = pm.Deterministic("ror", tt.exp(log_ror))
@@ -724,7 +708,7 @@ class TessSystem:
             log_sigma_lc = pm.Normal("log_sigma_lc", mu=np.log(np.median(yerr_phot.values)), sd=2)
 
             # Orbit model
-            orbit = xo.orbits.KeplerianOrbit(r_star=rstar, m_star=mstar, period=period, t0=t0, b=b, m_planet=mp, m_planet_units=units.earthMass, ecc=ecc, omega=omega)
+            orbit = xo.orbits.KeplerianOrbit(r_star=rstar, m_star=mstar, period=period, t0=t0, b=b, ecc=ecc, omega=omega)
 
             # Light curves
             light_curves = xo_star.get_light_curve(orbit=orbit, r=ror, t=x_phot.values, texp=self.cadence/60/60/24) * 1e3 # Converts self.cadence from seconds to days.
@@ -773,13 +757,11 @@ class TessSystem:
             for i, tel in enumerate(self.rv_inst_names):
                 mean_rv += gamma_rv[i] * np.array(self.rv_df['tel'] == tel, dtype=int)
                 diag_rv += ((self.rv_df.errvel.values)**2 + sigma_rv[i])**2 * np.array(self.rv_df['tel'] == tel, dtype=int)
-            pm.Deterministic("mean_rv", mean_rv)
-            pm.Deterministic("diag_rv", diag_rv)
             
             # RV model
-            rv_model = self.__get_rv_model(self.rv_df.time, orbit, trend_rv)
-            self.__get_rv_model(t_rv, orbit, trend_rv, name="_pred")
-            resid_rv = self.rv_df.mnvel.values - mean_rv - rv_model
+            planet_rv, bkg_rv, full_rv_model = self.__get_rv_model(self.rv_df.time, K, orbit, trend_rv)
+            planet_rv_pred, bkg_rv_pred, full_rv_model_pred = self.__get_rv_model(t_rv, K, orbit, trend_rv)
+            resid_rv = self.rv_df.mnvel.values - mean_rv - full_rv_model
             pm.Normal("obs_rv", mu=0, sd=tt.sqrt(diag_rv), observed=resid_rv)
 
             # Compute and save the phased light curve models
@@ -802,6 +784,7 @@ class TessSystem:
             map_soln = pmx.optimize(start=map_soln, vars=[gamma_rv])
             if self.rv_trend:
                 map_soln = pmx.optimize(start=map_soln, vars=[trend_rv])
+            map_soln = pmx.optimize(start=map_soln, vars=[log_K])
             map_soln = pmx.optimize(start=map_soln, vars=[log_ror])
             map_soln = pmx.optimize(start=map_soln, vars=[b])
             map_soln = pmx.optimize(start=map_soln, vars=[log_period, t0])
@@ -817,10 +800,26 @@ class TessSystem:
                 zip(
                     ["light_curves", 
                     "gp_pred",
-                    "lc_phase_pred"],
+                    "lc_phase_pred",
+                    "mean_rv",
+                    "err_rv",
+                    "planet_rv",
+                    "planet_rv_pred",
+                    "bkg_rv",
+                    "bkg_rv_pred",
+                    "full_rv_model", 
+                    "full_rv_model_pred"],
                     pmx.eval_in_model([light_curves, 
                                         gp.predict(resid_phot), 
-                                        lc_phase_pred], 
+                                        lc_phase_pred,
+                                        mean_rv,
+                                        np.sqrt(diag_rv),
+                                        planet_rv,
+                                        planet_rv_pred,
+                                        bkg_rv,
+                                        bkg_rv_pred,
+                                        full_rv_model,
+                                        full_rv_model_pred], 
                                         map_soln)
                 )
             )
@@ -857,18 +856,36 @@ class TessSystem:
         '''
         df_chains = pd.DataFrame()
         for param in model.named_vars.keys():
-            if '__' in param or param == 'gp':
+            try:
+                num_dim = len(flat_samps[param].shape)
+            except KeyError:
                 continue
-            if len(flat_samps[param].shape) > 1 and param != 'u':
+            if num_dim > 1 and param != 'u' and param != 'gamma_rv' and param != 'sigma_rv':
                 msg = "Chains and number of transiting planets have shape mismatch."
                 assert len(self.transiting_planets) == flat_samps[param].shape[0], msg
                 for i, pl_letter in enumerate(self.transiting_planets.keys()):
-                    df_chains[f"{param}_{pl_letter}"] = flat_samps[param][i, :].data
+                    try:
+                        df_chains[f"{param}_{pl_letter}"] = flat_samps[param][i, :].data
+                    except ValueError:
+                        continue
             elif param == 'u':
                 for i in range(flat_samps[param].shape[0]):
                     df_chains[f"u_{i}"] = flat_samps[param][i, :].data
+            elif param == 'gamma_rv':
+                msg = "Chains and number of RV instruments have shape mismatch."
+                assert flat_samps[param].shape[0] == len(self.rv_inst_names), msg
+                for i,tel in enumerate(self.rv_inst_names):
+                    df_chains[f"gamma_rv_{tel}"] = flat_samps[param][i, :].data
+            elif param == 'sigma_rv':
+                msg = "Chains and number of RV instruments have shape mismatch."
+                assert flat_samps[param].shape[0] == len(self.rv_inst_names), msg
+                for i,tel in enumerate(self.rv_inst_names):
+                    df_chains[f"sigma_rv_{tel}"] = flat_samps[param][i, :].data
             else:
-                df_chains[param] = flat_samps[param].data
+                try:
+                    df_chains[param] = flat_samps[param].data
+                except ValueError:
+                    continue
             
         df_chains.to_csv(chains_output_fname, index=False, compression="gzip")
 
@@ -888,13 +905,13 @@ class TessSystem:
                     pass
         
         # Do some output directory housekeeping
-        assert os.path.isdir(self.phot_sampling_dir), "Output directory does not exist." # This should be redundant, but just in case.
-        chains_output_fname = os.path.join(self.phot_sampling_dir, f"{self.name.replace(' ', '_')}_phot_chains{output_fname_suffix}.csv.gz")
+        assert os.path.isdir(self.sampling_dir), "Output directory does not exist." # This should be redundant, but just in case.
+        chains_output_fname = os.path.join(self.sampling_dir, f"{self.name.replace(' ', '_')}_phot_chains{output_fname_suffix}.csv.gz")
         if not overwrite and os.path.isfile(chains_output_fname):
             warnings.warn("Exiting before starting the sampling to avoid overwriting exisiting chains file.")
             return None, None
 
-        trace_summary_output_fname = os.path.join(self.phot_sampling_dir, f"{self.name.replace(' ', '_')}_trace_summary{output_fname_suffix}.csv")
+        trace_summary_output_fname = os.path.join(self.sampling_dir, f"{self.name.replace(' ', '_')}_trace_summary{output_fname_suffix}.csv")
         if not overwrite and os.path.isfile(trace_summary_output_fname):
             warnings.warn("Exiting before starting the sampling to avoid overwriting exisiting trace summary file.")
             return None, None
@@ -919,6 +936,8 @@ class TessSystem:
 
         # Save the concatenated samples.
         flat_samps =  trace.posterior.stack(sample=("chain", "draw"))
+        with open(os.path.join(self.sampling_dir, f"{self.name.replace(' ', '_')}_flat_samples.pkl"), "wb") as flat_samples_fname:
+            pickle.dump(flat_samps, flat_samples_fname, protocol=pickle.HIGHEST_PROTOCOL)
         self.__flat_samps_to_csv(model, flat_samps, chains_output_fname)
         self.chains_path = chains_output_fname
 
@@ -961,20 +980,35 @@ class TessSystem:
             self.chains_derived_path = chains_derived_path
             df_chains = pd.read_csv(self.chains_path)
         else:
-            df_chains = pd.read_csv(self.chains_derived_path)
+            try:
+                df_chains = pd.read_csv(self.chains_derived_path)
+            except FileNotFoundError:
+                df_chains = pd.read_csv(self.chains_path)
         N = len(df_chains)
-        mstar_samples = np.random.normal(self.star.mstar, self.star.mstar_err, N)
-        rstar_samples = np.random.normal(self.star.rstar, self.star.rstar_err, N)
+        if self.is_joint_model:
+            mstar_samples = df_chains['mstar'].values
+            rstar_samples = df_chains['rstar'].values
+        else:
+            mstar_samples = np.random.normal(self.star.mstar, self.star.mstar_err, N)
+            rstar_samples = np.random.normal(self.star.rstar, self.star.rstar_err, N)
         teff_samples = np.random.normal(self.star.teff, self.star.teff_err, N)
         for letter in self.transiting_planets.keys():
             df_chains[f"rp_{letter}"] = units.R_sun.to(units.R_earth, df_chains[f"ror_{letter}"] * rstar_samples) # Planet radius in earth radius
-            df_chains[f"dur_hr_{letter}"] = df_chains[f"dur_{letter}"] * 24 # Transit duration in hours
+            
+            if not self.is_joint_model:
+                df_chains[f"dur_hr_{letter}"] = df_chains[f"dur_{letter}"] * 24 # Transit duration in hours
+
             df_chains[f"omega_folded_{letter}"] = df_chains[f"omega_{letter}"].apply(convert_negative_angles)
             df_chains[f"omega_folded_deg_{letter}"] = df_chains[f"omega_folded_{letter}"].values * 180 / np.pi # Convert omega from radians to degrees to have for convenience
             df_chains[f"a_{letter}"] = get_semimajor_axis(df_chains[f"period_{letter}"].values, mstar_samples)
             df_chains[f"aor_{letter}"] = get_aor(df_chains[f"a_{letter}"].values, rstar_samples)
             df_chains[f"sinc_{letter}"] = get_sinc(df_chains[f"a_{letter}"].values, teff_samples, rstar_samples)
             df_chains[f"teq_{letter}"] = get_teq(df_chains[f"a_{letter}"].values, teff_samples, rstar_samples) # Calculated assuming zero Bond albedo
-            if "mp" in df_chains.columns.tolist():
-                df_chains[f"rho_{letter}"] = get_density(df_chains[f"mp_{letter}"], df_chains[f"rp_{letter}"], 'earthMass', 'earthRad', 'g', 'cm')
+            
+            df_chains[f"i_rad_{letter}"], df_chains[f"i_deg_{letter}"] = get_inclination(df_chains[f"b_{letter}"].values, df_chains[f"a_{letter}"].values, rstar_samples)
+            if self.is_joint_model:
+                df_chains[f"msini_{letter}"] = Msini(df_chains[f"K_{letter}"], df_chains[f"period_{letter}"], mstar_samples, df_chains[f"ecc_{letter}"], Msini_units='earth')
+                df_chains[f"mp_{letter}"] = df_chains[f"msini_{letter}"] / np.sin(df_chains[f"i_rad_{letter}"])
+                df_chains[f"rho_{letter}"] = get_density(df_chains[f"mp_{letter}"].values, df_chains[f"rp_{letter}"].values, 'earthMass', 'earthRad', 'g', 'cm')
+
         df_chains.to_csv(self.chains_derived_path, index=False, compression="gzip")

@@ -556,8 +556,16 @@ class ThreePanelPhotPlot:
                     t0 = np.array([chains[f"t0_{letter}"].values[ind] for letter in self.toi.transiting_planets.keys()])
                     ror = np.array([chains[f"ror_{letter}"].values[ind] for letter in self.toi.transiting_planets.keys()])
                     b = np.array([chains[f"b_{letter}"].values[ind] for letter in self.toi.transiting_planets.keys()])
-                    dur = np.array([chains[f"dur_{letter}"].values[ind] for letter in self.toi.transiting_planets.keys()])
-                    orbit = xo.orbits.KeplerianOrbit(period=period, t0=t0, b=b, ror=ror, duration=dur)
+                    if not self.toi.is_joint_model:
+                        dur = np.array([chains[f"dur_{letter}"].values[ind] for letter in self.toi.transiting_planets.keys()])
+                        orbit = xo.orbits.KeplerianOrbit(period=period, t0=t0, b=b, ror=ror, duration=dur)
+                    else:
+                        # If a joint model, parameterized in terms of stellar density and ecc and omega directly
+                        rstar = chains["rstar"].values[ind]
+                        mstar = chains["mstar"].values[ind]
+                        ecc = np.array([chains[f"ecc_{letter}"].values[ind] for letter in self.toi.transiting_planets.keys()])
+                        omega = np.array([chains[f"omega_{letter}"].values[ind] for letter in self.toi.transiting_planets.keys()])
+                        orbit = xo.orbits.KeplerianOrbit(r_star=rstar, m_star=mstar, period=period, t0=t0, b=b, ecc=ecc, omega=omega)
 
                     # Light curves
                     N_EVAL_POINTS = 500

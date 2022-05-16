@@ -81,6 +81,12 @@ def get_teq(a_samples, teff_samples, rstar_samples, bond_albedo=0):
     a_samples_sun = (a_samples * units.AU).to(units.R_sun).value
     return teff_samples * (1 - bond_albedo)**(0.25) * np.sqrt(rstar_samples / (2 * a_samples_sun))
 
+def get_inclination(b_samples, a_samples, rstar_samples):   
+    inclination_samples_rad = np.arccos(b_samples / ((a_samples * units.AU).to(units.R_sun).value) * rstar_samples)
+    inclination_samples_deg = inclination_samples_rad * 180 / np.pi
+    
+    return inclination_samples_rad, inclination_samples_deg
+
 def __get_summary_info(chain):
     median = np.median(chain)
     mean = np.mean(chain)

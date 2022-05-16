@@ -296,7 +296,7 @@ def plot_joint_corners(toi, df_derived_chains, overwrite=False):
     '''
     if toi.phot_gp_kernel == "exp_decay":
 
-        # Corner plot for star properties and noise parameters
+        # Corner plot for light curve star and noise properties
         star_labels = ['$\mu$ [ppt]', '$u_1$', '$u_2$']
         noise_labels = ['$\sigma_\mathrm{jitter}$ [ppt]', '$\sigma_\mathrm{GP}$ [PPT]', r'$\rho$ [d]']
         star_noise_chains = np.vstack([
@@ -305,12 +305,12 @@ def plot_joint_corners(toi, df_derived_chains, overwrite=False):
             df_derived_chains['u_1'],
             np.exp(df_derived_chains['log_sigma_lc']),
             np.exp(df_derived_chains['log_sigma_dec_gp']),
-            np.exp(df_derived_chains['log_rho_gp'])
+            np.exp(df_derived_chains['log_rho_gp']),
         ]).T
         star_noise_corner = TesslaCornerPlot(toi, star_labels + noise_labels, star_noise_chains, toi.name)
         star_noise_corner.plot(overwrite=overwrite)
 
-        # Corner plot for each planet's transit parameters
+        # Corner plot for the measured parameters
         for i,letter in enumerate(toi.transiting_planets.keys()):
             planet_labels = [
                 '$P$ [d]',
@@ -318,7 +318,8 @@ def plot_joint_corners(toi, df_derived_chains, overwrite=False):
                 '$R_\mathrm{p}/R_*$ [$\%$]',
                 '$b$',
                 '$e$',
-                '$\omega$ [Rad]'
+                '$\omega$ [Rad]',
+                '$K$ [m s$^{-1}$]'
             ]
             planet_chains = np.vstack([
                 df_derived_chains[f'period_{letter}'],
@@ -326,7 +327,8 @@ def plot_joint_corners(toi, df_derived_chains, overwrite=False):
                 df_derived_chains[f'ror_{letter}'] * 100, # Put in units of percent to make the decimals easier to see
                 df_derived_chains[f'b_{letter}'],
                 df_derived_chains[f'ecc_{letter}'],
-                df_derived_chains[f'omega_{letter}']
+                df_derived_chains[f'omega_{letter}'],
+                df_derived_chains[f'K_{letter}']
             ]).T
             planet_corner = TesslaCornerPlot(toi, planet_labels, planet_chains, f"{toi.name} {letter} measured parameters")
             planet_corner.plot(overwrite=overwrite)
