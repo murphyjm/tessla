@@ -9,6 +9,7 @@ from tessla.tesssystem import TessSystem
 from tessla.data_utils import find_breaks, quick_look_summary
 from tessla.plotting_utils import sg_smoothing_plot, quick_transit_plot, plot_individual_transits, phase_plot, plot_phot_only_corners, plot_joint_corners
 from tessla.threepanelphotplot import ThreePanelPhotPlot
+from tessla.rvplot import RVPlot
 
 # Script imports
 import os
@@ -166,7 +167,10 @@ def main():
 
         if toi.is_joint_model:
             # Make RV plot
-            pass
+            rv_plot = RVPlot(toi, 
+                             plot_random_orbit_draws=(not args.no_sampling), 
+                             num_random_orbit_draws=(args.num_transit_draws))
+            rv_plot.plot(save_fname=f"{toi.name.replace(' ', '_')}_rv_model" + args.plot_fname_suffix, overwrite=args.overwrite_plot)
 
     # If the sampling was run...
     if flat_samps is not None:

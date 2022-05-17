@@ -320,7 +320,7 @@ def plot_joint_corners(toi, df_derived_chains, overwrite=False):
             rv_inst_labels.append(f'$\sigma_\mathrm{{{tel}}}$ [m s$^{{-1}}$]')
             rv_inst_chains_list.append(df_derived_chains[f'sigma_rv_{tel}'])
         rv_inst_chains = np.vstack(rv_inst_chains_list).T
-        rv_inst_corner = TesslaCornerPlot(toi, rv_inst_labels, rv_inst_chains, toi.name)
+        rv_inst_corner = TesslaCornerPlot(toi, rv_inst_labels, rv_inst_chains, f"{toi.name} RV instrument parameters")
         rv_inst_corner.plot(overwrite=overwrite)
 
         # Corner plot for the measured parameters
@@ -350,7 +350,7 @@ def plot_joint_corners(toi, df_derived_chains, overwrite=False):
             derived_labels = [
                 '$R_\mathrm{p}$ [$R_\mathrm{\oplus}$]',
                 '$M_\mathrm{p}$ [$M_\mathrm{\oplus}$]',
-                '$\\rho_\mathrm{p} [g cm$^{-1}$]',
+                '$\\rho_\mathrm{p}$ [g cm$^{-1}$]',
                 '$a$ [AU]',
                 '$T_\mathrm{eq}$ [K]'
             ]
