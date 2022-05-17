@@ -267,7 +267,6 @@ class RVPlot:
             # Plot the folded data
             x_fold = (self.toi.rv_df.time - planet.t0 + 0.5 * planet.per) % planet.per - 0.5 * planet.per
             x_fold /= planet.per # Put this in unitless phase
-            inds = np.argsort(x_fold)
             
             # RV contribution from other planets and background trend (if any)
             other_rv = np.sum(np.delete(self.toi.extras['planet_rv'], i, axis=1), axis=1)
@@ -288,7 +287,7 @@ class RVPlot:
             # Plot the binned RVs like in RadVel
             bin_duration = 0.125 # 1/8 bins of phase
             bins = (x_fold.max() - x_fold.min()) / bin_duration
-            binned_rv, binned_edges, _ = binned_statistic(x_fold, self.toi.rv_df.mnvel - self.toi.extras['mean_rv'], statistic="mean", bins=bins)
+            binned_rv, binned_edges, _ = binned_statistic(x_fold, self.toi.rv_df.mnvel - self.toi.extras['mean_rv'] - other_rv, statistic="mean", bins=bins)
             binned_rv_var, __, ___ = binned_statistic(x_fold, (self.toi.extras['err_rv'])**2, statistic="mean", bins=bins)
             binned_rv_err = np.sqrt(binned_rv_var)
             binned_edge_diff = np.ediff1d(binned_edges) / 2
@@ -303,15 +302,10 @@ class RVPlot:
                     ind = np.random.choice(np.arange(self.num_random_orbit_draws))
 
                     # Build the model we used before
-                    # Star
-                    u = [chains['u_0'].values[ind], chains['u_1'].values[ind]]
-                    xo_star = xo.LimbDarkLightCurve(u)
-
                     # Orbit
                     K = np.array([chains[f"K_{letter}"].values[ind] for letter in self.toi.transiting_planets.keys()])
                     period = np.array([chains[f"period_{letter}"].values[ind] for letter in self.toi.transiting_planets.keys()])
                     t0 = np.array([chains[f"t0_{letter}"].values[ind] for letter in self.toi.transiting_planets.keys()])
-                    ror = np.array([chains[f"ror_{letter}"].values[ind] for letter in self.toi.transiting_planets.keys()])
                     b = np.array([chains[f"b_{letter}"].values[ind] for letter in self.toi.transiting_planets.keys()])
                     rstar = chains["rstar"].values[ind]
                     mstar = chains["mstar"].values[ind]

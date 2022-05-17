@@ -761,14 +761,14 @@ class TessSystem:
             # Build the RV model
             if self.rv_trend:
                 # Optionally add a polynomial trend as the RV background
-                trend_rv = pm.Normal("trend", mu=0, sd=10, shape=self.rv_trend_order + 1)
+                trend_rv = pm.Normal("trend_rv", mu=0, sd=10, shape=self.rv_trend_order + 1)
             else:
                 trend_rv = None
             gamma_rv_list = []
             for tel in self.rv_inst_names:
                 mask = self.rv_df['tel'] == tel
                 gamma_rv_list.append(np.median(self.rv_df.loc[mask, 'mnvel']))
-            gamma_rv = pm.Normal("gamma_rv", mu=np.array(gamma_rv_list), sigma=50, shape=self.num_rv_inst)
+            gamma_rv = pm.Normal("gamma_rv", mu=np.array(gamma_rv_list), sigma=10, shape=self.num_rv_inst)
             sigma_rv = pm.HalfNormal("sigma_rv", sigma=10, shape=self.num_rv_inst)
             mean_rv = tt.zeros(len(self.rv_df))
             diag_rv = tt.zeros(len(self.rv_df))
