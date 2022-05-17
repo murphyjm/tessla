@@ -25,13 +25,30 @@ import datetime
 from astropy.time import Time
 
 DEFAULT_MARKER_MAPPER = {
+    'j':{
+        'color':'black',
+        'marker':'o',
+        'label':'HIRES'
+    },
+    'hires_j':{
+        'color':'black',
+        'marker':'o',
+        'label':'HIRES'
+    },
     'HIRES':{
         'color':'black',
-        'marker':'o'
+        'marker':'o',
+        'label':'HIRES'
+    },
+    'apf':{
+        'color':'green',
+        'marker':'d',
+        'label':'APF'
     },
     'APF':{
         'color':'green',
-        'marker':'d'
+        'marker':'d',
+        'label':'APF'
     }
 }
 
@@ -146,8 +163,8 @@ class RVPlot:
         fig = plt.figure(figsize=self.figsize)
 
         # Create the GridSpec objects
-        gs0, gs1 = gridspec.GridSpec(2, 1, figure=fig, height_ratios=[1, 0.5])
-        heights = [1, 0.33]
+        gs0, gs1 = gridspec.GridSpec(2, 1, figure=fig, height_ratios=[1, 0.66])
+        heights = [1, 0.25]
         sps1, sps2 = gridspec.GridSpecFromSubplotSpec(2, 1, subplot_spec=gs0, height_ratios=heights, hspace=0.1)
         
         ################################################################################################
@@ -161,10 +178,10 @@ class RVPlot:
             mask = self.toi.rv_df.tel == tel
             ax1.errorbar(self.toi.rv_df.time[mask], 
                         self.toi.rv_df.mnvel[mask] - self.toi.extras['mean_rv'][mask], 
-                        self.toi.extras['err_rv'][mask], label=tel, **self.tel_marker_mapper[tel])
+                        self.toi.extras['err_rv'][mask], fmt='.', **self.tel_marker_mapper[tel])
 
         # Plot the RV model
-        ax1.plot(self.toi.extras['t_rv_pred'], self.toi.extras['full_rv_model_pred'], color="blue", label="RV Model")
+        ax1.plot(self.toi.t_rv, self.toi.extras['full_rv_model_pred'], color="blue", label="RV Model", lw=3)
 
         # Add label for years to the upper axis
         self.__add_ymd_label(fig, ax1, (np.min(self.toi.rv_df.time), np.max(self.toi.rv_df.time)), 'left')
@@ -190,15 +207,16 @@ class RVPlot:
         residuals = self.toi.rv_df.mnvel - self.toi.extras['full_rv_model'] - self.toi.extras['mean_rv']
         for tel in self.toi.rv_inst_names:
             mask = self.toi.rv_df.tel == tel
-            ax1.errorbar(self.toi.rv_df.time[mask], 
+            ax2.errorbar(self.toi.rv_df.time[mask], 
                         residuals[mask], 
-                        self.toi.extras['err_rv'][mask], label=tel, **self.tel_marker_mapper[tel])
+                        self.toi.extras['err_rv'][mask], fmt='.', **self.tel_marker_mapper[tel])
         ax2.axhline(0, color="#aaaaaa", lw=1)
 
         # Plot housekeeping
         ax2.set_ylabel("Residuals", fontsize=14, labelpad=self.ylabelpad)
         ax2.set_xlabel(f"Time [BJD - {self.toi.bjd_ref:.1f}]", fontsize=14)
-        ax2.yaxis.set_major_locator(MultipleLocator(2))
+        ax2.yaxis.set_major_locator(MultipleLocator(20))
+        ax2.yaxis.set_minor_locator(MultipleLocator(10))
         bottom = -1 * np.max(ax2.get_ylim())
         ax2.set_ylim(bottom=bottom)
 
@@ -213,8 +231,8 @@ class RVPlot:
 
         # Make ticks go inward and set multiple locator for x-axis
         for ax in [ax1, ax2]:
-            ax.xaxis.set_major_locator(MultipleLocator(20))
-            ax.xaxis.set_minor_locator(MultipleLocator(5))
+            ax.xaxis.set_major_locator(MultipleLocator(100))
+            ax.xaxis.set_minor_locator(MultipleLocator(50))
             ax.tick_params(axis='y', direction='in', which='both', left=True, right=True)
             ax.tick_params(axis='x', direction='in', which='both', top=True, bottom=True)
         
@@ -231,7 +249,7 @@ class RVPlot:
         '''
         Plot the folded transits for each planet.
         '''
-        heights = [1, 0.33]
+        heights = [1, 0.25]
         sps = gridspec.GridSpecFromSubplotSpec(2, len(self.toi.transiting_planets), subplot_spec=gs1, height_ratios=heights, hspace=0.05)
         
         residuals = self.toi.rv_df.mnvel - self.toi.extras['full_rv_model'] - self.toi.extras['mean_rv']
@@ -260,20 +278,22 @@ class RVPlot:
                 mask = self.toi.rv_df.tel == tel
                 ax0.errorbar(x_fold[mask], 
                             self.toi.rv_df.mnvel[mask] - self.toi.extras['mean_rv'][mask] - other_rv[mask], 
-                            self.toi.extras['err_rv'][mask], label=tel, **self.tel_marker_mapper[tel])
+                            self.toi.extras['err_rv'][mask], fmt='.', **self.tel_marker_mapper[tel])
             # Plot the phase-folded MAP solution
-            x_fold_pred = (self.toi.t_rv_pred - planet.t0 + 0.5 * planet.per) % planet.per - 0.5 * planet.per
+            x_fold_pred = (self.toi.t_rv - planet.t0 + 0.5 * planet.per) % planet.per - 0.5 * planet.per
             x_fold_pred /= planet.per # Put this in unitless phase
             inds_pred = np.argsort(x_fold_pred)
-            ax0.plot(x_fold_pred[inds_pred], self.toi.extras['planet_rv_pred'][:, i][inds_pred], color=planet.color, zorder=1000)
+            ax0.plot(x_fold_pred[inds_pred], self.toi.extras['planet_rv_pred'][:, i][inds_pred], color=planet.color, zorder=1000, lw=3)
 
             # Plot the binned RVs like in RadVel
             bin_duration = 0.125 # 1/8 bins of phase
             bins = (x_fold.max() - x_fold.min()) / bin_duration
-            binned_flux, binned_edges, _ = binned_statistic(x_fold, self.toi.rv_df.mnvel - self.toi.extras['mean_rv'], statistic="mean", bins=bins)
+            binned_rv, binned_edges, _ = binned_statistic(x_fold, self.toi.rv_df.mnvel - self.toi.extras['mean_rv'], statistic="mean", bins=bins)
+            binned_rv_var, __, ___ = binned_statistic(x_fold, (self.toi.extras['err_rv'])**2, statistic="mean", bins=bins)
+            binned_rv_err = np.sqrt(binned_rv_var)
             binned_edge_diff = np.ediff1d(binned_edges) / 2
             binned_locs = binned_edges[:-1] + binned_edge_diff
-            ax0.scatter(binned_locs, binned_flux, s=20, color='tomato', edgecolor='red', zorder=1000, label='Binned RV')
+            ax0.errorbar(binned_locs, binned_rv, binned_rv_err, fmt='.', marker='o', color='tomato', mec='red', zorder=1001, label='Binned RV')
 
             if self.plot_random_orbit_draws:
                 if self.toi.verbose:
@@ -300,7 +320,7 @@ class RVPlot:
                     orbit = xo.orbits.KeplerianOrbit(r_star=rstar, m_star=mstar, period=period, t0=t0, b=b, ecc=ecc, omega=omega)
 
                     # Get RV for planet
-                    planet_rv_pred = orbit.get_radial_velocity(self.toi.t_rv_pred, K=K)
+                    planet_rv_pred = orbit.get_radial_velocity(self.toi.t_rv, K=K).eval()
                     
                     # Plot the random draw
                     ax0.plot(x_fold_pred[inds_pred], planet_rv_pred[:, i][inds_pred], color=planet.color, alpha=0.3, zorder=999)
@@ -310,9 +330,9 @@ class RVPlot:
             phase_folded_resid_axes.append(ax1)
             for tel in self.toi.rv_inst_names:
                 mask = self.toi.rv_df.tel == tel
-                ax1.errorbar(x_fold[mask][inds], 
-                            residuals[mask][inds], 
-                            self.toi.extras['err_rv'][mask][inds], label=tel, **self.tel_marker_mapper[tel])
+                ax1.errorbar(x_fold[mask],
+                            residuals[mask], 
+                            self.toi.extras['err_rv'][mask], fmt='.', **self.tel_marker_mapper[tel])
             ax1.axhline(0, color="#aaaaaa", lw=1)
 
             # Plot housekeeping
@@ -320,8 +340,8 @@ class RVPlot:
 
             # Put the x-axis labels and ticks in units of hours instead of days
             for ax in [ax0, ax1]:
-                ax.xaxis.set_major_locator(0.25)
-                ax.xaxis.set_minor_locator(0.05)
+                ax.xaxis.set_major_locator(MultipleLocator(0.25))
+                ax.xaxis.set_minor_locator(MultipleLocator(0.05))
                 ax.tick_params(axis='x', direction='in', which='both', top=True, bottom=True)
                 ax.tick_params(axis='y', direction='in', which='both', left=True, right=True)
 
@@ -329,7 +349,8 @@ class RVPlot:
             ax1.set_xlabel("Phase", fontsize=14)
             ax0.yaxis.set_major_locator(MultipleLocator(5))
             ax0.yaxis.set_minor_locator(MultipleLocator(1))
-            ax1.yaxis.set_major_locator(MultipleLocator(2))
+            ax1.yaxis.set_major_locator(MultipleLocator(20))
+            ax1.yaxis.set_minor_locator(MultipleLocator(10))
 
             if i == 0:
                 ax0.set_ylabel("RV [m s$^{-1}$]", fontsize=14)
@@ -343,10 +364,10 @@ class RVPlot:
                 ecc_str = f"$e = {ecc_med:.2f} \pm {ecc_err:.2f}$"
                 mp_med = self.df_summary.loc[f'mp_{planet.pl_letter}', 'median']
                 mp_err = self.df_summary.loc[f'mp_{planet.pl_letter}', 'std']
-                mp_str = f"$M_\mathrm{{p}} = {mp_med:.2f} \pm {mp_err:.2f}$ $M_\oplus$"
+                mp_str = f"$M_\mathrm{{p}} = {mp_med:.1f} \pm {mp_err:.1f}$ $M_\oplus$"
                 planet_str = per_str + '\n' + ecc_str + '\n' + mp_str
-                text = ax0.text(0.98, 0.05, planet_str, ha='right', va='bottom', transform=ax0.transAxes)
-                text.set_bbox(dict(facecolor='none', alpha=0.8, edgecolor='none'))
+                text = ax0.text(0.05, 0.05, planet_str, ha='left', va='bottom', transform=ax0.transAxes)
+                text.set_bbox(dict(facecolor='white', alpha=0.5, edgecolor='none'))
         
         # Make the y-axes range the same for all of the phase-folded transit plots
         for axes in [phase_folded_axes, phase_folded_resid_axes]:
@@ -355,5 +376,7 @@ class RVPlot:
             y_phase_lim = (y_phase_min, y_phase_max)
             for i in range(len(axes)):
                 axes[i].set_ylim(y_phase_lim)
+        
+        fig.align_ylabels()
 
         return fig

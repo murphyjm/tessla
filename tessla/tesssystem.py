@@ -125,6 +125,8 @@ class TessSystem:
             msg = 'RV .csv file must have the following columns: ["time", "mnvel", "errvel", "tel"], where "mnvel" and "errvel" are in m/s.'
             assert all([col in cols for col in ['time', 'mnvel', 'errvel', 'tel']]), msg
             # Standardize 'j' and 'hires_j' to 'HIRES' and 'apf' to 'APF'
+            bad_mask = (np.abs(rv_df.errvel) > 10) | (np.abs(rv_df.mnvel) > 20)
+            rv_df = rv_df[~bad_mask].reset_index(drop=True)
             rv_df['tel'] = rv_df['tel'].map(RV_INST_NAME_MAPPER).fillna(rv_df['tel'])
             self.rv_df = rv_df
             self.rv_inst_names = np.unique(rv_df['tel'])
@@ -686,7 +688,7 @@ class TessSystem:
         '''
         '''
         t_rv = np.linspace(self.rv_df.time.min() - t_rv_buffer, self.rv_df.time.max() + t_rv_buffer, n_eval_points)
-
+        self.t_rv = t_rv
         with pm.Model() as model:
             mean_flux = pm.Normal("mean_flux", 0.0, sd=10.)
             u = xo.QuadLimbDark("u")
@@ -752,7 +754,7 @@ class TessSystem:
             # Build the RV model
             if self.rv_trend:
                 # Optionally add a polynomial trend as the RV background
-                trend_rv = pm.Normal("trend", mu=0, sd=10 ** -np.arange(self.rv_trend_order + 1)[::-1], shape=self.rv_trend_order + 1)
+                trend_rv = pm.Normal("trend", mu=0, sd=10, shape=self.rv_trend_order + 1)
             else:
                 trend_rv = None
             gamma_rv_list = []
@@ -760,12 +762,12 @@ class TessSystem:
                 mask = self.rv_df['tel'] == tel
                 gamma_rv_list.append(np.median(self.rv_df.loc[mask, 'mnvel']))
             gamma_rv = pm.Normal("gamma_rv", mu=np.array(gamma_rv_list), sigma=50, shape=self.num_rv_inst)
-            sigma_rv = pm.HalfNormal("sigma_rv", sigma=10, shape=self.num_rv_inst,)
+            sigma_rv = pm.HalfNormal("sigma_rv", sigma=10, shape=self.num_rv_inst)
             mean_rv = tt.zeros(len(self.rv_df))
             diag_rv = tt.zeros(len(self.rv_df))
             for i, tel in enumerate(self.rv_inst_names):
                 mean_rv += gamma_rv[i] * np.array(self.rv_df['tel'] == tel, dtype=int)
-                diag_rv += ((self.rv_df.errvel.values)**2 + sigma_rv[i])**2 * np.array(self.rv_df['tel'] == tel, dtype=int)
+                diag_rv += ((self.rv_df.errvel.values)**2 + sigma_rv[i]**2) * np.array(self.rv_df['tel'] == tel, dtype=int)
             
             # RV model
             planet_rv, bkg_rv, full_rv_model = self.__get_rv_model(self.rv_df.time, K, orbit, trend_rv)
@@ -812,7 +814,6 @@ class TessSystem:
                     "lc_phase_pred",
                     "mean_rv",
                     "err_rv",
-                    "t_rv_pred",
                     "planet_rv",
                     "planet_rv_pred",
                     "bkg_rv",
@@ -824,7 +825,6 @@ class TessSystem:
                                         lc_phase_pred,
                                         mean_rv,
                                         np.sqrt(diag_rv),
-                                        t_rv,
                                         planet_rv,
                                         planet_rv_pred,
                                         bkg_rv,

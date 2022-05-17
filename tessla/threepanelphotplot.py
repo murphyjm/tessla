@@ -646,6 +646,8 @@ class ThreePanelPhotPlot:
             y_phase_lim = (y_phase_min, y_phase_max)
             for i in range(len(axes)):
                 axes[i].set_ylim(y_phase_lim)
+        
+        fig.align_ylabels()
 
         return fig
 
