@@ -48,6 +48,7 @@ class ThreePanelPhotPlot:
                 num_random_transit_draws=25, # Number of random draws to plot.
                 save_format='.png',
                 save_dpi=400,
+                df_summary_fname=None,
                 ) -> None:
         
         self.toi = toi
@@ -60,6 +61,10 @@ class ThreePanelPhotPlot:
         self.data_gap_thresh = data_gap_thresh
         self.plot_random_transit_draws = plot_random_transit_draws
         self.num_random_transit_draws = num_random_transit_draws
+
+        self.df_summary = None
+        if df_summary_fname is not None:
+            self.df_summary = pd.read_csv(df_summary_fname, index_col=0)
 
         # Plot hyperparameters
         self.figsize = figsize
@@ -149,6 +154,8 @@ class ThreePanelPhotPlot:
         Annotate the chunk(s) with their sector(s) at the top of the upper panel.
         The indexing kung-fu is a bit arcane here, but it should work.
         '''
+        xpos = xstart
+        ha = 'left'
         original_indices = self.toi.cleaned_time.index.values
         sectors = self.toi.lc.sector[original_indices[xstart_ind:xstop_ind]]
         assert len(np.unique(sectors)) > 0, "No sector labels."
@@ -160,8 +167,11 @@ class ThreePanelPhotPlot:
             for j in range(len(sectors) -1):
                 sector_str += f"{sectors.value[j]}, "
             sector_str += f"{sectors.value[-1]}"
-        text = ax.text(xstart, np.max(self.y), sector_str, horizontalalignment='left', verticalalignment='top', fontsize=12)
-        text.set_bbox(dict(facecolor='lightgray', alpha=0.65, edgecolor='lightgray'))
+        if not "," in sector_str:
+            xpos = (self.toi.cleaned_time.values[xstop_ind - 1] + xstart)/2
+            ha = 'center'
+        text = ax.text(xpos, np.max(self.y), sector_str, horizontalalignment=ha, verticalalignment='top', fontsize=12)
+        text.set_bbox(dict(facecolor='none', alpha=0.65, edgecolor='none'))
 
     def __add_ymd_label(self, fig, ax, xlims, left_or_right):
         '''
@@ -330,7 +340,7 @@ class ThreePanelPhotPlot:
         bax3.axhline(0, color="#aaaaaa", lw=1)
         for ax in bax3.axs[1:]:
             ax.tick_params(axis='y', label1On=False) # Avoid y-axis labels popping up.
-        bax3.set_ylim([-2.5, 2.5]) # Can change this probably.
+        bax3.set_ylim([-3, 3]) # Can probably change this later.
         self.residuals = residuals.value # Save these
 
         # Plot housekeeping
@@ -395,7 +405,6 @@ class ThreePanelPhotPlot:
         fig = self.__plot_phase_folded_transits(fig, gs1)
         
         return fig
-
 
     def __three_panel_plot(self):
         '''
@@ -611,13 +620,24 @@ class ThreePanelPhotPlot:
                 ax1.set_ylabel("Residuals", fontsize=14)
             
             ax0.set_xlim([-xlim, xlim])
+            ax0.set_ylim([-3, 3])
             ax1.set_xlim([-xlim, xlim])
+            ax1.set_ylim([-3, 3])
             axis_to_data = ax.transAxes + ax.transData.inverted()
-            points_data = axis_to_data.transform((0.035, 0.))
+            points_data = axis_to_data.transform((0.035, 0.2))
             ax0.errorbar(points_data[0], points_data[1], yerr=np.sqrt(np.exp(self.toi.map_soln['log_sigma_lc'])**2 + np.median(self.yerr)**2), fmt='none', color='k', elinewidth=2, capsize=4)
             if i == 0:
-                text = ax0.text(points_data[0] + 0.4/24, points_data[1], 'Data pointwise error', fontsize=12)
-                text.set_bbox(dict(facecolor='lightgray', alpha=0.65, edgecolor='lightgray'))
+                text = ax0.text(points_data[0] + 0.2/24, points_data[1], 'Data uncert.', fontsize=12)
+                text.set_bbox(dict(facecolor='lightgray', alpha=0.8, edgecolor='lightgray'))
+            
+            if self.df_summary is not None:
+                per_str = f"$P =$ {self.df_summary.loc[f'period_{planet.pl_letter}', 'median']:.2f} d"
+                rp_med = self.df_summary.loc[f'rp_{planet.pl_letter}', 'median']
+                rp_err = self.df_summary.loc[f'rp_{planet.pl_letter}', 'std']
+                rp_str = f"$R_\mathrm{{p}} = {rp_med:.2f} \pm {rp_err:.2f}$ $R_\oplus$"
+                planet_str = per_str + '\n' + rp_str
+                text = ax0.text(0.98, 0.05, planet_str, ha='right', va='bottom', transform=ax0.transAxes)
+                text.set_bbox(dict(facecolor='lightgray', alpha=0.8, edgecolor='lightgray'))
         
         # Make the y-axes range the same for all of the phase-folded transit plots
         for axes in [phase_folded_axes, phase_folded_resid_axes]:
