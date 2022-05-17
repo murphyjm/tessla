@@ -1,13 +1,11 @@
 '''
-Fit the TESS photometry for a specific system.
+Fit the TESS photometry for a specific system. Optionally add in an RV data set and build a joint model.
 
 This script uses a lot of default and/or pre-filled optional arguments. 
 If something in the results looks funky, refer to the example notebooks for a more by-hand approach.
 '''
 # tessla imports
 from tessla.tesssystem import TessSystem
-from tessla.planet import Planet
-from tessla.star import Star
 from tessla.data_utils import find_breaks, quick_look_summary
 from tessla.plotting_utils import sg_smoothing_plot, quick_transit_plot, plot_individual_transits, phase_plot, plot_phot_only_corners, plot_joint_corners
 from tessla.threepanelphotplot import ThreePanelPhotPlot
@@ -165,6 +163,10 @@ def main():
         
         # Create a LS periodogram of the residuals about the full model. This should hopefully be white noise
         phot_plot.residuals_periodogram(overwrite=args.overwrite_plot)
+
+        if toi.is_joint_model:
+            # Make RV plot
+            pass
 
     # If the sampling was run...
     if flat_samps is not None:

@@ -9,7 +9,7 @@ setup(name='tessla',
       package_data={'tessla': ['data/toi_list.csv']},
       # scripts=['bin/fit_phot.py'],
       entry_points={
-            'console_scripts':['tessla_fit_phot=tessla.fit_phot:main'],
+            'console_scripts':['tessla_fit=tessla.fit_model:main'],
       }
 
 )

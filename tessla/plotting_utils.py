@@ -310,6 +310,19 @@ def plot_joint_corners(toi, df_derived_chains, overwrite=False):
         star_noise_corner = TesslaCornerPlot(toi, star_labels + noise_labels, star_noise_chains, toi.name)
         star_noise_corner.plot(overwrite=overwrite)
 
+        # Corner plot for instrument parameters
+        # TODO: What to do about RV trends?
+        rv_inst_labels = []
+        rv_inst_chains_list = []
+        for tel in toi.rv_inst_names:
+            rv_inst_labels.append(f'$\gamma_\mathrm{{{tel}}}$ [m s$^{{-1}}$]')
+            rv_inst_chains_list.append(df_derived_chains[f'gamma_rv_{tel}'])
+            rv_inst_labels.append(f'$\sigma_\mathrm{{{tel}}}$ [m s$^{{-1}}$]')
+            rv_inst_chains_list.append(df_derived_chains[f'sigma_rv_{tel}'])
+        rv_inst_chains = np.vstack(rv_inst_chains_list).T
+        rv_inst_corner = TesslaCornerPlot(toi, rv_inst_labels, rv_inst_chains, toi.name)
+        rv_inst_corner.plot(overwrite=overwrite)
+
         # Corner plot for the measured parameters
         for i,letter in enumerate(toi.transiting_planets.keys()):
             planet_labels = [
@@ -337,7 +350,7 @@ def plot_joint_corners(toi, df_derived_chains, overwrite=False):
             derived_labels = [
                 '$R_\mathrm{p}$ [$R_\mathrm{\oplus}$]',
                 '$M_\mathrm{p}$ [$M_\mathrm{\oplus}$]',
-                '$\rho_\mathrm{p} [g cm$^{-1}$]',
+                '$\\rho_\mathrm{p} [g cm$^{-1}$]',
                 '$a$ [AU]',
                 '$T_\mathrm{eq}$ [K]'
             ]

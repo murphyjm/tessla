@@ -44,7 +44,7 @@ class TesslaCornerPlot:
         Handle plotting i/o. Use helper function to actually create the plot.
         '''
         # Save fname housekeeping and overwrite handling.
-        out_dir = os.path.join(self.toi.phot_dir, 'plotting')
+        out_dir = os.path.join(self.toi.model_dir, 'plotting')
         if not os.path.isdir(out_dir):
             os.makedirs(out_dir)
         if save_fname is None:
