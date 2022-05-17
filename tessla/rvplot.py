@@ -252,7 +252,7 @@ class RVPlot:
             inds = np.argsort(x_fold)
             
             # RV contribution from other planets and background trend (if any)
-            other_rv = np.delete(self.toi.extras['planet_rv'], i, axis=1)
+            other_rv = np.sum(np.delete(self.toi.extras['planet_rv'], i, axis=1), axis=1)
             other_rv += self.toi.extras['bkg_rv']
 
             # Plot the data
@@ -261,7 +261,11 @@ class RVPlot:
                 ax0.errorbar(x_fold[mask], 
                             self.toi.rv_df.mnvel[mask] - self.toi.extras['mean_rv'][mask] - other_rv[mask], 
                             self.toi.extras['err_rv'][mask], label=tel, **self.tel_marker_mapper[tel])
-            ax0.plot(x_fold[inds], self.toi.extras['planet_rv_pred'][:, i][inds], color=planet.color)
+            # Plot the phase-folded MAP solution
+            x_fold_pred = (self.toi.t_rv_pred - planet.t0 + 0.5 * planet.per) % planet.per - 0.5 * planet.per
+            x_fold_pred /= planet.per # Put this in unitless phase
+            inds_pred = np.argsort(x_fold_pred)
+            ax0.plot(x_fold_pred[inds_pred], self.toi.extras['planet_rv_pred'][:, i][inds_pred], color=planet.color, zorder=1000)
 
             # Plot the binned RVs like in RadVel
             bin_duration = 0.125 # 1/8 bins of phase
@@ -295,77 +299,61 @@ class RVPlot:
                     omega = np.array([chains[f"omega_{letter}"].values[ind] for letter in self.toi.transiting_planets.keys()])
                     orbit = xo.orbits.KeplerianOrbit(r_star=rstar, m_star=mstar, period=period, t0=t0, b=b, ecc=ecc, omega=omega)
 
-        #             # Light curves
-        #             N_EVAL_POINTS = 500
-        #             phase_lc = np.linspace(-xlim, xlim, N_EVAL_POINTS)
-        #             lc_phase_pred = 1e3 * tt.stack(
-        #                                     [
-        #                                         xo_star.get_light_curve(
-        #                                             orbit=orbit, r=ror, t=t0[n] + phase_lc, texp=self.toi.cadence/60/60/24)[..., n]
-        #                                             for n in range(self.toi.n_transiting)
-        #                                     ],
-        #                                     axis=-1,
-        #             )
-        #             lc_phase_pred = lc_phase_pred.eval()
+                    # Get RV for planet
+                    planet_rv_pred = orbit.get_radial_velocity(self.toi.t_rv_pred, K=K)
+                    
+                    # Plot the random draw
+                    ax0.plot(x_fold_pred[inds_pred], planet_rv_pred[:, i][inds_pred], color=planet.color, alpha=0.3, zorder=999)
 
-        #             # Plot the random draw. Wasteful because it only uses one of the planet light curves and does this again for the next planet
-        #             ax0.plot(phase_lc, lc_phase_pred[:, i], color=planet.color, alpha=0.3, zorder=999, label='Random posterior draw')
+            # Plot the residuals below
+            ax1 = fig.add_subplot(sps[1, i])
+            phase_folded_resid_axes.append(ax1)
+            for tel in self.toi.rv_inst_names:
+                mask = self.toi.rv_df.tel == tel
+                ax1.errorbar(x_fold[mask][inds], 
+                            residuals[mask][inds], 
+                            self.toi.extras['err_rv'][mask][inds], label=tel, **self.tel_marker_mapper[tel])
+            ax1.axhline(0, color="#aaaaaa", lw=1)
 
-        #     # Plot the residuals below
-        #     ax1 = fig.add_subplot(sps[1, i])
-        #     phase_folded_resid_axes.append(ax1)
-        #     ax1.plot(x_fold, residuals, '.k', label='Residuals', alpha=0.3, zorder=0)
-        #     ax1.axhline(0, color="#aaaaaa", lw=1)
+            # Plot housekeeping
+            ax0.set_title(f"{self.toi.name} {planet.pl_letter}")
 
-        #     # Plot housekeeping
-        #     ax0.set_title(f"{self.toi.name} {planet.pl_letter}")
+            # Put the x-axis labels and ticks in units of hours instead of days
+            for ax in [ax0, ax1]:
+                ax.xaxis.set_major_locator(0.25))
+                ax.xaxis.set_minor_locator(0.05)
+                ax.tick_params(axis='x', direction='in', which='both', top=True, bottom=True)
+                ax.tick_params(axis='y', direction='in', which='both', left=True, right=True)
 
-        #     # Put the x-axis labels and ticks in units of hours instead of days
-        #     for ax in [ax0, ax1]:
-        #         ax.xaxis.set_major_formatter(FuncFormatter(lambda x, pos: f"{x * 24:g}"))
-        #         ax.xaxis.set_major_locator(MultipleLocator(2/24))
-        #         ax.xaxis.set_minor_locator(MultipleLocator(1/24))
-        #         ax.tick_params(axis='x', direction='in', which='both', top=True, bottom=True)
-        #         ax.tick_params(axis='y', direction='in', which='both', left=True, right=True)
+            ax0.set_xticklabels([])
+            ax1.set_xlabel("Phase", fontsize=14)
+            ax0.yaxis.set_major_locator(MultipleLocator(5))
+            ax0.yaxis.set_minor_locator(MultipleLocator(1))
+            ax1.yaxis.set_major_locator(MultipleLocator(2))
 
-        #     ax0.set_xticklabels([])
-        #     ax1.set_xlabel("Time since transit [hours]", fontsize=14)
-        #     ax0.yaxis.set_major_locator(MultipleLocator(1))
-        #     ax0.yaxis.set_minor_locator(MultipleLocator(0.5))
-        #     ax1.yaxis.set_major_locator(MultipleLocator(2))
-
-        #     if i == 0:
-        #         ax0.set_ylabel("Relative flux [ppt]", fontsize=14)
-        #         ax1.set_ylabel("Residuals", fontsize=14)
+            if i == 0:
+                ax0.set_ylabel("RV [m s$^{-1}$]", fontsize=14)
+                ax1.set_ylabel("Residuals", fontsize=14)
             
-        #     ax0.set_xlim([-xlim, xlim])
-        #     ax0.set_ylim([-3, 3])
-        #     ax1.set_xlim([-xlim, xlim])
-        #     ax1.set_ylim([-3, 3])
-        #     axis_to_data = ax.transAxes + ax.transData.inverted()
-        #     points_data = axis_to_data.transform((0.035, 0.2))
-        #     ax0.errorbar(points_data[0], points_data[1], yerr=np.sqrt(np.exp(self.toi.map_soln['log_sigma_lc'])**2 + np.median(self.yerr)**2), fmt='none', color='k', elinewidth=2, capsize=4)
-        #     if i == 0:
-        #         text = ax0.text(points_data[0] + 0.2/24, points_data[1], 'Data uncert.', fontsize=12)
-        #         text.set_bbox(dict(facecolor='none', alpha=0.8, edgecolor='none'))
-            
-        #     if self.df_summary is not None:
-        #         per_str = f"$P =$ {self.df_summary.loc[f'period_{planet.pl_letter}', 'median']:.2f} d"
-        #         rp_med = self.df_summary.loc[f'rp_{planet.pl_letter}', 'median']
-        #         rp_err = self.df_summary.loc[f'rp_{planet.pl_letter}', 'std']
-        #         rp_str = f"$R_\mathrm{{p}} = {rp_med:.2f} \pm {rp_err:.2f}$ $R_\oplus$"
-        #         planet_str = per_str + '\n' + rp_str
-        #         text = ax0.text(0.98, 0.05, planet_str, ha='right', va='bottom', transform=ax0.transAxes)
-        #         text.set_bbox(dict(facecolor='none', alpha=0.8, edgecolor='none'))
+
+            if self.df_summary is not None:
+                per_str = f"$P =$ {self.df_summary.loc[f'period_{planet.pl_letter}', 'median']:.2f} d"
+                ecc_med = self.df_summary.loc[f'ecc_{planet.pl_letter}', 'median']
+                ecc_err = self.df_summary.loc[f'ecc_{planet.pl_letter}', 'std']
+                ecc_str = f"$e = {ecc_med:.2f} \pm {ecc_err:.2f}$"
+                mp_med = self.df_summary.loc[f'mp_{planet.pl_letter}', 'median']
+                mp_err = self.df_summary.loc[f'mp_{planet.pl_letter}', 'std']
+                mp_str = f"$M_\mathrm{{p}} = {mp_med:.2f} \pm {mp_err:.2f}$ $M_\oplus$"
+                planet_str = per_str + '\n' + ecc_str + '\n' + mp_str
+                text = ax0.text(0.98, 0.05, planet_str, ha='right', va='bottom', transform=ax0.transAxes)
+                text.set_bbox(dict(facecolor='none', alpha=0.8, edgecolor='none'))
         
-        # # Make the y-axes range the same for all of the phase-folded transit plots
-        # for axes in [phase_folded_axes, phase_folded_resid_axes]:
-        #     y_phase_max = np.max([max(ax.get_ylim()) for ax in axes])
-        #     y_phase_min = np.min([min(ax.get_ylim()) for ax in axes])
-        #     y_phase_lim = (y_phase_min, y_phase_max)
-        #     for i in range(len(axes)):
-        #         axes[i].set_ylim(y_phase_lim)
-
-        # return fig
+        # Make the y-axes range the same for all of the phase-folded transit plots
+        for axes in [phase_folded_axes, phase_folded_resid_axes]:
+            y_phase_max = np.max([max(ax.get_ylim()) for ax in axes])
+            y_phase_min = np.min([min(ax.get_ylim()) for ax in axes])
+            y_phase_lim = (y_phase_min, y_phase_max)
+            for i in range(len(axes)):
+                axes[i].set_ylim(y_phase_lim)
 
         return fig

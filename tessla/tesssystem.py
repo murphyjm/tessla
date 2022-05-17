@@ -41,6 +41,12 @@ Problem: How to have different length period vectors for the exoplanet orbit mod
 Might just make sense to use RadVel in that case.
 '''
 
+RV_INST_NAME_MAPPER = {
+    'apf':'APF',
+    'j':'HIRES',
+    'hires_j':'HIRES'
+}
+
 class TessSystem:
     '''
     Container object that holds meta information about a system.
@@ -118,6 +124,8 @@ class TessSystem:
             cols = rv_df.columns.tolist()
             msg = 'RV .csv file must have the following columns: ["time", "mnvel", "errvel", "tel"], where "mnvel" and "errvel" are in m/s.'
             assert all([col in cols for col in ['time', 'mnvel', 'errvel', 'tel']]), msg
+            # Standardize 'j' and 'hires_j' to 'HIRES' and 'apf' to 'APF'
+            rv_df['tel'] = rv_df['tel'].map(RV_INST_NAME_MAPPER).fillna(rv_df['tel'])
             self.rv_df = rv_df
             self.rv_inst_names = np.unique(rv_df['tel'])
             self.num_rv_inst = len(self.rv_inst_names)
@@ -863,7 +871,7 @@ class TessSystem:
                 num_dim = len(flat_samps[param].shape)
             except KeyError:
                 continue
-            if num_dim > 1 and param != 'u' and param != 'gamma_rv' and param != 'sigma_rv':
+            if num_dim > 1 and param != 'u' and param != 'gamma_rv' and param != 'sigma_rv' and param != 'trend_rv':
                 msg = "Chains and number of transiting planets have shape mismatch."
                 assert len(self.transiting_planets) == flat_samps[param].shape[0], msg
                 for i, pl_letter in enumerate(self.transiting_planets.keys()):
@@ -884,6 +892,9 @@ class TessSystem:
                 assert flat_samps[param].shape[0] == len(self.rv_inst_names), msg
                 for i,tel in enumerate(self.rv_inst_names):
                     df_chains[f"sigma_rv_{tel}"] = flat_samps[param][i, :].data
+            elif param == 'trend_rv':
+                for i in range(self.rv_trend_order + 1):
+                    df_chains[f"trend_rv_{i}"] = flat_samps[param][i, :].data
             else:
                 try:
                     df_chains[param] = flat_samps[param].data
