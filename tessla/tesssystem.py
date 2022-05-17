@@ -69,7 +69,8 @@ class TessSystem:
                                             # Options are: ['activity', 'exp_decay', 'rotation']. Activity is exp_decay + rotation. See celerite2 documentation.
                 # RV stuff
                 rv_data_path=None, # Path to RV data .csv. Must contain columns: "time", "mnvel" [m/s], "errvel" [m/s], "tel"
-                
+                mnvel_cut=None,
+                errvel_cut=None, # If a float is provided, cut all mnvel and errvel absolute values above this limit. To get rid of bad data.
                 # General stuff
                 verbose=True, # Print out messages
                 plotting=True, # Create plots as you go
@@ -125,8 +126,14 @@ class TessSystem:
             msg = 'RV .csv file must have the following columns: ["time", "mnvel", "errvel", "tel"], where "mnvel" and "errvel" are in m/s.'
             assert all([col in cols for col in ['time', 'mnvel', 'errvel', 'tel']]), msg
             # Standardize 'j' and 'hires_j' to 'HIRES' and 'apf' to 'APF'
-            bad_mask = (np.abs(rv_df.errvel) > 10) | (np.abs(rv_df.mnvel) > 20)
+            bad_mask = np.zeros(len(rv_df), dtype=bool)
+            if mnvel_cut is not None:
+                bad_mask |= np.abs(rv_df.mnvel) > mnvel_cut
+            if errvel_cut is not None:
+                bad_mask |= np.abs(rv_df.errvel) > errvel_cut
             rv_df = rv_df[~bad_mask].reset_index(drop=True)
+            if self.verbose:
+                print(f"Removed {np.sum(bad_mask)} RVs for being outliers.")
             rv_df['tel'] = rv_df['tel'].map(RV_INST_NAME_MAPPER).fillna(rv_df['tel'])
             self.rv_df = rv_df
             self.rv_inst_names = np.unique(rv_df['tel'])

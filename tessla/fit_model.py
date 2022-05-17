@@ -61,6 +61,8 @@ def parse_args():
 def fix_tois(toi, args):
     '''
     Fix incorrect entries in the TOI catalog or manually add planets that don't appear there.
+
+    TODO: This needs to be updated so that it's a member function of the TESSSYSTEM object itself.
     '''
     planet_dir = args.planet_objs_dir
     if not os.path.exists(planet_dir):

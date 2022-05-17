@@ -171,7 +171,7 @@ class RVPlot:
         ############################### TOP PANEL: RVs and full RV model ###############################
         ################################################################################################
         ax1 = fig.add_subplot(sps1)
-        ax1.set_title(self.toi.name, pad=10)
+        ax1.set_title(self.toi.name, pad=0)
         
         # Plot the data
         for tel in self.toi.rv_inst_names:
@@ -181,7 +181,7 @@ class RVPlot:
                         self.toi.extras['err_rv'][mask], fmt='.', **self.tel_marker_mapper[tel])
 
         # Plot the RV model
-        ax1.plot(self.toi.t_rv, self.toi.extras['full_rv_model_pred'], color="blue", label="RV Model", lw=3)
+        ax1.plot(self.toi.t_rv, self.toi.extras['full_rv_model_pred'], color="blue", lw=3)
 
         # Add label for years to the upper axis
         self.__add_ymd_label(fig, ax1, (np.min(self.toi.rv_df.time), np.max(self.toi.rv_df.time)), 'left')
