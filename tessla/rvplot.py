@@ -320,7 +320,7 @@ class RVPlot:
 
             # Put the x-axis labels and ticks in units of hours instead of days
             for ax in [ax0, ax1]:
-                ax.xaxis.set_major_locator(0.25))
+                ax.xaxis.set_major_locator(0.25)
                 ax.xaxis.set_minor_locator(0.05)
                 ax.tick_params(axis='x', direction='in', which='both', top=True, bottom=True)
                 ax.tick_params(axis='y', direction='in', which='both', left=True, right=True)
