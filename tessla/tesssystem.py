@@ -416,6 +416,8 @@ class TessSystem:
             m = m0
         
         # Don't remove in-transit data.
+        if self.all_transits_mask is None:
+            self.all_transits_mask = np.zeros(len(m), dtype=bool)
         m = ~(~m & ~self.all_transits_mask) # Some bitwise operator kung-fu, but it makes sense.
         if self.verbose:
             print(f"{len(self.lc.time) - m.sum()} {sigma_thresh}-sigma outliers identified.")
@@ -441,7 +443,7 @@ class TessSystem:
         if self.all_transits_mask is None and self.n_transiting > 0 and self.verbose:
             print("Warning: No transit mask has been created, so this initial outlier removal step may flag in-transit data as outliers.")
         if self.n_transiting != len(self.transiting_planets):
-            print("Warning: The number ")
+            print("Warning: self.n_transiting does not equal len(self.transiting_planets)")
         self.sg_window_size = time_delta_to_data_delta(self.lc.time, time_window=time_window)
         self.__sg_smoothing(positive_outliers_only=positive_outliers_only, max_iters=max_iters, sigma_thresh=sigma_thresh)
 
