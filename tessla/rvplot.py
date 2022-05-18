@@ -66,7 +66,8 @@ class RVPlot:
                 save_format='.png',
                 save_dpi=400,
                 df_summary_fname=None,
-                tel_marker_mapper = None
+                tel_marker_mapper=None,
+                rms_yscale_phase_folded_panels=False,
                 ) -> None:
     
         self.toi = toi
@@ -88,6 +89,8 @@ class RVPlot:
             for tel in self.toi.rv_inst_names:
                 assert tel in tel_marker_mapper.keys(), "RV instrument not found in tel_marker_mapper dictionary."
             self.tel_marker_mapper = tel_marker_mapper
+        
+        self.rms_yscale_phase_folded_panels = rms_yscale_phase_folded_panels # If true, set the Y axis limits for the phase-folded panels based on the residuals rms.
 
     def __add_ymd_label(self, fig, ax, xlims, left_or_right):
         '''
@@ -155,6 +158,36 @@ class RVPlot:
         fig.savefig(save_fname, facecolor='white', bbox_inches='tight', dpi=self.save_dpi)
         print(f"RV model plot saved to {save_fname}")
         plt.close()
+    
+    def __get_ytick_spacing(self):
+        '''
+        Hacky.
+        '''
+        yspan = np.max(self.toi.rv_df.mnvel) - np.min(self.toi.rv_df.mnvel)
+        major = 5
+        minor = 1
+        if yspan >= 50:
+            major = 10
+            minor = 5
+        elif yspan >= 100:
+            major = 20
+            minor = 10
+        return major, minor
+
+    def __get_residuals_ytick_spacing(self, residuals):
+        '''
+        Hacky.
+        '''
+        yspan = np.max(residuals) - np.min(residuals)
+        major = 10
+        minor = 5
+        if yspan >= 35:
+            major = 20
+            minor = 10
+        elif yspan >= 45:
+            major = 25
+            minor = 5
+        return major, minor
 
     def __rv_plot(self):
         '''
@@ -191,8 +224,9 @@ class RVPlot:
         # Top panel housekeeping
         ax1.set_xticklabels([])
         ax1.set_ylabel("RV [m s$^{-1}$]", fontsize=14, labelpad=self.ylabelpad)
-        ax1.yaxis.set_major_locator(MultipleLocator(5))
-        ax1.yaxis.set_minor_locator(MultipleLocator(1))
+        major, minor = self.__get_ytick_spacing()
+        ax1.yaxis.set_major_locator(MultipleLocator(major))
+        ax1.yaxis.set_minor_locator(MultipleLocator(minor))
         ax1.legend(fontsize=14, loc='upper right')
 
         ################################################################################################
@@ -216,8 +250,9 @@ class RVPlot:
         # Plot housekeeping
         ax2.set_ylabel("Residuals", fontsize=14, labelpad=self.ylabelpad)
         ax2.set_xlabel(f"Time [BJD - {self.toi.bjd_ref:.1f}]", fontsize=14)
-        ax2.yaxis.set_major_locator(MultipleLocator(20))
-        ax2.yaxis.set_minor_locator(MultipleLocator(10))
+        major, minor = self.__get_residuals_ytick_spacing(residuals)
+        ax2.yaxis.set_major_locator(MultipleLocator(major))
+        ax2.yaxis.set_minor_locator(MultipleLocator(minor))
         bottom = -1 * np.max(ax2.get_ylim())
         ax2.set_ylim(bottom=bottom)
 
@@ -245,8 +280,6 @@ class RVPlot:
         return fig
 
     def __plot_phase_folded_orbits(self, fig, gs1):
-        '''
-        '''
         '''
         Plot the folded transits for each planet.
         '''
@@ -332,8 +365,6 @@ class RVPlot:
 
             # Plot housekeeping
             ax0.set_title(f"{self.toi.name} {planet.pl_letter}")
-
-            # Put the x-axis labels and ticks in units of hours instead of days
             for ax in [ax0, ax1]:
                 ax.xaxis.set_major_locator(MultipleLocator(0.25))
                 ax.xaxis.set_minor_locator(MultipleLocator(0.05))
@@ -342,10 +373,12 @@ class RVPlot:
 
             ax0.set_xticklabels([])
             ax1.set_xlabel("Phase", fontsize=14)
-            ax0.yaxis.set_major_locator(MultipleLocator(5))
-            ax0.yaxis.set_minor_locator(MultipleLocator(1))
-            ax1.yaxis.set_major_locator(MultipleLocator(20))
-            ax1.yaxis.set_minor_locator(MultipleLocator(10))
+            major, minor = self.__get_ytick_spacing()
+            ax0.yaxis.set_major_locator(MultipleLocator(major))
+            ax0.yaxis.set_minor_locator(MultipleLocator(minor))
+            major, minor = self.__get_residuals_ytick_spacing(residuals)
+            ax1.yaxis.set_major_locator(MultipleLocator(major))
+            ax1.yaxis.set_minor_locator(MultipleLocator(minor))
 
             if i == 0:
                 ax0.set_ylabel("RV [m s$^{-1}$]", fontsize=14)
@@ -362,13 +395,18 @@ class RVPlot:
                 mp_str = f"$M_\mathrm{{p}} = {mp_med:.1f} \pm {mp_err:.1f}$ $M_\oplus$"
                 planet_str = per_str + '\n' + ecc_str + '\n' + mp_str
                 text = ax0.text(0.05, 0.05, planet_str, ha='left', va='bottom', transform=ax0.transAxes)
-                text.set_bbox(dict(facecolor='white', alpha=0.5, edgecolor='none'))
+                alpha = 0.5
+                if self.rms_yscale_phase_folded_panels:
+                    alpha=0.8
+                text.set_bbox(dict(facecolor='white', alpha=alpha, edgecolor='none'))
         
-        # Make the y-axes range the same for all of the phase-folded transit plots
-        for axes in [phase_folded_axes, phase_folded_resid_axes]:
+        # Make the y-axes range the same for all of the phase-folded plots
+        for k, axes in enumerate([phase_folded_axes, phase_folded_resid_axes]):
             y_phase_max = np.max([max(ax.get_ylim()) for ax in axes])
             y_phase_min = np.min([min(ax.get_ylim()) for ax in axes])
             y_phase_lim = (y_phase_min, y_phase_max)
+            if k == 0 and self.rms_yscale_phase_folded_panels:
+                y_phase_lim = (-3 * np.std(residuals), 3 * np.std(residuals))
             for i in range(len(axes)):
                 axes[i].set_ylim(y_phase_lim)
         
