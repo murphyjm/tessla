@@ -311,7 +311,12 @@ def plot_joint_corners(toi, df_derived_chains, overwrite=False):
         star_noise_corner.plot(overwrite=overwrite)
 
         # Corner plot for instrument parameters
-        # TODO: What to do about RV trends?
+        rv_trend_labels_dict = {
+            0:"$\gamma_\mathrm{trend}$ [m s$^{-1}$]",
+            1:"$\dot{\gamma}$ [m s$^{-1}$ d$^{-1}$]",
+            2:"$\ddot{\gamma}$ [m s$^{-1}$ d$^{-2}$]",
+        }
+
         rv_inst_labels = []
         rv_inst_chains_list = []
         for tel in toi.rv_inst_names:
@@ -319,6 +324,14 @@ def plot_joint_corners(toi, df_derived_chains, overwrite=False):
             rv_inst_chains_list.append(df_derived_chains[f'gamma_rv_{tel}'])
             rv_inst_labels.append(f'$\sigma_\mathrm{{{tel}}}$ [m s$^{{-1}}$]')
             rv_inst_chains_list.append(df_derived_chains[f'sigma_rv_{tel}'])
+        if toi.rv_trend:
+            for i in range(toi.rv_trend_order + 1):
+                try:
+                    rv_inst_labels.append(rv_trend_labels_dict[i])
+                    rv_inst_chains_list.append(df_derived_chains[f'trend_{i}'])
+                except KeyError:
+                    print("Trend value not in rv_trend_labels_dict.")
+                    break
         rv_inst_chains = np.vstack(rv_inst_chains_list).T
         rv_inst_corner = TesslaCornerPlot(toi, rv_inst_labels, rv_inst_chains, f"{toi.name} RV instrument parameters")
         rv_inst_corner.plot(overwrite=overwrite)
