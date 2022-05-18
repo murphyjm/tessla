@@ -1,16 +1,15 @@
 '''
-Fit the TESS photometry for a specific system.
+Fit the TESS photometry for a specific system. Optionally add in an RV data set and build a joint model.
 
 This script uses a lot of default and/or pre-filled optional arguments. 
 If something in the results looks funky, refer to the example notebooks for a more by-hand approach.
 '''
 # tessla imports
 from tessla.tesssystem import TessSystem
-from tessla.planet import Planet
-from tessla.star import Star
 from tessla.data_utils import find_breaks, quick_look_summary
-from tessla.plotting_utils import sg_smoothing_plot, quick_transit_plot, plot_individual_transits, phase_plot, plot_corners
+from tessla.plotting_utils import sg_smoothing_plot, quick_transit_plot, plot_individual_transits, phase_plot, plot_phot_only_corners, plot_joint_corners
 from tessla.threepanelphotplot import ThreePanelPhotPlot
+from tessla.rvplot import RVPlot
 
 # Script imports
 import os
@@ -32,6 +31,10 @@ def parse_args():
     parser.add_argument("star_obj_fname", type=str, help="Path to the .pkl file containing the tessla.star.Star object.")
     parser.add_argument("--planet_objs_dir", type=str, default=None, help="If there are transiting planets that are not TOIs in the system or the TOIs in the catalog have incorrect properties, this is the path to the directory with the .pkl files that contain the tessla.planet.Planet objects.")
     parser.add_argument("--output_dir_suffix", type=str, default='', help="Suffix for output directory. Default is empty string. E.g. '_test_01' for TOI-1824_test_01.")
+    
+    # Joint photometry-RV model?
+    parser.add_argument("--rv_data_path", type=str, default=None, help="Path to RV data set to include in modeling.")
+    parser.add_argument("--rv_trend", action="store_true", help="Include a linear trend in the background RV model.")
 
     # Data
     parser.add_argument("--flux_origin", type=str, default="sap_flux", help="Either pdcsap_flux or sap_flux. Default is SAP.")
@@ -58,6 +61,8 @@ def parse_args():
 def fix_tois(toi, args):
     '''
     Fix incorrect entries in the TOI catalog or manually add planets that don't appear there.
+
+    TODO: This needs to be updated so that it's a member function of the TESSSYSTEM object itself.
     '''
     planet_dir = args.planet_objs_dir
     if not os.path.exists(planet_dir):
@@ -89,7 +94,8 @@ def main():
     toi = TessSystem(args.name, 
                     tic=args.tic, 
                     toi=args.toi, 
-                    phot_gp_kernel=args.phot_gp_kernel, 
+                    phot_gp_kernel=args.phot_gp_kernel,
+                    rv_data_path=args.rv_data_path,
                     plotting=(not args.no_plotting), 
                     flux_origin=args.flux_origin, 
                     use_long_cadence_data=args.use_long_cadence_data,
@@ -117,16 +123,23 @@ def main():
         star = pickle.load(star_fname)
         star.inflate_star_mass_and_rad_errs() # Inflate the error bars on stellar mass and radius according to Tayar et al. 2022
         toi.add_star_props(star)
+
+    # Before MAP fitting, update t0s to near middle of phot data to reduce covariance between P and t0
+    toi.update_t0s_to_near_data_middle()
     
     # Run the MAP fitting loop
     model = toi.flatten_light_curve()
-    quick_transit_plot(toi)
 
+    # If there's an RV dataset, make a joint model of the photometry and RVs.
+    if args.rv_data_path is not None:
+        model = toi.fit_phot_and_rvs(rv_trend=args.rv_trend)
+    quick_transit_plot(toi)
+    
     # Make plots of the individual transits
     plot_individual_transits(toi)
 
     # Create a phase-folded plot of the light curve at the presumed stellar rotation period
-    phase_plot(os.path.join(toi.phot_dir, 'plotting'), 
+    phase_plot(os.path.join(toi.model_dir, 'plotting'), 
                 f"{toi.name} {toi.flux_origin.replace('_', ' ')}", 
                 'Relative flux [ppt]', 
                 toi.cleaned_time.values, toi.cleaned_flux.values, toi.rot_per, 0)
@@ -139,9 +152,10 @@ def main():
                                     tune=args.ntune, 
                                     draws=args.draws, 
                                     chains=args.nchains)
-
-        # Add eccentricity and omega to the chains
-        toi.add_ecc_and_omega_to_chains(flat_samps)
+        
+        if not toi.is_joint_model:
+            # Add eccentricity and omega to the chains
+            toi.add_ecc_and_omega_to_chains(flat_samps)
         toi.add_derived_quantities_to_chains()
 
     if toi.plotting:
@@ -156,6 +170,13 @@ def main():
         # Create a LS periodogram of the residuals about the full model. This should hopefully be white noise
         phot_plot.residuals_periodogram(overwrite=args.overwrite_plot)
 
+        if toi.is_joint_model:
+            # Make RV plot
+            rv_plot = RVPlot(toi, 
+                             plot_random_orbit_draws=(not args.no_sampling), 
+                             num_random_orbit_draws=(args.num_transit_draws))
+            rv_plot.plot(save_fname=f"{toi.name.replace(' ', '_')}_rv_model" + args.plot_fname_suffix, overwrite=args.overwrite_plot)
+
     # If the sampling was run...
     if flat_samps is not None:
 
@@ -164,7 +185,10 @@ def main():
 
         # Make the corner plots
         if toi.plotting:
-            plot_corners(toi, df_derived_chains, overwrite=args.overwrite_plot)
+            if not toi.is_joint_model:
+                plot_phot_only_corners(toi, df_derived_chains, overwrite=args.overwrite_plot)
+            else:
+                plot_joint_corners(toi, df_derived_chains, overwrite=args.overwrite_plot)
         
         # Save an output table with derived physical parameters in useful units for quickly checking on the sampling results.
         quick_look_summary(toi, df_derived_chains)

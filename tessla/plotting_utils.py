@@ -39,7 +39,7 @@ def sg_smoothing_plot(toi):
         ax.set_xlabel(f'Time [BJD - {toi.bjd_ref:.1f}]')
         ax.set_ylabel(f'Relative flux [ppt]')
         
-        out_dir = os.path.join(toi.phot_dir, 'plotting')
+        out_dir = os.path.join(toi.model_dir, 'plotting')
         if not os.path.isdir(out_dir):
             os.makedirs(out_dir)
         fig.savefig(os.path.join(out_dir, f"{toi.name.replace(' ', '_')}_sg_filtering_sector_{sector:02}.png"), facecolor='white', bbox_inches='tight', dpi=300)
@@ -126,7 +126,7 @@ def quick_transit_plot(toi):
     Make a plot of what the MAP transit fit looks like for each planet before moving on to the sampling.
     '''
     
-    out_dir = os.path.join(toi.phot_dir, 'plotting')
+    out_dir = os.path.join(toi.model_dir, 'plotting')
     if not os.path.isdir(out_dir):
         os.makedirs(out_dir)
 
@@ -136,7 +136,7 @@ def quick_transit_plot(toi):
         x_fold = ((x - toi.map_soln["t0"][i] + 0.5 * toi.map_soln["period"][i]) % toi.map_soln[
             "period"
         ][i] - 0.5 * toi.map_soln["period"][i]).values
-        ax.scatter(x_fold, y - toi.extras['gp_pred'] - toi.map_soln['mean'], c=x, s=3)
+        ax.scatter(x_fold, y - toi.extras['gp_pred'] - toi.map_soln['mean_flux'], c=x, s=3)
         phase = np.linspace(-0.3, 0.3, len(toi.extras['lc_phase_pred'][:, i]))
         ax.plot(phase, toi.extras['lc_phase_pred'][:, i], 'r', lw=5)
         ax.set_xlim(-6/24, 6/24)
@@ -160,7 +160,7 @@ def plot_individual_transits(toi, xlim=0.3):
     '''
     Make a plot of each individual transit for each planet.
     '''
-    out_dir = os.path.join(toi.phot_dir, 'plotting')
+    out_dir = os.path.join(toi.model_dir, 'plotting')
     if not os.path.isdir(out_dir):
         os.makedirs(out_dir)
     
@@ -184,7 +184,7 @@ def plot_individual_transits(toi, xlim=0.3):
         mask = np.abs(x_fold) < xlim
         transit_inds = np.argwhere(np.abs(np.ediff1d(x_fold[mask])) > 0.5)
 
-        noise_model = toi.extras["gp_pred"] + toi.map_soln["mean"]
+        noise_model = toi.extras["gp_pred"] + toi.map_soln["mean_flux"]
         lc_model = toi.extras["light_curves"][:, i]
 
         def plot_transit(start_ind, end_ind, transit_num):
@@ -234,7 +234,7 @@ def plot_individual_transits(toi, xlim=0.3):
     if toi.verbose:
         print(f"Individual transit plots saved to {out_dir}/individual_transits/")
 
-def plot_corners(toi, df_derived_chains, overwrite=False):
+def plot_phot_only_corners(toi, df_derived_chains, overwrite=False):
     '''
     Make the corner plots!
     '''
@@ -244,7 +244,7 @@ def plot_corners(toi, df_derived_chains, overwrite=False):
         star_labels = ['$\mu$ [ppt]', '$u_1$', '$u_2$']
         noise_labels = ['$\sigma_\mathrm{jitter}$ [ppt]', '$\sigma_\mathrm{GP}$ [PPT]', r'$\rho$ [d]']
         star_noise_chains = np.vstack([
-            df_derived_chains['mean'], 
+            df_derived_chains['mean_flux'], 
             df_derived_chains['u_0'],
             df_derived_chains['u_1'],
             np.exp(df_derived_chains['log_sigma_lc']),
@@ -283,6 +283,96 @@ def plot_corners(toi, df_derived_chains, overwrite=False):
                 df_derived_chains[f"rp_{letter}"],
                 df_derived_chains[f"ecc_{letter}"],
                 df_derived_chains[f"omega_folded_deg_{letter}"]
+            ]).T
+            derived_corner = TesslaCornerPlot(toi, derived_labels, derived_chains, f"{toi.name} {letter} derived parameters")
+            derived_corner.plot(overwrite=overwrite)
+    else:
+        # TODO: Fix? Or just leave it like this and people can make corner plots on their own if they use a different kernel.
+        print("NOTE: Right now automated corner plot generation only works if phot_gp_kernel == 'exp_decay'")
+
+def plot_joint_corners(toi, df_derived_chains, overwrite=False):
+    '''
+    Make the corner plots!
+    '''
+    if toi.phot_gp_kernel == "exp_decay":
+
+        # Corner plot for light curve star and noise properties
+        star_labels = ['$\mu$ [ppt]', '$u_1$', '$u_2$']
+        noise_labels = ['$\sigma_\mathrm{jitter}$ [ppt]', '$\sigma_\mathrm{GP}$ [PPT]', r'$\rho$ [d]']
+        star_noise_chains = np.vstack([
+            df_derived_chains['mean_flux'], 
+            df_derived_chains['u_0'],
+            df_derived_chains['u_1'],
+            np.exp(df_derived_chains['log_sigma_lc']),
+            np.exp(df_derived_chains['log_sigma_dec_gp']),
+            np.exp(df_derived_chains['log_rho_gp']),
+        ]).T
+        star_noise_corner = TesslaCornerPlot(toi, star_labels + noise_labels, star_noise_chains, toi.name)
+        star_noise_corner.plot(overwrite=overwrite)
+
+        # Corner plot for instrument parameters
+        rv_trend_labels_dict = {
+            0:"$\gamma_\mathrm{trend}$ [m s$^{-1}$]",
+            1:"$\dot{\gamma}$ [m s$^{-1}$ d$^{-1}$]",
+            2:"$\ddot{\gamma}$ [m s$^{-1}$ d$^{-2}$]",
+        }
+
+        rv_inst_labels = []
+        rv_inst_chains_list = []
+        for tel in toi.rv_inst_names:
+            rv_inst_labels.append(f'$\gamma_\mathrm{{{tel}}}$ [m s$^{{-1}}$]')
+            rv_inst_chains_list.append(df_derived_chains[f'gamma_rv_{tel}'])
+            rv_inst_labels.append(f'$\sigma_\mathrm{{{tel}}}$ [m s$^{{-1}}$]')
+            rv_inst_chains_list.append(df_derived_chains[f'sigma_rv_{tel}'])
+        if toi.rv_trend:
+            for i in range(0, toi.rv_trend_order + 1):
+                try:
+                    rv_inst_labels.append(rv_trend_labels_dict[i])
+                    rv_inst_chains_list.append(df_derived_chains[f'trend_rv_{i}'])
+                except KeyError:
+                    print("Trend value not in rv_trend_labels_dict.")
+                    continue
+        rv_inst_chains = np.vstack(rv_inst_chains_list).T
+        rv_inst_corner = TesslaCornerPlot(toi, rv_inst_labels, rv_inst_chains, f"{toi.name} RV instrument parameters")
+        rv_inst_corner.plot(overwrite=overwrite)
+
+        # Corner plot for the measured parameters
+        for i,letter in enumerate(toi.transiting_planets.keys()):
+            planet_labels = [
+                '$P$ [d]',
+                '$T_\mathrm{c}$ [BTJD]',
+                '$R_\mathrm{p}/R_*$ [$\%$]',
+                '$b$',
+                '$e$',
+                '$\omega$ [Rad]',
+                '$K$ [m s$^{-1}$]'
+            ]
+            planet_chains = np.vstack([
+                df_derived_chains[f'period_{letter}'],
+                df_derived_chains[f't0_BTJD_{letter}'],
+                df_derived_chains[f'ror_{letter}'] * 100, # Put in units of percent to make the decimals easier to see
+                df_derived_chains[f'b_{letter}'],
+                df_derived_chains[f'ecc_{letter}'],
+                df_derived_chains[f'omega_{letter}'],
+                df_derived_chains[f'K_{letter}']
+            ]).T
+            planet_corner = TesslaCornerPlot(toi, planet_labels, planet_chains, f"{toi.name} {letter} measured parameters")
+            planet_corner.plot(overwrite=overwrite)
+
+            # Corner plot for derived planet parameters
+            derived_labels = [
+                '$R_\mathrm{p}$ [$R_\mathrm{\oplus}$]',
+                '$M_\mathrm{p}$ [$M_\mathrm{\oplus}$]',
+                '$\\rho_\mathrm{p}$ [g cm$^{-1}$]',
+                '$a$ [AU]',
+                '$T_\mathrm{eq}$ [K]'
+            ]
+            derived_chains = np.vstack([
+                df_derived_chains[f"rp_{letter}"],
+                df_derived_chains[f"mp_{letter}"],
+                df_derived_chains[f"rho_{letter}"],
+                df_derived_chains[f"a_{letter}"],
+                df_derived_chains[f"teq_{letter}"],
             ]).T
             derived_corner = TesslaCornerPlot(toi, derived_labels, derived_chains, f"{toi.name} {letter} derived parameters")
             derived_corner.plot(overwrite=overwrite)

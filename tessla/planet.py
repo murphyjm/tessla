@@ -24,7 +24,11 @@ class Planet:
                 dur=None,
                 dur_err=None,
                 depth=None,
-                depth_err=None
+                depth_err=None,
+                ecc=None,
+                ecc_err=None,
+                omega=None, # In degrees
+                omega_err=None, # In degrees
                 ) -> None:
     
         self.pl_letter = pl_letter
@@ -47,6 +51,13 @@ class Planet:
         assert pl_letter in planet_color_dict.keys(), "Planet letter {pl_letter} not in planet_color_dict"
         self.color = planet_color_dict[pl_letter]
 
+        # Additional quantities
+        self.ecc = ecc
+        self.ecc_err = ecc_err
+        self.omega = omega
+        self.omega_err = omega_err
+
+
     def __create_transit_mask(self, time):
         '''
         Create a transit mask.
@@ -60,5 +71,4 @@ class Planet:
         '''
         self.transit_mask = self.__create_transit_mask(time)
         return self.transit_mask
-    
     

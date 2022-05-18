@@ -3,6 +3,21 @@ from astropy import units
 import pandas as pd
 import os
 
+def get_t0s_in_range(xstart, xstop, per, t0):
+    '''
+    Return a list of transit times between xstart and xstop for a planet with period per and reference transit epoch t0.
+    '''
+    first_transit_in_range = t0 + int((xstart - t0)/per) * per
+    t0s = []
+    t0_curr = first_transit_in_range
+    # Definitely a quicker way to do this, but this is fine for now.
+    while t0_curr < xstop:
+        t0s.append(t0_curr)
+        t0_curr += per
+    if len(t0s) == 0:
+        print("No transits in range...")
+    return np.array(t0s)
+
 def find_breaks(time, diff_threshold=10, verbose=False):
     '''
     Identify breaks between non-consecutive sectors of data (identified by gaps larger than diff_threshold days)
@@ -81,6 +96,12 @@ def get_teq(a_samples, teff_samples, rstar_samples, bond_albedo=0):
     a_samples_sun = (a_samples * units.AU).to(units.R_sun).value
     return teff_samples * (1 - bond_albedo)**(0.25) * np.sqrt(rstar_samples / (2 * a_samples_sun))
 
+def get_inclination(b_samples, a_samples, rstar_samples):   
+    inclination_samples_rad = np.arccos(b_samples / ((a_samples * units.AU).to(units.R_sun).value) * rstar_samples)
+    inclination_samples_deg = inclination_samples_rad * 180 / np.pi
+    
+    return inclination_samples_rad, inclination_samples_deg
+
 def __get_summary_info(chain):
     median = np.median(chain)
     mean = np.mean(chain)
@@ -94,8 +115,12 @@ def __get_summary_info(chain):
 def quick_look_summary(toi, df_derived_chains):
     columns = ['median', 'mean', 'std', 'err16', 'err84', 'min', 'max']
     df = pd.DataFrame(columns=columns)
+    if toi.rv_data_path is None:
+        params = ['period', 't0', 'rp', 'dur_hr', 'b', 'ecc', 'omega_folded_deg']
+    else:
+        params = ['period', 't0', 'rp', 'b', 'ecc', 'omega', 'mp', 'rho', 'a', 'teq']
     for letter in toi.transiting_planets.keys():
-        for param in ['period', 't0', 'rp', 'dur_hr', 'b', 'ecc', 'omega_folded_deg']:
+        for param in params:
             df.loc[f"{param}_{letter}"] = __get_summary_info(df_derived_chains[f"{param}_{letter}"])
     save_fname = f"{toi.name.replace(' ', '_')}_quick_look_summary.csv"
     save_path = os.path.join(toi.output_dir, save_fname)

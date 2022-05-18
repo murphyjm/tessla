@@ -48,6 +48,7 @@ class ThreePanelPhotPlot:
                 num_random_transit_draws=25, # Number of random draws to plot.
                 save_format='.png',
                 save_dpi=400,
+                df_summary_fname=None,
                 ) -> None:
         
         self.toi = toi
@@ -60,6 +61,10 @@ class ThreePanelPhotPlot:
         self.data_gap_thresh = data_gap_thresh
         self.plot_random_transit_draws = plot_random_transit_draws
         self.num_random_transit_draws = num_random_transit_draws
+
+        self.df_summary = None
+        if df_summary_fname is not None:
+            self.df_summary = pd.read_csv(df_summary_fname, index_col=0)
 
         # Plot hyperparameters
         self.figsize = figsize
@@ -77,7 +82,7 @@ class ThreePanelPhotPlot:
         if self.toi.verbose:
             print("Creating three panel plot...")
         
-        out_dir = os.path.join(self.toi.phot_dir, 'plotting')
+        out_dir = os.path.join(self.toi.model_dir, 'plotting')
         if not os.path.isdir(out_dir):
             os.makedirs(out_dir)
 
@@ -149,6 +154,8 @@ class ThreePanelPhotPlot:
         Annotate the chunk(s) with their sector(s) at the top of the upper panel.
         The indexing kung-fu is a bit arcane here, but it should work.
         '''
+        xpos = xstart
+        ha = 'left'
         original_indices = self.toi.cleaned_time.index.values
         sectors = self.toi.lc.sector[original_indices[xstart_ind:xstop_ind]]
         assert len(np.unique(sectors)) > 0, "No sector labels."
@@ -160,8 +167,11 @@ class ThreePanelPhotPlot:
             for j in range(len(sectors) -1):
                 sector_str += f"{sectors.value[j]}, "
             sector_str += f"{sectors.value[-1]}"
-        text = ax.text(xstart, np.max(self.y), sector_str, horizontalalignment='left', verticalalignment='top', fontsize=12)
-        text.set_bbox(dict(facecolor='lightgray', alpha=0.65, edgecolor='lightgray'))
+        if not "," in sector_str:
+            xpos = (self.toi.cleaned_time.values[xstop_ind - 1] + xstart)/2
+            ha = 'center'
+        text = ax.text(xpos, np.max(self.y), sector_str, horizontalalignment=ha, verticalalignment='top', fontsize=12)
+        text.set_bbox(dict(facecolor='none', alpha=0.65, edgecolor='none'))
 
     def __add_ymd_label(self, fig, ax, xlims, left_or_right):
         '''
@@ -229,7 +239,7 @@ class ThreePanelPhotPlot:
         
         # Plot the GP model on top chunk-by-chunk to avoid the lines that extend into the gaps
         # Also mark the transits in each chunk for each planet
-        gp_mod = self.toi.extras["gp_pred"] + self.toi.map_soln["mean"]
+        gp_mod = self.toi.extras["gp_pred"] + self.toi.map_soln["mean_flux"]
         assert len(self.x) == len(gp_mod), "Different lengths for data being plotted and GP model"
 
         # --------------- #
@@ -330,7 +340,7 @@ class ThreePanelPhotPlot:
         bax3.axhline(0, color="#aaaaaa", lw=1)
         for ax in bax3.axs[1:]:
             ax.tick_params(axis='y', label1On=False) # Avoid y-axis labels popping up.
-        bax3.set_ylim([-2.5, 2.5]) # Can change this probably.
+        bax3.set_ylim([-3, 3]) # Can probably change this later.
         self.residuals = residuals.value # Save these
 
         # Plot housekeeping
@@ -396,7 +406,6 @@ class ThreePanelPhotPlot:
         
         return fig
 
-
     def __three_panel_plot(self):
         '''
         Make a three panel plot but don't have to worry about breaks in the axis. E.g. if there's only one sector of photometry or all sectors are consecutive.
@@ -419,7 +428,7 @@ class ThreePanelPhotPlot:
         ax1.plot(self.x, self.y, '.k', alpha=0.3, label="Data")
 
         # Plot the GP model and mark the transits
-        gp_mod = self.toi.extras["gp_pred"] + self.toi.map_soln["mean"]
+        gp_mod = self.toi.extras["gp_pred"] + self.toi.map_soln["mean_flux"]
         assert len(self.x) == len(gp_mod), "Different lengths for data being plotted and GP model"
         ax1.plot(self.x, gp_mod, color="C2", label="GP model")
         self.__plot_transit_markers(ax1, np.min(self.x), np.max(self.x))
@@ -505,7 +514,7 @@ class ThreePanelPhotPlot:
         heights = [1, 0.33]
         sps = gridspec.GridSpecFromSubplotSpec(2, len(self.toi.transiting_planets), subplot_spec=gs1, height_ratios=heights, hspace=0.05)
 
-        gp_mod = self.toi.extras["gp_pred"] + self.toi.map_soln["mean"]
+        gp_mod = self.toi.extras["gp_pred"] + self.toi.map_soln["mean_flux"]
         residuals = self.y - gp_mod - np.sum(self.toi.extras["light_curves"], axis=-1)
 
         chains = None
@@ -556,8 +565,16 @@ class ThreePanelPhotPlot:
                     t0 = np.array([chains[f"t0_{letter}"].values[ind] for letter in self.toi.transiting_planets.keys()])
                     ror = np.array([chains[f"ror_{letter}"].values[ind] for letter in self.toi.transiting_planets.keys()])
                     b = np.array([chains[f"b_{letter}"].values[ind] for letter in self.toi.transiting_planets.keys()])
-                    dur = np.array([chains[f"dur_{letter}"].values[ind] for letter in self.toi.transiting_planets.keys()])
-                    orbit = xo.orbits.KeplerianOrbit(period=period, t0=t0, b=b, ror=ror, duration=dur)
+                    if not self.toi.is_joint_model:
+                        dur = np.array([chains[f"dur_{letter}"].values[ind] for letter in self.toi.transiting_planets.keys()])
+                        orbit = xo.orbits.KeplerianOrbit(period=period, t0=t0, b=b, ror=ror, duration=dur)
+                    else:
+                        # If a joint model, parameterized in terms of stellar density and ecc and omega directly
+                        rstar = chains["rstar"].values[ind]
+                        mstar = chains["mstar"].values[ind]
+                        ecc = np.array([chains[f"ecc_{letter}"].values[ind] for letter in self.toi.transiting_planets.keys()])
+                        omega = np.array([chains[f"omega_{letter}"].values[ind] for letter in self.toi.transiting_planets.keys()])
+                        orbit = xo.orbits.KeplerianOrbit(r_star=rstar, m_star=mstar, period=period, t0=t0, b=b, ecc=ecc, omega=omega)
 
                     # Light curves
                     N_EVAL_POINTS = 500
@@ -603,13 +620,25 @@ class ThreePanelPhotPlot:
                 ax1.set_ylabel("Residuals", fontsize=14)
             
             ax0.set_xlim([-xlim, xlim])
+            ax0.set_ylim([-3, 3])
             ax1.set_xlim([-xlim, xlim])
+            ax1.set_ylim([-3, 3])
             axis_to_data = ax.transAxes + ax.transData.inverted()
-            points_data = axis_to_data.transform((0.035, 0.))
+            points_data = axis_to_data.transform((0.04, 0.15))
             ax0.errorbar(points_data[0], points_data[1], yerr=np.sqrt(np.exp(self.toi.map_soln['log_sigma_lc'])**2 + np.median(self.yerr)**2), fmt='none', color='k', elinewidth=2, capsize=4)
             if i == 0:
-                text = ax0.text(points_data[0] + 0.4/24, points_data[1], 'Data pointwise error', fontsize=12)
-                text.set_bbox(dict(facecolor='lightgray', alpha=0.65, edgecolor='lightgray'))
+                text = ax0.text(points_data[0] + 0.3/24, points_data[1], 'Data uncert.', fontsize=12)
+                text.set_bbox(dict(facecolor='white', alpha=0.5, edgecolor='none'))
+            
+            if self.df_summary is not None:
+                per_str = f"$P =$ {self.df_summary.loc[f'period_{planet.pl_letter}', 'median']:.2f} d"
+                text_per = ax0.text(0.05, 0.9, per_str, ha='left', va='top', transform=ax0.transAxes)
+                text_per.set_bbox(dict(facecolor='white', alpha=0.5, edgecolor='none'))
+                rp_med = self.df_summary.loc[f'rp_{planet.pl_letter}', 'median']
+                rp_err = self.df_summary.loc[f'rp_{planet.pl_letter}', 'std']
+                rp_str = f"$R_\mathrm{{p}} = {rp_med:.2f} \pm {rp_err:.2f}$ $R_\oplus$"
+                text_rp = ax0.text(0.95, 0.9, rp_str, ha='right', va='top', transform=ax0.transAxes)
+                text_rp.set_bbox(dict(facecolor='white', alpha=0.5, edgecolor='none'))
         
         # Make the y-axes range the same for all of the phase-folded transit plots
         for axes in [phase_folded_axes, phase_folded_resid_axes]:
@@ -618,6 +647,8 @@ class ThreePanelPhotPlot:
             y_phase_lim = (y_phase_min, y_phase_max)
             for i in range(len(axes)):
                 axes[i].set_ylim(y_phase_lim)
+        
+        fig.align_ylabels()
 
         return fig
 
@@ -628,7 +659,7 @@ class ThreePanelPhotPlot:
         if self.toi.verbose:
             print("Creating periodogram of photometric model residuals...")
         
-        out_dir = os.path.join(self.toi.phot_dir, 'plotting')
+        out_dir = os.path.join(self.toi.model_dir, 'plotting')
         if not os.path.isdir(out_dir):
             os.makedirs(out_dir)
 
