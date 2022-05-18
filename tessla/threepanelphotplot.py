@@ -171,7 +171,7 @@ class ThreePanelPhotPlot:
             xpos = (self.toi.cleaned_time.values[xstop_ind - 1] + xstart)/2
             ha = 'center'
         text = ax.text(xpos, np.max(self.y), sector_str, horizontalalignment=ha, verticalalignment='top', fontsize=12)
-        text.set_bbox(dict(facecolor='none', alpha=0.65, edgecolor='none'))
+        text.set_bbox(dict(facecolor='white', alpha=0.5, edgecolor='none'))
 
     def __add_ymd_label(self, fig, ax, xlims, left_or_right):
         '''
