@@ -78,6 +78,7 @@ class RVPlot:
         self.save_format = save_format
         self.save_dpi = save_dpi
         self.df_summary_fname = df_summary_fname
+        self.df_summary = None
         if df_summary_fname is not None:
             self.df_summary = pd.read_csv(df_summary_fname, index_col=0)
 

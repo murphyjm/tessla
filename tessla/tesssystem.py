@@ -8,7 +8,7 @@ from astropy import units
 import pickle
 
 # Data utils
-from tessla.data_utils import get_inclination, time_delta_to_data_delta, convert_negative_angles, get_semimajor_axis, get_sinc, get_aor, get_teq, get_density, get_inclination
+from tessla.data_utils import get_inclination, time_delta_to_data_delta, convert_negative_angles, get_semimajor_axis, get_sinc, get_aor, get_teq, get_density, get_inclination, get_t0s_in_range
 from scipy.signal import savgol_filter
 
 # Enables sampling with multiple cores on Mac.
@@ -47,6 +47,8 @@ RV_INST_NAME_MAPPER = {
     'hires_j':'HIRES'
 }
 
+T0_BTJD = 2457000
+
 class TessSystem:
     '''
     Container object that holds meta information about a system.
@@ -64,7 +66,7 @@ class TessSystem:
                 use_long_cadence_data=False, # By default, don't use the 30-min cadence data if it's the only data available for a sector. If true, treat it as a different instrument.
                 flux_origin='sap_flux', # By default, use the SAP flux. Can also specify "pdcsap_flux" but this may not be available for all sectors.
                 n_transiting=1, # Number of transiting planets
-                bjd_ref=2457000, # BJD offset
+                bjd_ref=2457000, # BJD offset. BTJD as default
                 phot_gp_kernel='exp_decay', # What GP kernel to use to flatten the light curve. 
                                             # Options are: ['activity', 'exp_decay', 'rotation']. Activity is exp_decay + rotation. See celerite2 documentation.
                 # RV stuff
@@ -223,6 +225,23 @@ class TessSystem:
             self.add_transiting_planet(planet)
         
         self.create_transit_mask()
+
+    def update_t0s_to_near_data_middle(self, buffer=100): # If t0 is already within buffer days of the data middle, that's fine.
+        '''
+        To reduce the covariance bewteen period and t0, use a t0 initial guess that is close to the middle of the photometry timeseries.
+        '''
+        phot_data_middle = 0.5 * (np.max(self.lc.time.value) - np.min(self.lc.time.value))
+        for planet in self.transiting_planets.values():
+            if np.abs(phot_data_middle - planet.t0) < buffer:
+                continue
+            else:
+                t0s = get_t0s_in_range(np.min(self.lc.time.value), np.max(self.lc.time.value), planet.per, planet.t0)
+                middle_ind = int(np.median(np.arange(len(t0s))))
+                middle_t0 = t0s[middle_ind]
+                assert np.abs(phot_data_middle - middle_t0) < buffer, "New t0 is still not within buffer."
+                if self.verbose:
+                    print(f"Planet {planet.pl_letter} t0 updated from {planet.t0:.2f} to {middle_t0:.2f} [BJD - {self.bjd_ref:.2f}] to reduce P and t0 covariance.")
+                planet.t0 = middle_t0
 
     def add_star_props(self, star):
         '''
@@ -688,7 +707,7 @@ class TessSystem:
         # Background model
         bkg = tt.zeros(len(t))
         if self.rv_trend:
-            A = np.vander(t, self.rv_trend_order + 1)
+            A = np.vander(t - self.rv_trend_time_ref, self.rv_trend_order + 1, increasing=True)# [:, :-1] # Don't use the offset term, we already have instrument offsets.
             bkg = tt.dot(A, trend_rv)
             
         return planet_rv, bkg, tt.sum(planet_rv, axis=-1) + bkg
@@ -801,9 +820,9 @@ class TessSystem:
             # Order of parameters to be optimized is a bit arbitrary
             map_soln = pmx.optimize(start=start, vars=[log_sigma_lc])
             map_soln = pmx.optimize(start=map_soln, vars=[sigma_rv])
-            map_soln = pmx.optimize(start=map_soln, vars=[gamma_rv])
             if self.rv_trend:
                 map_soln = pmx.optimize(start=map_soln, vars=[trend_rv])
+            map_soln = pmx.optimize(start=map_soln, vars=[gamma_rv])
             map_soln = pmx.optimize(start=map_soln, vars=[log_K])
             map_soln = pmx.optimize(start=map_soln, vars=[log_ror])
             map_soln = pmx.optimize(start=map_soln, vars=[b])
@@ -851,6 +870,7 @@ class TessSystem:
         '''
         self.rv_trend = rv_trend
         self.rv_trend_order = rv_trend_order
+        self.rv_trend_time_ref = 0.5 * (np.max(self.rv_df.time) - np.min(self.rv_df.time)) # Reference time for the background trend model, if needed.
         # You may want to call self.flatten_light_curve() first because it will remove photometric outliers.
         model, map_soln, extras = self.__build_joint_model(self.cleaned_time, self.cleaned_flux, self.cleaned_flux_err, start=self.map_soln)
 
@@ -1017,7 +1037,8 @@ class TessSystem:
         teff_samples = np.random.normal(self.star.teff, self.star.teff_err, N)
         for letter in self.transiting_planets.keys():
             df_chains[f"rp_{letter}"] = units.R_sun.to(units.R_earth, df_chains[f"ror_{letter}"] * rstar_samples) # Planet radius in earth radius
-            
+            df_chains[f"t0_BTJD_{letter}"] = df_chains[f"t0_{letter}"] + self.bjd_ref - T0_BTJD # T0 in BTJD
+
             if not self.is_joint_model:
                 df_chains[f"dur_hr_{letter}"] = df_chains[f"dur_{letter}"] * 24 # Transit duration in hours
 

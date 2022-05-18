@@ -3,6 +3,21 @@ from astropy import units
 import pandas as pd
 import os
 
+def get_t0s_in_range(xstart, xstop, per, t0):
+    '''
+    Return a list of transit times between xstart and xstop for a planet with period per and reference transit epoch t0.
+    '''
+    first_transit_in_range = t0 + int((xstart - t0)/per) * per
+    t0s = []
+    t0_curr = first_transit_in_range
+    # Definitely a quicker way to do this, but this is fine for now.
+    while t0_curr < xstop:
+        t0s.append(t0_curr)
+        t0_curr += per
+    if len(t0s) == 0:
+        print("No transits in range...")
+    return np.array(t0s)
+
 def find_breaks(time, diff_threshold=10, verbose=False):
     '''
     Identify breaks between non-consecutive sectors of data (identified by gaps larger than diff_threshold days)

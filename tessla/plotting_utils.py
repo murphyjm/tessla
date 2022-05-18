@@ -325,13 +325,13 @@ def plot_joint_corners(toi, df_derived_chains, overwrite=False):
             rv_inst_labels.append(f'$\sigma_\mathrm{{{tel}}}$ [m s$^{{-1}}$]')
             rv_inst_chains_list.append(df_derived_chains[f'sigma_rv_{tel}'])
         if toi.rv_trend:
-            for i in range(toi.rv_trend_order + 1):
+            for i in range(0, toi.rv_trend_order + 1):
                 try:
                     rv_inst_labels.append(rv_trend_labels_dict[i])
-                    rv_inst_chains_list.append(df_derived_chains[f'trend_{i}'])
+                    rv_inst_chains_list.append(df_derived_chains[f'trend_rv_{i}'])
                 except KeyError:
                     print("Trend value not in rv_trend_labels_dict.")
-                    break
+                    continue
         rv_inst_chains = np.vstack(rv_inst_chains_list).T
         rv_inst_corner = TesslaCornerPlot(toi, rv_inst_labels, rv_inst_chains, f"{toi.name} RV instrument parameters")
         rv_inst_corner.plot(overwrite=overwrite)
@@ -340,7 +340,7 @@ def plot_joint_corners(toi, df_derived_chains, overwrite=False):
         for i,letter in enumerate(toi.transiting_planets.keys()):
             planet_labels = [
                 '$P$ [d]',
-                '$T_\mathrm{c}$ ' + f'[BJD - {toi.bjd_ref:.1f}]\n', # Add new line so top of title doesn't overlap with Period corner plot?
+                '$T_\mathrm{c}$ [BTJD]',
                 '$R_\mathrm{p}/R_*$ [$\%$]',
                 '$b$',
                 '$e$',
@@ -349,7 +349,7 @@ def plot_joint_corners(toi, df_derived_chains, overwrite=False):
             ]
             planet_chains = np.vstack([
                 df_derived_chains[f'period_{letter}'],
-                df_derived_chains[f't0_{letter}'],
+                df_derived_chains[f't0_BTJD_{letter}'],
                 df_derived_chains[f'ror_{letter}'] * 100, # Put in units of percent to make the decimals easier to see
                 df_derived_chains[f'b_{letter}'],
                 df_derived_chains[f'ecc_{letter}'],

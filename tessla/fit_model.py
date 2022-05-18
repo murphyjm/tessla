@@ -123,6 +123,9 @@ def main():
         star = pickle.load(star_fname)
         star.inflate_star_mass_and_rad_errs() # Inflate the error bars on stellar mass and radius according to Tayar et al. 2022
         toi.add_star_props(star)
+
+    # Before MAP fitting, update t0s to near middle of phot data to reduce covariance between P and t0
+    toi.update_t0s_to_near_data_middle()
     
     # Run the MAP fitting loop
     model = toi.flatten_light_curve()
@@ -150,7 +153,7 @@ def main():
                                     draws=args.draws, 
                                     chains=args.nchains)
         
-        if args.rv_data_path is None:
+        if not toi.is_joint_model:
             # Add eccentricity and omega to the chains
             toi.add_ecc_and_omega_to_chains(flat_samps)
         toi.add_derived_quantities_to_chains()
@@ -182,7 +185,7 @@ def main():
 
         # Make the corner plots
         if toi.plotting:
-            if args.rv_data_path is None:
+            if not toi.is_joint_model:
                 plot_phot_only_corners(toi, df_derived_chains, overwrite=args.overwrite_plot)
             else:
                 plot_joint_corners(toi, df_derived_chains, overwrite=args.overwrite_plot)
