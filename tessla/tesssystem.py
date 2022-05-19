@@ -739,7 +739,7 @@ class TessSystem:
             b = pm.Uniform("b", 0, 1, shape=self.n_transiting)
             
             # Eccentricity and omega
-            ecs = pmx.UnitDisk("ecs", shape=(self.n_transiting, self.n_transiting), testval=0.01 * np.ones((self.n_transiting, self.n_transiting)))
+            ecs = pmx.UnitDisk("ecs", shape=(2, self.n_transiting), testval=0.01 * np.ones((2, self.n_transiting)))
             ecc = pm.Deterministic("ecc", tt.sum(ecs**2, axis=0))
             omega = pm.Deterministic("omega", tt.arctan2(ecs[1], ecs[0]))
             xo.eccentricity.vaneylen19("ecc_prior", multi=(self.n_transiting > 1), shape=self.n_transiting, fixed=True, observed=ecc)
