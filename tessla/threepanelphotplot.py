@@ -154,7 +154,6 @@ class ThreePanelPhotPlot:
         Annotate the chunk(s) with their sector(s) at the top of the upper panel.
         The indexing kung-fu is a bit arcane here, but it should work.
         '''
-        xpos = xstart
         ha = 'left'
         original_indices = self.toi.cleaned_time.index.values
         sectors = self.toi.lc.sector[original_indices[xstart_ind:xstop_ind]]
@@ -167,9 +166,9 @@ class ThreePanelPhotPlot:
             for j in range(len(sectors) -1):
                 sector_str += f"{sectors.value[j]}, "
             sector_str += f"{sectors.value[-1]}"
-        if not "," in sector_str:
-            xpos = (self.toi.cleaned_time.values[xstop_ind - 1] + xstart)/2
-            ha = 'center'
+        
+        xpos = (self.toi.cleaned_time.values[xstop_ind - 1] + xstart)/2
+        ha = 'center'
         text = ax.text(xpos, np.max(self.y), sector_str, horizontalalignment=ha, verticalalignment='top', fontsize=12)
         text.set_bbox(dict(facecolor='white', alpha=0.5, edgecolor='none'))
 

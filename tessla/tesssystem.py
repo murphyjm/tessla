@@ -32,7 +32,7 @@ from celerite2.theano import terms, GaussianProcess
 import arviz as az
 
 # Radvel
-from radvel.utils import Msini
+from radvel.utils import Msini, bintels
 
 '''
 NOTE: Right now, nontransiting planets won't work, so don't add them!
@@ -73,6 +73,7 @@ class TessSystem:
                 rv_data_path=None, # Path to RV data .csv. Must contain columns: "time", "mnvel" [m/s], "errvel" [m/s], "tel"
                 mnvel_cut=None,
                 errvel_cut=None, # If a float is provided, cut all mnvel and errvel absolute values above this limit. To get rid of bad data.
+                rv_bin_size=0.33, # Bin RVs collected in the same night (within 8 hours)
                 # General stuff
                 verbose=True, # Print out messages
                 plotting=True, # Create plots as you go
@@ -115,6 +116,7 @@ class TessSystem:
         # If RVs were included so creating a joint model
         self.rv_data_path = rv_data_path
         self.rv_df = None
+        self.rv_bin_size = rv_bin_size
         if self.rv_data_path is not None:
             if self.verbose:
                 print("RV dataset detected. This will be a joint photometry-RV model.")
@@ -137,7 +139,13 @@ class TessSystem:
             if self.verbose:
                 print(f"Removed {np.sum(bad_mask)} RVs for being outliers.")
             rv_df['tel'] = rv_df['tel'].map(RV_INST_NAME_MAPPER).fillna(rv_df['tel'])
-            self.rv_df = rv_df
+            rv_df_binned = pd.DataFrame()
+            rv_df_binned['time'], rv_df_binned['mnvel'], rv_df_binned['errvel'], rv_df_binned['tel'] = bintels(rv_df['time'].values, 
+                                                                                                               rv_df['mnvel'].values, 
+                                                                                                               rv_df['errvel'].values, 
+                                                                                                               rv_df['tel'].values, 
+                                                                                                               binsize=self.rv_bin_size)
+            self.rv_df = rv_df_binned
             self.rv_inst_names = np.unique(rv_df['tel'])
             self.num_rv_inst = len(self.rv_inst_names)
 

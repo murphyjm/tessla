@@ -303,8 +303,9 @@ class RVPlot:
             x_fold /= planet.per # Put this in unitless phase
             
             # RV contribution from other planets and background trend (if any)
-            other_rv = np.sum(np.delete(self.toi.extras['planet_rv'], i, axis=1), axis=1)
-            other_rv += self.toi.extras['bkg_rv']
+            other_rv = self.toi.extras['bkg_rv']
+            if len(self.toi.extras['planet_rv'].shape) > 1:
+                other_rv = np.sum(np.delete(self.toi.extras['planet_rv'], i, axis=1), axis=1)
 
             # Plot the data
             for tel in self.toi.rv_inst_names:
@@ -316,7 +317,10 @@ class RVPlot:
             x_fold_pred = (self.toi.t_rv - planet.t0 + 0.5 * planet.per) % planet.per - 0.5 * planet.per
             x_fold_pred /= planet.per # Put this in unitless phase
             inds_pred = np.argsort(x_fold_pred)
-            ax0.plot(x_fold_pred[inds_pred], self.toi.extras['planet_rv_pred'][:, i][inds_pred], color=planet.color, zorder=1000, lw=3)
+            if len(self.toi.extras['planet_rv_pred'].shape) > 1:
+                ax0.plot(x_fold_pred[inds_pred], self.toi.extras['planet_rv_pred'][:, i][inds_pred], color=planet.color, zorder=1000, lw=3)
+            else:
+                ax0.plot(x_fold_pred[inds_pred], self.toi.extras['planet_rv_pred'][inds_pred], color=planet.color, zorder=1000, lw=3)
 
             # Plot the binned RVs like in RadVel
             bin_duration = 0.125 # 1/8 bins of phase
@@ -351,7 +355,10 @@ class RVPlot:
                     planet_rv_pred = orbit.get_radial_velocity(self.toi.t_rv, K=K).eval()
                     
                     # Plot the random draw
-                    ax0.plot(x_fold_pred[inds_pred], planet_rv_pred[:, i][inds_pred], color=planet.color, alpha=0.3, zorder=999)
+                    if len(self.toi.extras['planet_rv_pred'].shape) > 1:
+                        ax0.plot(x_fold_pred[inds_pred], planet_rv_pred[:, i][inds_pred], color=planet.color, alpha=0.3, zorder=999)
+                    else:
+                        ax0.plot(x_fold_pred[inds_pred], planet_rv_pred[inds_pred], color=planet.color, alpha=0.3, zorder=999)
 
             # Plot the residuals below
             ax1 = fig.add_subplot(sps[1, i])
