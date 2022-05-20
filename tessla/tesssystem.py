@@ -516,7 +516,7 @@ class TessSystem:
         Create an exponentially-decaying SHOTerm GP kernel.
         '''
         log_sigma_dec_gp = pm.Normal("log_sigma_dec_gp", mu=0., sigma=10)
-        BoundedNormal = pm.Bound(pm.Normal, lower=np.log(0.5), upper=np.log(50)) # Bounded normal for the periodic length scale so it's forced to be longer than 12 hours so it doesn't interfere with transit fitting. 
+        BoundedNormal = pm.Bound(pm.Normal, lower=np.log(1), upper=np.log(50)) # Bounded normal for the periodic length scale so it's forced to be longer than 12 hours so it doesn't interfere with transit fitting. 
         log_rho_gp = BoundedNormal("log_rho_gp", mu=np.log(10), sd=np.log(50))
         kernel = terms.SHOTerm(sigma=tt.exp(log_sigma_dec_gp), rho=tt.exp(log_rho_gp), Q=1/np.sqrt(2))
         noise_params = [log_sigma_dec_gp, log_rho_gp]
