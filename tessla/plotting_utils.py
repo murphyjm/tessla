@@ -258,14 +258,14 @@ def plot_phot_only_corners(toi, df_derived_chains, overwrite=False):
         for i,letter in enumerate(toi.transiting_planets.keys()):
             planet_labels = [
                 '$P$ [d]',
-                '$T_\mathrm{c}$ ' + f'[BJD - {toi.bjd_ref:.1f}]\n', # Add new line so top of title doesn't overlap with Period corner plot?
+                '$T_\mathrm{c}$ [BTJD]',
                 '$R_\mathrm{p}/R_*$ [$\%$]',
                 '$b$',
                 '$T_\mathrm{dur}$ [hr]'
             ]
             planet_chains = np.vstack([
                 df_derived_chains[f'period_{letter}'],
-                df_derived_chains[f't0_{letter}'],
+                df_derived_chains[f't0_BTJD_{letter}'],
                 df_derived_chains[f'ror_{letter}'] * 100, # Put in units of percent to make the decimals easier to see
                 df_derived_chains[f'b_{letter}'],
                 df_derived_chains[f'dur_hr_{letter}']

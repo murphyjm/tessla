@@ -143,7 +143,22 @@ def main():
                 f"{toi.name} {toi.flux_origin.replace('_', ' ')}", 
                 'Relative flux [ppt]', 
                 toi.cleaned_time.values, toi.cleaned_flux.values, toi.rot_per, 0)
-    
+
+    # Plot the MAP solutions for inspection
+    if toi.plotting:
+        use_broken_x_axis = len(find_breaks(toi.cleaned_time.values)) > 0 # If breaks in the x-axis, then use the broken x-axis plot
+        phot_plot = ThreePanelPhotPlot(toi,
+                                    use_broken_x_axis=use_broken_x_axis, 
+                                    plot_random_transit_draws=False)
+        phot_plot.plot(save_fname=f"{toi.name.replace(' ', '_')}_phot_model" + args.plot_fname_suffix, overwrite=args.overwrite_plot)
+        # Create a LS periodogram of the residuals about the full model. This should hopefully be white noise
+        phot_plot.residuals_periodogram(overwrite=args.overwrite_plot)
+
+        if toi.is_joint_model:
+            rv_plot = RVPlot(toi, 
+                             plot_random_orbit_draws=False)
+            rv_plot.plot(save_fname=f"{toi.name.replace(' ', '_')}_rv_model" + args.plot_fname_suffix, overwrite=args.overwrite_plot)
+        
     # Run the sampling
     flat_samps = None
     if not args.no_sampling:
@@ -158,28 +173,21 @@ def main():
             toi.add_ecc_and_omega_to_chains(flat_samps)
         toi.add_derived_quantities_to_chains()
 
-    if toi.plotting:
         # Plot the results
         use_broken_x_axis = len(find_breaks(toi.cleaned_time.values)) > 0 # If breaks in the x-axis, then use the broken x-axis plot
         phot_plot = ThreePanelPhotPlot(toi,
                                     use_broken_x_axis=use_broken_x_axis, 
-                                    plot_random_transit_draws=(not args.no_sampling),
+                                    plot_random_transit_draws=True,
                                     num_random_transit_draws=args.num_transit_draws)
-        phot_plot.plot(save_fname=f"{toi.name.replace(' ', '_')}_phot_model" + args.plot_fname_suffix, overwrite=args.overwrite_plot)
-        
-        # Create a LS periodogram of the residuals about the full model. This should hopefully be white noise
-        phot_plot.residuals_periodogram(overwrite=args.overwrite_plot)
+        phot_plot.plot(save_fname=f"{toi.name.replace(' ', '_')}_phot_model_w_draws" + args.plot_fname_suffix, overwrite=args.overwrite_plot)
 
         if toi.is_joint_model:
             # Make RV plot
             rv_plot = RVPlot(toi, 
-                             plot_random_orbit_draws=(not args.no_sampling), 
+                             plot_random_orbit_draws=True, 
                              num_random_orbit_draws=(args.num_transit_draws))
-            rv_plot.plot(save_fname=f"{toi.name.replace(' ', '_')}_rv_model" + args.plot_fname_suffix, overwrite=args.overwrite_plot)
-
-    # If the sampling was run...
-    if flat_samps is not None:
-
+            rv_plot.plot(save_fname=f"{toi.name.replace(' ', '_')}_rv_model_w_draws" + args.plot_fname_suffix, overwrite=args.overwrite_plot)
+        
         # Read this data for derived corner plots and output summary table.
         df_derived_chains = pd.read_csv(toi.chains_derived_path)
 
