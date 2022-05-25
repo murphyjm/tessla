@@ -74,6 +74,7 @@ class TessSystem:
                 mnvel_cut=None,
                 errvel_cut=None, # If a float is provided, cut all mnvel and errvel absolute values above this limit. To get rid of bad data.
                 rv_bin_size=0.33, # Bin RVs collected in the same night (within 8 hours)
+                include_svalue_gp=False, # If true, add a GP simultaneously fit to the RVs and HIRES S-values
                 # General stuff
                 verbose=True, # Print out messages
                 plotting=True, # Create plots as you go
@@ -123,9 +124,11 @@ class TessSystem:
             model_out_dir = os.path.join(self.output_dir, 'joint_model')
             sampling_out_dir = os.path.join(self.output_dir, 'joint_sampling')
             self.is_joint_model = True
+            self.include_svalue_gp = include_svalue_gp
 
             # Read in the RV data from file.
             rv_df = pd.read_csv(self.rv_data_path, comment='#')
+            rv_df = rv_df.rename(columns={'time':'date', 'bjd':'time'})
             cols = rv_df.columns.tolist()
             msg = 'RV .csv file must have the following columns: ["time", "mnvel", "errvel", "tel"], where "mnvel" and "errvel" are in m/s.'
             assert all([col in cols for col in ['time', 'mnvel', 'errvel', 'tel']]), msg
@@ -145,6 +148,15 @@ class TessSystem:
                                                                                                                rv_df['errvel'].values, 
                                                                                                                rv_df['tel'].values, 
                                                                                                                binsize=self.rv_bin_size)
+            if self.include_svalue_gp:
+                foo, rv_df_binned['svalue'], rv_df_binned['svalue_err'], bar = bintels(rv_df['time'].values, 
+                                                                                        rv_df['svalue'].values, 
+                                                                                        rv_df['svalue_err'].values, 
+                                                                                        rv_df['tel'].values, 
+                                                                                        binsize=self.rv_bin_size)
+                if self.verbose:
+                    print("Including GP model using S-Values")
+            rv_df_binned = rv_df_binned.sort_values(by='time').reset_index(drop=True)
             self.rv_df = rv_df_binned
             self.rv_inst_names = np.unique(rv_df['tel'])
             self.num_rv_inst = len(self.rv_inst_names)
@@ -286,8 +298,8 @@ class TessSystem:
         lc['time'] -= t_start.value
         self.bjd_ref += t_start.value
 
-        if self.rv_df is not None:
-            self.rv_df.time = self.rv_df.time.values - self.bjd_ref
+        if self.is_joint_model:
+            self.rv_df.time = self.rv_df.time - self.bjd_ref
 
         self.lc = lc
 
@@ -812,6 +824,29 @@ class TessSystem:
             resid_rv = self.rv_df.mnvel.values - mean_rv - full_rv_model
             pm.Normal("obs_rv", mu=0, sd=tt.sqrt(diag_rv), observed=resid_rv)
 
+            # RV GP if specified
+            if self.include_svalue_gp:
+                # Svalue GP
+                log_sigma_dec_sval_gp = pm.Normal("log_sigma_dec_sval_gp", mu=0., sigma=10)
+                BoundedNormal = pm.Bound(pm.Normal, lower=np.log(1), upper=np.log(50))
+                log_rho_sval_gp = BoundedNormal("log_rho_sval_gp", mu=np.log(10), sd=np.log(50))
+                kernel_sval = terms.SHOTerm(sigma=tt.exp(log_sigma_dec_sval_gp), rho=tt.exp(log_rho_sval_gp), Q=1/2) # Critically-damped oscillator
+                gp_sval_params = [log_sigma_dec_sval_gp, log_rho_sval_gp]
+                sval_mask = ~np.isnan(self.rv_df['svalue'])
+                gp_sval = GaussianProcess(kernel_sval, t=self.rv_df.loc[sval_mask, 'time'].values, diag=(self.rv_df.loc[sval_mask, 'svalue_err'].values)**2)
+                gp_sval.marginal("gp_sval", observed=self.rv_df.loc[sval_mask, 'svalue'].values)
+                
+                gp_rv_params = []
+                gp_rv_dict = {}
+                for tel in self.rv_inst_names:
+                    tel_mask = self.rv_df['tel'].values == tel
+                    log_sigma_dec_rv_gp = pm.Normal(f"log_sigma_dec_rv_gp_{tel}", mu=0., sigma=10) # Different amplitude for each instrument.
+                    kernel_rv = terms.SHOTerm(sigma=tt.exp(log_sigma_dec_rv_gp), rho=tt.exp(log_rho_sval_gp), Q=1/2) # Critically-damped oscillator. Shares periodic length scale with svalues.
+                    gp_rv_params += [log_sigma_dec_rv_gp]
+                    gp_rv = GaussianProcess(kernel_rv, t=self.rv_df.loc[tel_mask, 'time'].values, diag=diag_rv[tel_mask])
+                    gp_rv.marginal(f"gp_rv_{tel}", observed=resid_rv[tel_mask])
+                    gp_rv_dict[tel] = gp_rv
+
             # Compute and save the phased light curve models
             phase_lc = np.linspace(-phase_lim, phase_lim, n_eval_points)
             lc_phase_pred = 1e3 * tt.stack(
@@ -828,11 +863,14 @@ class TessSystem:
                 start = model.test_point
             # Order of parameters to be optimized is a bit arbitrary
             map_soln = pmx.optimize(start=start, vars=[log_sigma_lc])
-            map_soln = pmx.optimize(start=map_soln, vars=[sigma_rv])
             if self.rv_trend:
                 map_soln = pmx.optimize(start=map_soln, vars=[trend_rv])
             map_soln = pmx.optimize(start=map_soln, vars=[gamma_rv])
             map_soln = pmx.optimize(start=map_soln, vars=[log_K])
+            if self.include_svalue_gp:
+                map_soln = pmx.optimize(start=map_soln, vars=gp_sval_params)
+                map_soln = pmx.optimize(start=map_soln, vars=gp_rv_params)
+            map_soln = pmx.optimize(start=map_soln, vars=[sigma_rv])
             map_soln = pmx.optimize(start=map_soln, vars=[log_ror])
             map_soln = pmx.optimize(start=map_soln, vars=[b])
             map_soln = pmx.optimize(start=map_soln, vars=[log_period, t0])
@@ -844,32 +882,44 @@ class TessSystem:
             map_soln = pmx.optimize(start=map_soln, vars=gp_params)
             map_soln = pmx.optimize(start=map_soln)
             
+            extras_labels = ["light_curves", 
+                                "gp_pred",
+                                "lc_phase_pred",
+                                "mean_rv",
+                                "err_rv",
+                                "planet_rv",
+                                "planet_rv_pred",
+                                "bkg_rv",
+                                "bkg_rv_pred",
+                                "full_rv_model", 
+                                "full_rv_model_pred"]
+            extras_vars = [light_curves, 
+                            gp.predict(resid_phot), 
+                            lc_phase_pred,
+                            mean_rv,
+                            np.sqrt(diag_rv),
+                            planet_rv,
+                            planet_rv_pred,
+                            bkg_rv,
+                            bkg_rv_pred,
+                            full_rv_model,
+                            full_rv_model_pred]
+            
+            if self.include_svalue_gp:
+                extras_labels += ['gp_sval']
+                extras_vars += [gp_sval.predict(self.rv_df.loc[sval_mask, 'svalue'].values)]
+                for tel in self.rv_inst_names:
+                    tel_mask = self.rv_df['tel'].values == tel
+                    extras_labels += [f'gp_rv_{tel}']
+                    extras_vars += [gp_rv_dict[tel].predict(resid_rv[tel_mask], include_mean=False)]
+                    pred_mu, pred_var = gp_rv_dict[tel].predict(resid_rv[tel_mask], t=t_rv, include_mean=False, return_var=True)
+                    extras_labels += [f'gp_rv_pred_{tel}', f'gp_rv_pred_stdv_{tel}']
+                    extras_vars += [pred_mu, np.sqrt(pred_var)]
+
             extras = dict(
-                zip(
-                    ["light_curves", 
-                    "gp_pred",
-                    "lc_phase_pred",
-                    "mean_rv",
-                    "err_rv",
-                    "planet_rv",
-                    "planet_rv_pred",
-                    "bkg_rv",
-                    "bkg_rv_pred",
-                    "full_rv_model", 
-                    "full_rv_model_pred"],
-                    pmx.eval_in_model([light_curves, 
-                                        gp.predict(resid_phot), 
-                                        lc_phase_pred,
-                                        mean_rv,
-                                        np.sqrt(diag_rv),
-                                        planet_rv,
-                                        planet_rv_pred,
-                                        bkg_rv,
-                                        bkg_rv_pred,
-                                        full_rv_model,
-                                        full_rv_model_pred], 
-                                        map_soln)
-                )
+                zip(extras_labels,
+                    pmx.eval_in_model(extras_vars, map_soln)
+                    )
             )
             return model, map_soln, extras
 

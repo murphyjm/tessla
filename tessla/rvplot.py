@@ -215,7 +215,16 @@ class RVPlot:
                         self.toi.extras['err_rv'][mask], fmt='.', **self.tel_marker_mapper[tel])
 
         # Plot the RV model
-        ax1.plot(self.toi.t_rv, self.toi.extras['full_rv_model_pred'], color="blue", lw=3)
+        if not self.toi.include_svalue_gp:
+            ax1.plot(self.toi.t_rv, self.toi.extras['full_rv_model_pred'], color="blue", lw=3)
+        else:
+            for tel in self.toi.rv_inst_names:
+                full_mod_pred = self.toi.extras['full_rv_model_pred'] + self.toi.extras[f'gp_rv_pred_{tel}']
+                # Plot the GP error envelope and the solution
+                ax1.fill_between(self.toi.t_rv, full_mod_pred + self.toi.extras[f'gp_rv_pred_stdv_{tel}'], full_mod_pred - self.toi.extras[f'gp_rv_pred_stdv_{tel}'], 
+                                    alpha=0.3, 
+                                    color=self.tel_marker_mapper[tel]['color'])
+                ax1.plot(self.toi.t_rv, full_mod_pred, color='blue', lw=1)
 
         # Add label for years to the upper axis
         self.__add_ymd_label(fig, ax1, (np.min(self.toi.rv_df.time), np.max(self.toi.rv_df.time)), 'left')
