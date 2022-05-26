@@ -54,8 +54,7 @@ class RVPlot:
     '''
     def __init__(self, 
                 toi,
-                figsize=(12,14), 
-                margin=1, # Units of days
+                figsize=(12,14),
                 ylabelpad=10,
                 plot_random_orbit_draws=False, # If true, plot random realizations of the phase-folded RV curve using the posteriors of the model fit.
                 num_random_orbit_draws=25, # Number of random draws to plot.
@@ -68,7 +67,6 @@ class RVPlot:
     
         self.toi = toi
         self.figsize = figsize
-        self.margin = margin
         self.ylabelpad = ylabelpad
         self.plot_random_orbit_draws = plot_random_orbit_draws
         self.num_random_orbit_draws = num_random_orbit_draws

@@ -20,17 +20,14 @@ class SvaluePlot():
     '''
     def __init__(self, 
                 toi,
-                figsize=(12,14), 
-                margin=1, # Units of days
+                figsize=(12,14),
                 ylabelpad=10,
                 save_format='.png',
                 save_dpi=400,
-                tel_marker_mapper=None,
-                rms_yscale_phase_folded_panels=False,
+                tel_marker_mapper=None
                 ) -> None:
         self.toi = toi
         self.figsize = figsize
-        self.margin = margin
         self.ylabelpad = ylabelpad
         self.save_format = save_format
         self.save_dpi = save_dpi
@@ -43,8 +40,6 @@ class SvaluePlot():
                 assert tel in tel_marker_mapper.keys(), "RV instrument not found in tel_marker_mapper dictionary."
             self.tel_marker_mapper = tel_marker_mapper
         
-        self.rms_yscale_phase_folded_panels = rms_yscale_phase_folded_panels # If true, set the Y axis limits for the phase-folded panels based on the residuals rms.
-
     def gp_plot(self, save_fname=None, overwrite=False):
         '''
         Make the GP plot!
