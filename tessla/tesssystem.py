@@ -854,10 +854,12 @@ class TessSystem:
                 
                 gp_svalue_params = [log_rho_svalue_gp]
                 gp_svalue_dict = {}
-                # Offset and jitter for svalues
-                gp_svalue_mean = pm.Uniform("gp_svalue_mean", lower=0, upper=1)
+                
+                # Jitter for svalues
+                gp_svalue_mean = pm.Uniform("gp_svalue_mean", lower=0, upper=1) # Mean for the GP rather than gamma values for each instrument since Svalue is not necessarily distributed around 0.
                 log_jitter_svalue_gp = pm.Normal("log_jitter_svalue_gp", mu=np.log(np.std(self.svalue_df.svalue.values)), sd=2, shape=self.num_svalue_inst) # Each Svalue GP gets a jitter term
                 diag_svalue = tt.zeros(len(self.svalue_df))
+                
                 # GP for each Svalue instrument
                 for i, tel in enumerate(self.svalue_inst_names):
                     tel_mask = self.svalue_df['tel'].values == tel
