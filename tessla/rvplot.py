@@ -9,10 +9,7 @@ from scipy.stats import binned_statistic
 # Exoplanet stuff
 import exoplanet as xo
 import theano
-
-from tessla.plotting_utils import plot_periodogram
 theano.config.gcc.cxxflags = "-Wno-c++11-narrowing" # Not exactly sure what this flag change does.
-import aesara_theano_fallback.tensor as tt
 
 # Plotting stuff
 from matplotlib import rcParams
@@ -21,8 +18,7 @@ import matplotlib.pyplot as plt
 from matplotlib import gridspec
 from matplotlib.ticker import MultipleLocator
 
-import datetime
-from astropy.time import Time
+from tessla.plotting_utils import add_ymd_label
 
 DEFAULT_MARKER_MAPPER = {
     'j':{
@@ -91,45 +87,6 @@ class RVPlot:
             self.tel_marker_mapper = tel_marker_mapper
         
         self.rms_yscale_phase_folded_panels = rms_yscale_phase_folded_panels # If true, set the Y axis limits for the phase-folded panels based on the residuals rms.
-
-    def __add_ymd_label(self, fig, ax, xlims, left_or_right):
-        '''
-        Add a ymd label to the top panel left-most and right-most chunks.
-        '''
-        fig.canvas.draw() # Needed in order to get back the ticklabels otherwise they'll be empty
-
-        ax_yrs = ax.secondary_xaxis('top')
-        ax_yrs.set_xticks(ax.get_xticks())
-        ax_yrs_ticks = ax.get_xticks()
-        ax_yrs_ticklabels = ax.get_xticklabels()
-        tick_mask = (ax_yrs_ticks > xlims[0]) & (ax_yrs_ticks < xlims[-1])
-        ax_yrs_ticks = ax_yrs_ticks[tick_mask]
-        ax_yrs_ticklabels = [label.get_text() for i,label in enumerate(ax_yrs_ticklabels) if tick_mask[i]]
-
-        bjd_date = None
-        ind = None
-        if left_or_right == 'left':
-            ind = 0
-            bjd_date = ax_yrs_ticks[ind] + self.toi.bjd_ref
-        elif left_or_right == 'right':
-            ind = -1
-            bjd_date = ax_yrs_ticks[ind] + self.toi.bjd_ref
-        else:
-            assert False, "Choose left or right chunk."
-        ymd_date = Time(bjd_date, format='jd', scale='utc').ymdhms
-        month_number = ymd_date['month'] # Next few lines get the abbreviation for the month's name from the month's number
-        datetime_obj = datetime.datetime.strptime(f"{month_number}", "%m")
-        month_name = datetime_obj.strftime("%b")
-        day = ymd_date['day']
-        year = ymd_date['year']
-        
-        ax_yrs.set_xticks(ax_yrs_ticks)
-        ax_yrs_ticklabels = [''] * len(ax_yrs_ticklabels)
-        ax_yrs_ticklabels[ind] = f"{year}-{month_name}-{day}"
-        ax_yrs.set_xticklabels(ax_yrs_ticklabels)
-
-        # Make the ticks themselves invisible 
-        ax_yrs.tick_params(axis="x", top=False, bottom=False, pad=1.0)
 
     def plot(self, save_fname=None, overwrite=False):
         '''
@@ -209,7 +166,7 @@ class RVPlot:
         
         # Plot the data
         for tel in self.toi.rv_inst_names:
-            mask = self.toi.rv_df.tel == tel
+            mask = self.toi.rv_df.tel.values == tel
             ax1.errorbar(self.toi.rv_df.time[mask], 
                         self.toi.rv_df.mnvel[mask] - self.toi.extras['mean_rv'][mask], 
                         self.toi.extras['err_rv'][mask], fmt='.', **self.tel_marker_mapper[tel])
@@ -227,8 +184,8 @@ class RVPlot:
                 ax1.plot(self.toi.t_rv, full_mod_pred, color='blue', lw=1)
 
         # Add label for years to the upper axis
-        self.__add_ymd_label(fig, ax1, (np.min(self.toi.rv_df.time), np.max(self.toi.rv_df.time)), 'left')
-        self.__add_ymd_label(fig, ax1, (np.min(self.toi.rv_df.time), np.max(self.toi.rv_df.time)), 'right')
+        add_ymd_label(self.toi.bjd_ref, fig, ax1, (np.min(self.toi.rv_df.time), np.max(self.toi.rv_df.time)), 'left')
+        add_ymd_label(self.toi.bjd_ref, fig, ax1, (np.min(self.toi.rv_df.time), np.max(self.toi.rv_df.time)), 'right')
         
         # Top panel housekeeping
         ax1.set_xticklabels([])
@@ -250,7 +207,7 @@ class RVPlot:
         # Plot the residuals about the full model
         residuals = self.toi.rv_df.mnvel - self.toi.extras['full_rv_model'] - self.toi.extras['mean_rv']
         for tel in self.toi.rv_inst_names:
-            mask = self.toi.rv_df.tel == tel
+            mask = self.toi.rv_df.tel.values == tel
             ax2.errorbar(self.toi.rv_df.time[mask], 
                         residuals[mask], 
                         self.toi.extras['err_rv'][mask], fmt='.', **self.tel_marker_mapper[tel])
@@ -318,7 +275,7 @@ class RVPlot:
 
             # Plot the data
             for tel in self.toi.rv_inst_names:
-                mask = self.toi.rv_df.tel == tel
+                mask = self.toi.rv_df.tel.values == tel
                 ax0.errorbar(x_fold[mask], 
                             self.toi.rv_df.mnvel[mask] - self.toi.extras['mean_rv'][mask] - other_rv[mask], 
                             self.toi.extras['err_rv'][mask], fmt='.', **self.tel_marker_mapper[tel])
@@ -373,7 +330,7 @@ class RVPlot:
             ax1 = fig.add_subplot(sps[1, i])
             phase_folded_resid_axes.append(ax1)
             for tel in self.toi.rv_inst_names:
-                mask = self.toi.rv_df.tel == tel
+                mask = self.toi.rv_df.tel.values == tel
                 ax1.errorbar(x_fold[mask],
                             residuals[mask], 
                             self.toi.extras['err_rv'][mask], fmt='.', **self.tel_marker_mapper[tel])

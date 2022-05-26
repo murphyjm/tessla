@@ -46,6 +46,7 @@ RV_INST_NAME_MAPPER = {
     'j':'HIRES',
     'hires_j':'HIRES'
 }
+VALID_SVALUE_INST = ['HIRES']
 
 T0_BTJD = 2457000
 
@@ -149,11 +150,22 @@ class TessSystem:
                                                                                                                rv_df['tel'].values, 
                                                                                                                binsize=self.rv_bin_size)
             if self.include_svalue_gp:
-                foo, rv_df_binned['svalue'], rv_df_binned['svalue_err'], bar = bintels(rv_df['time'].values, 
-                                                                                        rv_df['svalue'].values, 
-                                                                                        rv_df['svalue_err'].values, 
-                                                                                        rv_df['tel'].values, 
-                                                                                        binsize=self.rv_bin_size)
+                # Pick and choose which instruments have valid Svalues
+                valid_svalue_mask = np.zeros(len(rv_df), dtype=bool)
+                for tel in VALID_SVALUE_INST:
+                    valid_svalue_mask |= rv_df['tel'].values == tel
+                self.svalue_inst_names = np.unique(rv_df.loc[valid_svalue_mask, 'tel'])
+
+                svalue_df = rv_df[valid_svalue_mask].reset_index(drop=True)
+                svalue_df_binned = pd.DataFrame()
+                svalue_df_binned['time'], svalue_df_binned['svalue'], svalue_df_binned['svalue_err'], svalue_df_binned['tel'] = bintels(svalue_df['time'].values, 
+                                                                                                                                        svalue_df['svalue'].values, 
+                                                                                                                                        svalue_df['svalue_err'].values, 
+                                                                                                                                        svalue_df['tel'].values, 
+                                                                                                                                        binsize=self.rv_bin_size)
+                svalue_df_binned = svalue_df_binned.sort_values(by='time').reset_index(drop=True)
+                self.svalue_df = svalue_df_binned
+                self.num_svalue_inst = len(self.svalue_inst_names)
                 if self.verbose:
                     print("Including GP model using S-Values")
             rv_df_binned = rv_df_binned.sort_values(by='time').reset_index(drop=True)
@@ -300,6 +312,8 @@ class TessSystem:
 
         if self.is_joint_model:
             self.rv_df.time = self.rv_df.time - self.bjd_ref
+            if self.include_svalue_gp:
+                self.svalue_df.time = self.svalue_df.time - self.bjd_ref
 
         self.lc = lc
 
@@ -534,21 +548,22 @@ class TessSystem:
         noise_params = [log_sigma_dec_gp, log_rho_gp]
         return noise_params, kernel
 
-    def __get_rotation_kernel(self):
+    def __get_rotation_kernel(self, suffix=''):
         '''
         Create a rotation term for the GP kernel.
         '''
-        # TODO:
-        # sigma_rot_gp = pm.InverseGamma("sigma_rot_gp", alpha=3.0, beta=2*np.std(y[mask]))
-        # CONFUSED
+        if suffix != '' and suffix[0] != '_':
+            # Prepend an underscore if needed.
+            suffix = f"_{suffix}"
+
         sigma_rot_gp = pm.InverseGamma(
-            "sigma_rot_gp", **pmx.estimate_inverse_gamma_parameters(1, 5) # MAGIC NUMBERS FROM EXOPLANET TUTORIAL
+            f"sigma_rot_gp{suffix}", **pmx.estimate_inverse_gamma_parameters(1, 5)
         )
-        log_prot = pm.Normal("log_prot", mu=np.log(self.rot_per), sd=np.log(5))
-        prot = pm.Deterministic("prot", tt.exp(log_prot))
-        log_Q0 = pm.Normal("log_Q0", mu=0, sd=2)
-        log_dQ = pm.Normal("log_dQ", mu=0, sd=2)
-        f = pm.Uniform("f", lower=0.01, upper=1)
+        log_prot = pm.Normal(f"log_prot{suffix}", mu=np.log(self.rot_per), sd=np.log(5))
+        prot = pm.Deterministic(f"prot{suffix}", tt.exp(log_prot))
+        log_Q0 = pm.Normal(f"log_Q0{suffix}", mu=0, sd=2)
+        log_dQ = pm.Normal(f"log_dQ{suffix}", mu=0, sd=2)
+        f = pm.Uniform(f"f{suffix}", lower=0.01, upper=1)
         kernel = terms.RotationTerm(sigma=sigma_rot_gp, period=prot, Q0=tt.exp(log_Q0), dQ=tt.exp(log_dQ), f=f)
         noise_params = [sigma_rot_gp, log_prot, prot, log_Q0, log_dQ, f]
         return noise_params, kernel
@@ -738,6 +753,10 @@ class TessSystem:
         '''
         t_rv = np.linspace(self.rv_df.time.min() - t_rv_buffer, self.rv_df.time.max() + t_rv_buffer, n_eval_points)
         self.t_rv = t_rv
+        if self.include_svalue_gp:
+            t_svalue = np.linspace(self.svalue_df.time.min() - t_rv_buffer, self.svalue_df.time.max() + t_rv_buffer, n_eval_points)
+            self.t_svalue = t_svalue
+
         with pm.Model() as model:
             mean_flux = pm.Normal("mean_flux", 0.0, sd=10.)
             u = xo.QuadLimbDark("u")
@@ -750,7 +769,7 @@ class TessSystem:
             assert_msg = "Not all of the transiting planets use the same BJD reference date as the TOI object so the t0 value will be incorrect."
             assert all([planet.bjd_ref == self.bjd_ref for planet in self.transiting_planets.values()]), assert_msg
             t0 = pm.Normal("t0", mu=np.array([planet.t0 for planet in self.transiting_planets.values()]), sd=1, shape=self.n_transiting)
-            log_K = pm.Normal("log_K", mu=np.log(np.std(self.rv_df.mnvel) * np.ones(self.n_transiting)), sigma=10, shape=self.n_transiting)
+            log_K = pm.Normal("log_K", mu=np.log(np.std(self.rv_df.mnvel) * np.ones(self.n_transiting)), sigma=np.log(50), shape=self.n_transiting)
             K = pm.Deterministic("K", tt.exp(log_K))
             log_period = pm.Normal("log_period", mu=np.log(np.array([planet.per for planet in self.transiting_planets.values()])), sd=1, shape=self.n_transiting)
             period = pm.Deterministic("period", tt.exp(log_period))
@@ -810,8 +829,10 @@ class TessSystem:
             for tel in self.rv_inst_names:
                 mask = self.rv_df['tel'] == tel
                 gamma_rv_list.append(np.median(self.rv_df.loc[mask, 'mnvel']))
-            gamma_rv = pm.Normal("gamma_rv", mu=np.array(gamma_rv_list), sigma=10, shape=self.num_rv_inst)
-            sigma_rv = pm.HalfNormal("sigma_rv", sigma=10, shape=self.num_rv_inst)
+            BoundedNormalGamma = pm.Bound(pm.Normal, lower=-15, upper=15)
+            gamma_rv = BoundedNormalGamma("gamma_rv", mu=np.array(gamma_rv_list), sigma=10, shape=self.num_rv_inst)
+            BoundedNormalSigma = pm.Bound(pm.Normal, lower=0, upper=10)
+            sigma_rv = BoundedNormalSigma("sigma_rv", mu=5, sd=5, shape=self.num_rv_inst)
             mean_rv = tt.zeros(len(self.rv_df))
             diag_rv = tt.zeros(len(self.rv_df))
             for i, tel in enumerate(self.rv_inst_names):
@@ -826,23 +847,39 @@ class TessSystem:
 
             # RV GP if specified
             if self.include_svalue_gp:
-                # Svalue GP
-                log_sigma_dec_sval_gp = pm.Normal("log_sigma_dec_sval_gp", mu=0., sigma=10)
-                BoundedNormal = pm.Bound(pm.Normal, lower=np.log(1), upper=np.log(50))
-                log_rho_sval_gp = BoundedNormal("log_rho_sval_gp", mu=np.log(10), sd=np.log(50))
-                kernel_sval = terms.SHOTerm(sigma=tt.exp(log_sigma_dec_sval_gp), rho=tt.exp(log_rho_sval_gp), Q=1/2) # Critically-damped oscillator
-                gp_sval_params = [log_sigma_dec_sval_gp, log_rho_sval_gp]
-                sval_mask = ~np.isnan(self.rv_df['svalue'])
-                gp_sval = GaussianProcess(kernel_sval, t=self.rv_df.loc[sval_mask, 'time'].values, diag=(self.rv_df.loc[sval_mask, 'svalue_err'].values)**2)
-                gp_sval.marginal("gp_sval", observed=self.rv_df.loc[sval_mask, 'svalue'].values)
+                # This parameter shared by all GPs
+                BoundedNormalRhoSvalue = pm.Bound(pm.Normal, lower=np.log(1), upper=np.log(50))
+                log_rho_svalue_gp = BoundedNormalRhoSvalue("log_rho_svalue_gp", mu=np.log(10), sd=np.log(50))
                 
+                gp_svalue_params = [log_rho_svalue_gp]
+                gp_svalue_dict = {}
+                log_jitter_svalue_gp = pm.Normal("log_jitter_svalue_gp", mu=np.log(np.std(self.svalue_df.svalues.values)), sd=2, shape=self.num_svalue_inst) # Each Svalue GP gets a jitter term
+                diag_svalue = tt.zeros(len(self.svalue_df))
+                # GP for each Svalue instrument
+                for i, tel in enumerate(self.svalue_inst_names):
+                    tel_mask = self.svalue_df['tel'].values == tel
+                    diag_svalue += ((self.svalue_df.svalue_err.values)**2 + tt.exp(2 * log_jitter_svalue_gp[i])) * np.array(self.svalue_df['tel'] == tel, dtype=int)
+                    
+                    # Kernel specific
+                    log_sigma_dec_svalue_gp = pm.Normal(f"log_sigma_dec_svalue_gp_{tel}", mu=0., sigma=10)
+                    gp_svalue_params += [log_sigma_dec_svalue_gp]
+                    kernel_svalue = terms.SHOTerm(sigma=tt.exp(log_sigma_dec_svalue_gp), rho=tt.exp(log_rho_svalue_gp), Q=1/2) # Critically-damped oscillator
+                    
+                    gp_svalue = GaussianProcess(kernel_svalue, t=self.svalue_df.loc[tel_mask, 'time'].values, diag=(self.svalue_df.loc[tel_mask, 'svalue_err'].values)**2 + tt.exp(2 * log_jitter_svalue_gp[i]))
+                    gp_svalue.marginal(f"gp_svalue_{tel}", observed=self.svalue_df.loc[tel_mask, 'svalue'].values)
+                    gp_svalue_dict[tel] = gp_svalue
+
                 gp_rv_params = []
                 gp_rv_dict = {}
+                # GP for each RV instrument
                 for tel in self.rv_inst_names:
                     tel_mask = self.rv_df['tel'].values == tel
+                    
+                    # Kernel specific
                     log_sigma_dec_rv_gp = pm.Normal(f"log_sigma_dec_rv_gp_{tel}", mu=0., sigma=10) # Different amplitude for each instrument.
-                    kernel_rv = terms.SHOTerm(sigma=tt.exp(log_sigma_dec_rv_gp), rho=tt.exp(log_rho_sval_gp), Q=1/2) # Critically-damped oscillator. Shares periodic length scale with svalues.
                     gp_rv_params += [log_sigma_dec_rv_gp]
+                    kernel_rv = terms.SHOTerm(sigma=tt.exp(log_sigma_dec_rv_gp), rho=tt.exp(log_rho_svalue_gp), Q=1/2) # Critically-damped oscillator. Shares periodic length scale with svalues.
+                    
                     gp_rv = GaussianProcess(kernel_rv, t=self.rv_df.loc[tel_mask, 'time'].values, diag=diag_rv[tel_mask])
                     gp_rv.marginal(f"gp_rv_{tel}", observed=resid_rv[tel_mask])
                     gp_rv_dict[tel] = gp_rv
@@ -863,17 +900,18 @@ class TessSystem:
                 start = model.test_point
             # Order of parameters to be optimized is a bit arbitrary
             map_soln = pmx.optimize(start=start, vars=[log_sigma_lc])
+            map_soln = pmx.optimize(start=map_soln, vars=[log_K])
             if self.rv_trend:
                 map_soln = pmx.optimize(start=map_soln, vars=[trend_rv])
             map_soln = pmx.optimize(start=map_soln, vars=[gamma_rv])
-            map_soln = pmx.optimize(start=map_soln, vars=[log_K])
             if self.include_svalue_gp:
-                map_soln = pmx.optimize(start=map_soln, vars=gp_sval_params)
+                map_soln = pmx.optimize(start=map_soln, vars=gp_svalue_params)
                 map_soln = pmx.optimize(start=map_soln, vars=gp_rv_params)
             map_soln = pmx.optimize(start=map_soln, vars=[sigma_rv])
             map_soln = pmx.optimize(start=map_soln, vars=[log_ror])
             map_soln = pmx.optimize(start=map_soln, vars=[b])
             map_soln = pmx.optimize(start=map_soln, vars=[log_period, t0])
+            map_soln = pmx.optimize(start=map_soln, vars=[log_K])
             map_soln = pmx.optimize(start=map_soln, vars=[u])
             map_soln = pmx.optimize(start=map_soln, vars=[log_ror])
             map_soln = pmx.optimize(start=map_soln, vars=[b])
@@ -906,15 +944,25 @@ class TessSystem:
                             full_rv_model_pred]
             
             if self.include_svalue_gp:
-                extras_labels += ['gp_sval']
-                extras_vars += [gp_sval.predict(self.rv_df.loc[sval_mask, 'svalue'].values)]
+                extras_labels += ['log_jitter_svalue_gp']
+                extras_vars += np.sqrt(diag_svalue)
+                for tel in self.svalue_inst_names:
+                    tel_mask = self.svalue_df['tel'].values == tel
+                    extras_labels += [f'gp_svalue_{tel}']
+                    extras_vars += [gp_svalue_dict[tel].predict(self.svalue_df.loc[tel_mask, 'svalue'].values)]
+                    # For plotting
+                    pred_svalue_mu, pred_svalue_var = gp_svalue_dict[tel].predict(self.svalue_df.loc[tel_mask, 'svalue'].values, t=t_svalue, return_var=True)
+                    extras_labels += [f'gp_svalue_pred_{tel}', f'gp_svalue_pred_stdv_{tel}']
+                    extras_vars += [pred_svalue_mu, np.sqrt(pred_svalue_var)]
+
                 for tel in self.rv_inst_names:
                     tel_mask = self.rv_df['tel'].values == tel
                     extras_labels += [f'gp_rv_{tel}']
                     extras_vars += [gp_rv_dict[tel].predict(resid_rv[tel_mask], include_mean=False)]
-                    pred_mu, pred_var = gp_rv_dict[tel].predict(resid_rv[tel_mask], t=t_rv, include_mean=False, return_var=True)
+                    # For plotting
+                    pred_rv_mu, pred_rv_var = gp_rv_dict[tel].predict(resid_rv[tel_mask], t=t_rv, include_mean=False, return_var=True)
                     extras_labels += [f'gp_rv_pred_{tel}', f'gp_rv_pred_stdv_{tel}']
-                    extras_vars += [pred_mu, np.sqrt(pred_var)]
+                    extras_vars += [pred_rv_mu, np.sqrt(pred_rv_var)]
 
             extras = dict(
                 zip(extras_labels,

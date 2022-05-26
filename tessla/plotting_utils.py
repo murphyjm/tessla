@@ -5,6 +5,8 @@ import numpy as np
 from scipy.stats import binned_statistic
 from scipy.signal import savgol_filter, find_peaks
 from tqdm import tqdm
+import datetime
+from astropy.time import Time
 
 from tessla.tesslacornerplot import TesslaCornerPlot
 
@@ -405,3 +407,42 @@ def phase_plot(out_dir, title, ylabel, x, y, per, t0, **kwargs):
     fig.savefig(os.path.join(out_dir, save_fname), facecolor='white', bbox_inches='tight', dpi=300)
     plt.close()
     print(f"Phase plot saved to {out_dir}/{save_fname}")
+
+def add_ymd_label(bjd_ref, fig, ax, xlims, left_or_right):
+    '''
+    Add a ymd label to the top panel left-most and right-most chunks.
+    '''
+    fig.canvas.draw() # Needed in order to get back the ticklabels otherwise they'll be empty
+
+    ax_yrs = ax.secondary_xaxis('top')
+    ax_yrs.set_xticks(ax.get_xticks())
+    ax_yrs_ticks = ax.get_xticks()
+    ax_yrs_ticklabels = ax.get_xticklabels()
+    tick_mask = (ax_yrs_ticks > xlims[0]) & (ax_yrs_ticks < xlims[-1])
+    ax_yrs_ticks = ax_yrs_ticks[tick_mask]
+    ax_yrs_ticklabels = [label.get_text() for i,label in enumerate(ax_yrs_ticklabels) if tick_mask[i]]
+
+    bjd_date = None
+    ind = None
+    if left_or_right == 'left':
+        ind = 0
+        bjd_date = ax_yrs_ticks[ind] + bjd_ref
+    elif left_or_right == 'right':
+        ind = -1
+        bjd_date = ax_yrs_ticks[ind] + bjd_ref
+    else:
+        assert False, "Choose left or right chunk."
+    ymd_date = Time(bjd_date, format='jd', scale='utc').ymdhms
+    month_number = ymd_date['month'] # Next few lines get the abbreviation for the month's name from the month's number
+    datetime_obj = datetime.datetime.strptime(f"{month_number}", "%m")
+    month_name = datetime_obj.strftime("%b")
+    day = ymd_date['day']
+    year = ymd_date['year']
+    
+    ax_yrs.set_xticks(ax_yrs_ticks)
+    ax_yrs_ticklabels = [''] * len(ax_yrs_ticklabels)
+    ax_yrs_ticklabels[ind] = f"{year}-{month_name}-{day}"
+    ax_yrs.set_xticklabels(ax_yrs_ticklabels)
+
+    # Make the ticks themselves invisible 
+    ax_yrs.tick_params(axis="x", top=False, bottom=False, pad=1.0)
