@@ -20,7 +20,7 @@ class SvaluePlot():
     '''
     def __init__(self, 
                 toi,
-                figsize=(12,14),
+                figsize=(6,7),
                 ylabelpad=10,
                 save_format='.png',
                 save_dpi=400,
@@ -76,10 +76,9 @@ class SvaluePlot():
         # Create the figure object
         fig = plt.figure(figsize=self.figsize)
 
-        # Create the GridSpec objects
-        gs0 = gridspec.GridSpec(1, 1, figure=fig, height_ratios=[1])
+        # Create the GridSpec object
         heights = [1, 0.25]
-        sps1, sps2 = gridspec.GridSpecFromSubplotSpec(2, 1, subplot_spec=gs0, height_ratios=heights, hspace=0.1)
+        sps1, sps2 = gridspec.GridSpec(2, 1, figure=fig, height_ratios=heights, hspace=0.1)
         
         ################################################################################################
         ########################### TOP PANEL: Svalues and full Svalue model ###########################
@@ -91,17 +90,18 @@ class SvaluePlot():
         for tel in self.toi.svalue_inst_names:
             tel_mask = self.toi.svalue_df.tel.values == tel
             ax1.errorbar(self.toi.svalue_df.time[tel_mask],
-                        self.toi.svalue_df.svalue[tel_mask], # TODO: Add Svalue offsets for each svalue instrument? But they only come up in a GP model, and they each have different amplitudes. So should be okay to exclude
+                        self.toi.svalue_df.svalue[tel_mask],
                         self.toi.extras['err_svalue'][tel_mask], fmt='.', **self.tel_marker_mapper[tel])
 
         # Plot the SValue model
         for tel in self.toi.svalue_inst_names:
             # Plot the GP error envelope and the solution
-            ax1.fill_between(self.toi.t_svalue, self.toi.extras[f'gp_svalue_pred_{tel}'] + self.toi.extras[f'gp_svalue_pred_stdv_{tel}'], 
-                                                self.toi.extras[f'gp_svalue_pred_{tel}'] - self.toi.extras[f'gp_svalue_pred_stdv_{tel}'], 
+            gp_mod = self.toi.extras[f'gp_svalue_pred_{tel}']
+            ax1.fill_between(self.toi.t_svalue, gp_mod + self.toi.extras[f'gp_svalue_pred_stdv_{tel}'], 
+                                                gp_mod - self.toi.extras[f'gp_svalue_pred_stdv_{tel}'], 
                                                 alpha=0.3, 
                                                 color=self.tel_marker_mapper[tel]['color'])
-            ax1.plot(self.toi.t_svalue, self.toi.extras[f'gp_svalue_pred_{tel}'], color='blue', lw=1)
+            ax1.plot(self.toi.t_svalue, gp_mod, color='blue', lw=1)
 
         # Add label for years to the upper axis
         add_ymd_label(self.toi.bjd_ref, fig, ax1, (np.min(self.toi.svalue_df.time), np.max(self.toi.svalue_df.time)), 'left')
@@ -110,9 +110,9 @@ class SvaluePlot():
         # Top panel housekeeping
         ax1.set_xticklabels([])
         ax1.set_ylabel("$S_\mathrm{HK}$ [dex]", fontsize=14, labelpad=self.ylabelpad)
-        major, minor = self.__get_ytick_spacing()
-        ax1.yaxis.set_major_locator(MultipleLocator(major))
-        ax1.yaxis.set_minor_locator(MultipleLocator(minor))
+        # major, minor = self.__get_ytick_spacing()
+        # ax1.yaxis.set_major_locator(MultipleLocator(major))
+        # ax1.yaxis.set_minor_locator(MultipleLocator(minor))
         ax1.legend(fontsize=14, loc='upper right')
 
         ################################################################################################

@@ -829,10 +829,10 @@ class TessSystem:
             for tel in self.rv_inst_names:
                 mask = self.rv_df['tel'] == tel
                 gamma_rv_list.append(np.median(self.rv_df.loc[mask, 'mnvel']))
-            BoundedNormalGamma = pm.Bound(pm.Normal, lower=-15, upper=15)
-            gamma_rv = BoundedNormalGamma("gamma_rv", mu=np.array(gamma_rv_list), sigma=10, shape=self.num_rv_inst)
-            BoundedNormalSigma = pm.Bound(pm.Normal, lower=0, upper=10)
-            sigma_rv = BoundedNormalSigma("sigma_rv", mu=5, sd=5, shape=self.num_rv_inst)
+            # BoundedNormalGamma = pm.Bound(pm.Normal, lower=-15, upper=15)
+            gamma_rv = pm.Uniform("gamma_rv", lower=-20, upper=20, shape=self.num_rv_inst) # BoundedNormalGamma("gamma_rv", mu=np.array(gamma_rv_list), sigma=10, shape=self.num_rv_inst)
+            # BoundedNormalSigma = pm.Bound(pm.Normal, lower=0, upper=20)
+            sigma_rv = pm.Uniform("sigma_rv", lower=0, upper=20, shape=self.num_rv_inst) # BoundedNormalSigma("sigma_rv", mu=5, sd=5, shape=self.num_rv_inst)
             mean_rv = tt.zeros(len(self.rv_df))
             diag_rv = tt.zeros(len(self.rv_df))
             for i, tel in enumerate(self.rv_inst_names):
@@ -843,7 +843,8 @@ class TessSystem:
             planet_rv, bkg_rv, full_rv_model = self.__get_rv_model(self.rv_df.time, K, orbit, trend_rv)
             planet_rv_pred, bkg_rv_pred, full_rv_model_pred = self.__get_rv_model(t_rv, K, orbit, trend_rv)
             resid_rv = self.rv_df.mnvel.values - mean_rv - full_rv_model
-            pm.Normal("obs_rv", mu=0, sd=tt.sqrt(diag_rv), observed=resid_rv)
+            if not self.include_svalue_gp:
+                pm.Normal("obs_rv", mu=0, sd=tt.sqrt(diag_rv), observed=resid_rv)
 
             # RV GP if specified
             if self.include_svalue_gp:
@@ -853,7 +854,9 @@ class TessSystem:
                 
                 gp_svalue_params = [log_rho_svalue_gp]
                 gp_svalue_dict = {}
-                log_jitter_svalue_gp = pm.Normal("log_jitter_svalue_gp", mu=np.log(np.std(self.svalue_df.svalues.values)), sd=2, shape=self.num_svalue_inst) # Each Svalue GP gets a jitter term
+                # Offset and jitter for svalues
+                gp_svalue_mean = pm.Uniform("gp_svalue_mean", lower=0, upper=1)
+                log_jitter_svalue_gp = pm.Normal("log_jitter_svalue_gp", mu=np.log(np.std(self.svalue_df.svalue.values)), sd=2, shape=self.num_svalue_inst) # Each Svalue GP gets a jitter term
                 diag_svalue = tt.zeros(len(self.svalue_df))
                 # GP for each Svalue instrument
                 for i, tel in enumerate(self.svalue_inst_names):
@@ -865,7 +868,7 @@ class TessSystem:
                     gp_svalue_params += [log_sigma_dec_svalue_gp]
                     kernel_svalue = terms.SHOTerm(sigma=tt.exp(log_sigma_dec_svalue_gp), rho=tt.exp(log_rho_svalue_gp), Q=1/2) # Critically-damped oscillator
                     
-                    gp_svalue = GaussianProcess(kernel_svalue, t=self.svalue_df.loc[tel_mask, 'time'].values, diag=(self.svalue_df.loc[tel_mask, 'svalue_err'].values)**2 + tt.exp(2 * log_jitter_svalue_gp[i]))
+                    gp_svalue = GaussianProcess(kernel_svalue, mean=gp_svalue_mean, t=self.svalue_df.loc[tel_mask, 'time'].values, diag=(self.svalue_df.loc[tel_mask, 'svalue_err'].values)**2 + tt.exp(2 * log_jitter_svalue_gp[i]))
                     gp_svalue.marginal(f"gp_svalue_{tel}", observed=self.svalue_df.loc[tel_mask, 'svalue'].values)
                     gp_svalue_dict[tel] = gp_svalue
 
@@ -878,7 +881,7 @@ class TessSystem:
                     # Kernel specific
                     log_sigma_dec_rv_gp = pm.Normal(f"log_sigma_dec_rv_gp_{tel}", mu=0., sigma=10) # Different amplitude for each instrument.
                     gp_rv_params += [log_sigma_dec_rv_gp]
-                    kernel_rv = terms.SHOTerm(sigma=tt.exp(log_sigma_dec_rv_gp), rho=tt.exp(log_rho_svalue_gp), Q=1/2) # Critically-damped oscillator. Shares periodic length scale with svalues.
+                    kernel_rv = terms.SHOTerm(sigma=tt.exp(log_sigma_dec_rv_gp), rho=tt.exp(log_rho_svalue_gp), Q=1/2) # Underdamped # Critically-damped oscillator when Q=1/2. Shares periodic length scale with svalues.
                     
                     gp_rv = GaussianProcess(kernel_rv, t=self.rv_df.loc[tel_mask, 'time'].values, diag=diag_rv[tel_mask])
                     gp_rv.marginal(f"gp_rv_{tel}", observed=resid_rv[tel_mask])
@@ -944,8 +947,8 @@ class TessSystem:
                             full_rv_model_pred]
             
             if self.include_svalue_gp:
-                extras_labels += ['log_jitter_svalue_gp']
-                extras_vars += np.sqrt(diag_svalue)
+                extras_labels += ['err_svalue', 'gp_svalue_mean']
+                extras_vars += [np.sqrt(diag_svalue), gp_svalue_mean]
                 for tel in self.svalue_inst_names:
                     tel_mask = self.svalue_df['tel'].values == tel
                     extras_labels += [f'gp_svalue_{tel}']
@@ -958,9 +961,9 @@ class TessSystem:
                 for tel in self.rv_inst_names:
                     tel_mask = self.rv_df['tel'].values == tel
                     extras_labels += [f'gp_rv_{tel}']
-                    extras_vars += [gp_rv_dict[tel].predict(resid_rv[tel_mask], include_mean=False)]
+                    extras_vars += [gp_rv_dict[tel].predict(resid_rv[tel_mask])]
                     # For plotting
-                    pred_rv_mu, pred_rv_var = gp_rv_dict[tel].predict(resid_rv[tel_mask], t=t_rv, include_mean=False, return_var=True)
+                    pred_rv_mu, pred_rv_var = gp_rv_dict[tel].predict(resid_rv[tel_mask], t=t_rv, return_var=True)
                     extras_labels += [f'gp_rv_pred_{tel}', f'gp_rv_pred_stdv_{tel}']
                     extras_vars += [pred_rv_mu, np.sqrt(pred_rv_var)]
 
