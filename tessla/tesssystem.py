@@ -76,6 +76,7 @@ class TessSystem:
                 errvel_cut=None, # If a float is provided, cut all mnvel and errvel absolute values above this limit. To get rid of bad data.
                 rv_bin_size=0.33, # Bin RVs collected in the same night (within 8 hours)
                 include_svalue_gp=False, # If true, add a GP simultaneously fit to the RVs and HIRES S-values
+                svalue_gp_kernel='rotation', # Which kernel to use for the GP
                 # General stuff
                 verbose=True, # Print out messages
                 plotting=True, # Create plots as you go
@@ -150,6 +151,8 @@ class TessSystem:
                                                                                                                rv_df['tel'].values, 
                                                                                                                binsize=self.rv_bin_size)
             if self.include_svalue_gp:
+                assert svalue_gp_kernel.lower() in ['rotation', 'exp_decay'], "Svalue/RV GP must have kernel that is either 'rotation' or 'exp_decay'"
+                self.svalue_gp_kernel = svalue_gp_kernel.lower()
                 # Pick and choose which instruments have valid Svalues
                 valid_svalue_mask = np.zeros(len(rv_df), dtype=bool)
                 for tel in VALID_SVALUE_INST:
@@ -157,6 +160,7 @@ class TessSystem:
                 self.svalue_inst_names = np.unique(rv_df.loc[valid_svalue_mask, 'tel'])
 
                 svalue_df = rv_df[valid_svalue_mask].reset_index(drop=True)
+                svalue_df = svalue_df[svalue_df.svalue > 0].reset_index(drop=True) # All Svalues should be > 0.
                 svalue_df_binned = pd.DataFrame()
                 svalue_df_binned['time'], svalue_df_binned['svalue'], svalue_df_binned['svalue_err'], svalue_df_binned['tel'] = bintels(svalue_df['time'].values, 
                                                                                                                                         svalue_df['svalue'].values, 
@@ -167,7 +171,7 @@ class TessSystem:
                 self.svalue_df = svalue_df_binned
                 self.num_svalue_inst = len(self.svalue_inst_names)
                 if self.verbose:
-                    print("Including GP model using S-Values")
+                    print(f"Including GP model using S-Values with a {self.svalue_gp_kernel} kernel.")
             rv_df_binned = rv_df_binned.sort_values(by='time').reset_index(drop=True)
             self.rv_df = rv_df_binned
             self.rv_inst_names = np.unique(rv_df['tel'])
@@ -745,8 +749,11 @@ class TessSystem:
         if self.rv_trend:
             A = np.vander(t - self.rv_trend_time_ref, self.rv_trend_order + 1, increasing=True)# [:, :-1] # Don't use the offset term, we already have instrument offsets.
             bkg = tt.dot(A, trend_rv)
-            
-        return planet_rv, bkg, tt.sum(planet_rv, axis=-1) + bkg
+        
+        if self.n_transiting > 1:
+            return planet_rv, bkg, tt.sum(planet_rv, axis=-1) + bkg
+        else:
+            return planet_rv, bkg, planet_rv + bkg
         
     def __build_joint_model(self, x_phot, y_phot, yerr_phot, start=None, phase_lim=0.3, n_eval_points=500, t_rv_buffer=5):
         '''
@@ -770,6 +777,7 @@ class TessSystem:
             assert all([planet.bjd_ref == self.bjd_ref for planet in self.transiting_planets.values()]), assert_msg
             t0 = pm.Normal("t0", mu=np.array([planet.t0 for planet in self.transiting_planets.values()]), sd=1, shape=self.n_transiting)
             log_K = pm.Normal("log_K", mu=np.log(np.std(self.rv_df.mnvel) * np.ones(self.n_transiting)), sigma=np.log(50), shape=self.n_transiting)
+            # log_K = pm.Normal("log_K", mu=np.log(5) * np.ones(self.n_transiting), sigma=np.log(2), shape=self.n_transiting)
             K = pm.Deterministic("K", tt.exp(log_K))
             log_period = pm.Normal("log_period", mu=np.log(np.array([planet.per for planet in self.transiting_planets.values()])), sd=1, shape=self.n_transiting)
             period = pm.Deterministic("period", tt.exp(log_period))
@@ -829,10 +837,8 @@ class TessSystem:
             for tel in self.rv_inst_names:
                 mask = self.rv_df['tel'] == tel
                 gamma_rv_list.append(np.median(self.rv_df.loc[mask, 'mnvel']))
-            # BoundedNormalGamma = pm.Bound(pm.Normal, lower=-15, upper=15)
-            gamma_rv = pm.Uniform("gamma_rv", lower=-20, upper=20, shape=self.num_rv_inst) # BoundedNormalGamma("gamma_rv", mu=np.array(gamma_rv_list), sigma=10, shape=self.num_rv_inst)
-            # BoundedNormalSigma = pm.Bound(pm.Normal, lower=0, upper=20)
-            sigma_rv = pm.Uniform("sigma_rv", lower=0, upper=20, shape=self.num_rv_inst) # BoundedNormalSigma("sigma_rv", mu=5, sd=5, shape=self.num_rv_inst)
+            gamma_rv = pm.Uniform("gamma_rv", lower=-20, upper=20, shape=self.num_rv_inst)
+            sigma_rv = pm.Uniform("sigma_rv", lower=0, upper=20, shape=self.num_rv_inst)
             mean_rv = tt.zeros(len(self.rv_df))
             diag_rv = tt.zeros(len(self.rv_df))
             for i, tel in enumerate(self.rv_inst_names):
@@ -848,11 +854,17 @@ class TessSystem:
 
             # RV GP if specified
             if self.include_svalue_gp:
-                # This parameter shared by all GPs
-                BoundedNormalRhoSvalue = pm.Bound(pm.Normal, lower=np.log(1), upper=np.log(50))
-                log_rho_svalue_gp = BoundedNormalRhoSvalue("log_rho_svalue_gp", mu=np.log(10), sd=np.log(50))
+                # These parameters shared by all GPs
+                gp_svalue_params = []
+                BoundedNormalProt = pm.Bound(pm.Normal, lower=np.log(1), upper=np.log(50))
+                if self.svalue_gp_kernel == 'rotation':
+                    log_prot_rv_gp = BoundedNormalProt("log_prot_rv_gp", mu=np.log(self.rot_per), sd=np.log(5))
+                    prot_rv_gp = pm.Deterministic("prot_rv_gp", tt.exp(log_prot_rv_gp))
+                    gp_svalue_params += [log_prot_rv_gp]
+                elif self.svalue_gp_kernel == 'exp_decay':
+                    log_rho_svalue_gp = BoundedNormalProt("log_rho_svalue_gp", mu=np.log(10), sd=np.log(50))
+                    gp_svalue_params += [log_rho_svalue_gp]
                 
-                gp_svalue_params = [log_rho_svalue_gp]
                 gp_svalue_dict = {}
                 
                 # Jitter for svalues
@@ -865,11 +877,19 @@ class TessSystem:
                     tel_mask = self.svalue_df['tel'].values == tel
                     diag_svalue += ((self.svalue_df.svalue_err.values)**2 + tt.exp(2 * log_jitter_svalue_gp[i])) * np.array(self.svalue_df['tel'] == tel, dtype=int)
                     
-                    # Kernel specific
-                    log_sigma_dec_svalue_gp = pm.Normal(f"log_sigma_dec_svalue_gp_{tel}", mu=0., sigma=10)
-                    gp_svalue_params += [log_sigma_dec_svalue_gp]
-                    kernel_svalue = terms.SHOTerm(sigma=tt.exp(log_sigma_dec_svalue_gp), rho=tt.exp(log_rho_svalue_gp), Q=1/2) # Critically-damped oscillator
-                    
+                    # Kernels
+                    if self.svalue_gp_kernel == 'rotation':
+                        sigma_gp_svalue = pm.InverseGamma("sigma_gp_svalue", **pmx.estimate_inverse_gamma_parameters(0.001, 1))
+                        log_Q0_gp_svalue = pm.Normal('log_Q0_gp_svalue', mu=0, sd=2)
+                        log_dQ_gp_svalue = pm.Normal('log_dQ_gp_svalue', mu=0, sd=2)
+                        f_gp_svalue = pm.Uniform('f_gp_svalue', lower=0.01, upper=1)
+                        gp_svalue_params += [sigma_gp_svalue, log_Q0_gp_svalue, log_dQ_gp_svalue, f_gp_svalue]
+                        kernel_svalue = terms.RotationTerm(sigma=sigma_gp_svalue, period=prot_rv_gp, Q0=tt.exp(log_Q0_gp_svalue), dQ=tt.exp(log_dQ_gp_svalue), f=f_gp_svalue)
+                    elif self.svalue_gp_kernel == 'exp_decay':
+                        log_sigma_dec_svalue_gp = pm.Normal(f"log_sigma_dec_svalue_gp_{tel}", mu=0., sigma=10)
+                        gp_svalue_params += [log_sigma_dec_svalue_gp]
+                        kernel_svalue = terms.SHOTerm(sigma=tt.exp(log_sigma_dec_svalue_gp), rho=tt.exp(log_rho_svalue_gp), Q=1/2) # Critically-damped oscillator
+
                     gp_svalue = GaussianProcess(kernel_svalue, mean=gp_svalue_mean, t=self.svalue_df.loc[tel_mask, 'time'].values, diag=(self.svalue_df.loc[tel_mask, 'svalue_err'].values)**2 + tt.exp(2 * log_jitter_svalue_gp[i]))
                     gp_svalue.marginal(f"gp_svalue_{tel}", observed=self.svalue_df.loc[tel_mask, 'svalue'].values)
                     gp_svalue_dict[tel] = gp_svalue
@@ -877,13 +897,25 @@ class TessSystem:
                 gp_rv_params = []
                 gp_rv_dict = {}
                 # GP for each RV instrument
+                # These params shared by RV instruments
+                if self.svalue_gp_kernel == 'rotation':
+                    log_Q0_gp_rv = pm.Normal('log_Q0_gp_rv', mu=0, sd=2)
+                    log_dQ_gp_rv = pm.Normal('log_dQ_gp_rv', mu=0, sd=2)
+                    f_gp_rv = pm.Uniform('f_gp_rv', lower=0.01, upper=1)
+                    gp_svalue_params += [log_Q0_gp_rv, log_dQ_gp_rv, f_gp_rv]
+
                 for tel in self.rv_inst_names:
                     tel_mask = self.rv_df['tel'].values == tel
                     
-                    # Kernel specific
-                    log_sigma_dec_rv_gp = pm.Normal(f"log_sigma_dec_rv_gp_{tel}", mu=0., sigma=10) # Different amplitude for each instrument.
-                    gp_rv_params += [log_sigma_dec_rv_gp]
-                    kernel_rv = terms.SHOTerm(sigma=tt.exp(log_sigma_dec_rv_gp), rho=tt.exp(log_rho_svalue_gp), Q=1/2) # Underdamped # Critically-damped oscillator when Q=1/2. Shares periodic length scale with svalues.
+                    # Kernels
+                    if self.svalue_gp_kernel == 'rotation':
+                        sigma_gp_rv = pm.InverseGamma(f"sigma_gp_rv_{tel}", **pmx.estimate_inverse_gamma_parameters(0.001, 1))
+                        gp_svalue_params += [sigma_gp_rv]
+                        kernel_rv = terms.RotationTerm(sigma=sigma_gp_rv, period=prot_rv_gp, Q0=tt.exp(log_Q0_gp_rv), dQ=tt.exp(log_dQ_gp_rv), f=f_gp_rv)
+                    elif self.svalue_gp_kernel == 'exp_decay':
+                        log_sigma_dec_rv_gp = pm.Normal(f"log_sigma_dec_rv_gp_{tel}", mu=0., sigma=10) # Different amplitude for each instrument.
+                        gp_rv_params += [log_sigma_dec_rv_gp]
+                        kernel_rv = terms.SHOTerm(sigma=tt.exp(log_sigma_dec_rv_gp), rho=tt.exp(log_rho_svalue_gp), Q=1/2) # Critically-damped oscillator when Q=1/2. Shares periodic length scale with svalues.
                     
                     gp_rv = GaussianProcess(kernel_rv, t=self.rv_df.loc[tel_mask, 'time'].values, diag=diag_rv[tel_mask])
                     gp_rv.marginal(f"gp_rv_{tel}", observed=resid_rv[tel_mask])
@@ -910,8 +942,10 @@ class TessSystem:
                 map_soln = pmx.optimize(start=map_soln, vars=[trend_rv])
             map_soln = pmx.optimize(start=map_soln, vars=[gamma_rv])
             if self.include_svalue_gp:
-                map_soln = pmx.optimize(start=map_soln, vars=gp_svalue_params)
-                map_soln = pmx.optimize(start=map_soln, vars=gp_rv_params)
+                for k in range(len(gp_svalue_params)):
+                    map_soln = pmx.optimize(start=map_soln, vars=[gp_svalue_params[k]])
+                for k in range(len(gp_rv_params)):
+                    map_soln = pmx.optimize(start=map_soln, vars=[gp_rv_params[k]])
             map_soln = pmx.optimize(start=map_soln, vars=[sigma_rv])
             map_soln = pmx.optimize(start=map_soln, vars=[log_ror])
             map_soln = pmx.optimize(start=map_soln, vars=[b])
