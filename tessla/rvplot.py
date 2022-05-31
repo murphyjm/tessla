@@ -203,7 +203,12 @@ class RVPlot:
         ax2 = fig.add_subplot(sps2)
 
         # Plot the residuals about the full model
-        residuals = self.toi.rv_df.mnvel - self.toi.extras['full_rv_model'] - self.toi.extras['mean_rv']
+        residuals = pd.Series(self.toi.rv_df.mnvel.values - self.toi.extras['full_rv_model'] - self.toi.extras['mean_rv']).copy()
+        if self.toi.include_svalue_gp:
+            for tel in self.toi.rv_inst_names:
+                mask = self.toi.rv_df.tel.values == tel
+                residuals.loc[mask] -= self.toi.extras[f"gp_rv_{tel}"]
+
         for tel in self.toi.rv_inst_names:
             mask = self.toi.rv_df.tel.values == tel
             ax2.errorbar(self.toi.rv_df.time[mask], 
@@ -250,7 +255,11 @@ class RVPlot:
         heights = [1, 0.25]
         sps = gridspec.GridSpecFromSubplotSpec(2, len(self.toi.transiting_planets), subplot_spec=gs1, height_ratios=heights, hspace=0.05)
         
-        residuals = self.toi.rv_df.mnvel - self.toi.extras['full_rv_model'] - self.toi.extras['mean_rv']
+        residuals = pd.Series(self.toi.rv_df.mnvel.values - self.toi.extras['full_rv_model'] - self.toi.extras['mean_rv']).copy()
+        if self.toi.include_svalue_gp:
+            for tel in self.toi.rv_inst_names:
+                mask = self.toi.rv_df.tel.values == tel
+                residuals.loc[mask] -= self.toi.extras[f"gp_rv_{tel}"]
 
         chains = None
         if self.plot_random_orbit_draws:
@@ -267,7 +276,7 @@ class RVPlot:
             x_fold /= planet.per # Put this in unitless phase
             
             # RV contribution from background trend and other planets and GP
-            other_rv = pd.Series(self.toi.extras['bkg_rv'])
+            other_rv = pd.Series(self.toi.extras['bkg_rv']).copy()
             if len(self.toi.extras['planet_rv'].shape) > 1:
                 other_rv += np.sum(np.delete(self.toi.extras['planet_rv'], i, axis=1), axis=1)
             if self.toi.include_svalue_gp:
