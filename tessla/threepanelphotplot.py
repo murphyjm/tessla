@@ -10,7 +10,7 @@ from tessla.data_utils import find_breaks
 import exoplanet as xo
 import theano
 
-from tessla.plotting_utils import plot_periodogram
+from tessla.plotting_utils import plot_periodogram, add_ymd_label
 theano.config.gcc.cxxflags = "-Wno-c++11-narrowing" # Not exactly sure what this flag change does.
 import aesara_theano_fallback.tensor as tt
 
@@ -25,9 +25,6 @@ from matplotlib.ticker import MultipleLocator, FuncFormatter
 from brokenaxes import brokenaxes
 from matplotlib import gridspec
 from matplotlib.gridspec import GridSpec
-
-import datetime
-from astropy.time import Time
 
 class ThreePanelPhotPlot:
     '''
@@ -172,45 +169,6 @@ class ThreePanelPhotPlot:
         text = ax.text(xpos, np.max(self.y), sector_str, horizontalalignment=ha, verticalalignment='top', fontsize=12)
         text.set_bbox(dict(facecolor='white', alpha=0.5, edgecolor='none'))
 
-    def __add_ymd_label(self, fig, ax, xlims, left_or_right):
-        '''
-        Add a ymd label to the top panel left-most and right-most chunks.
-        '''
-        fig.canvas.draw() # Needed in order to get back the ticklabels otherwise they'll be empty
-
-        ax_yrs = ax.secondary_xaxis('top')
-        ax_yrs.set_xticks(ax.get_xticks())
-        ax_yrs_ticks = ax.get_xticks()
-        ax_yrs_ticklabels = ax.get_xticklabels()
-        tick_mask = (ax_yrs_ticks > xlims[0]) & (ax_yrs_ticks < xlims[-1])
-        ax_yrs_ticks = ax_yrs_ticks[tick_mask]
-        ax_yrs_ticklabels = [label.get_text() for i,label in enumerate(ax_yrs_ticklabels) if tick_mask[i]]
-
-        bjd_date = None
-        ind = None
-        if left_or_right == 'left':
-            ind = 0
-            bjd_date = ax_yrs_ticks[ind] + self.toi.bjd_ref
-        elif left_or_right == 'right':
-            ind = -1
-            bjd_date = ax_yrs_ticks[ind] + self.toi.bjd_ref
-        else:
-            assert False, "Choose left or right chunk."
-        ymd_date = Time(bjd_date, format='jd', scale='utc').ymdhms
-        month_number = ymd_date['month'] # Next few lines get the abbreviation for the month's name from the month's number
-        datetime_obj = datetime.datetime.strptime(f"{month_number}", "%m")
-        month_name = datetime_obj.strftime("%b")
-        day = ymd_date['day']
-        year = ymd_date['year']
-        
-        ax_yrs.set_xticks(ax_yrs_ticks)
-        ax_yrs_ticklabels = [''] * len(ax_yrs_ticklabels)
-        ax_yrs_ticklabels[ind] = f"{year}-{month_name}-{day}"
-        ax_yrs.set_xticklabels(ax_yrs_ticklabels)
-
-        # Make the ticks themselves invisible 
-        ax_yrs.tick_params(axis="x", top=False, bottom=False, pad=1.0)
-
     def __broken_three_panel_plot(self):
         '''
         Make the three panel plot using a broken x-axis. Used for TOIs with widely time-separated sectors.
@@ -256,7 +214,7 @@ class ThreePanelPhotPlot:
 
         # Add label for years to the upper axis for the left-most chunk
         left_xlims = xlim_tuple[0]
-        self.__add_ymd_label(fig, ax_left, left_xlims, 'left')
+        add_ymd_label(self.toi.bjd_ref, fig, ax_left, left_xlims, 'left')
 
         # ------------- #
         # Middle chunks #
@@ -289,9 +247,9 @@ class ThreePanelPhotPlot:
         # The -1 isn't technically the correct index (leaves our last element) but it shouldn't matter because there wouldn't be a single data point from a different sector at the end.
         self.__annotate_sector_marker(ax_right, xstart, xstart_ind, -1)
 
-        # Add label for years to the upper axis for the left-most chunk
+        # Add label for years to the upper axis for the right-most chunk
         right_xlims = xlim_tuple[-1]
-        self.__add_ymd_label(fig, ax_right, right_xlims, 'right')
+        add_ymd_label(self.toi.bjd_ref, fig, ax_right, right_xlims, 'right')
 
         # Top panel housekeeping
         bax1.set_xticklabels([])
@@ -436,8 +394,8 @@ class ThreePanelPhotPlot:
         self.__annotate_sector_marker(ax1, np.min(self.x), 0, -1)
 
         # Add label for years to the upper axis
-        self.__add_ymd_label(fig, ax1, (np.min(self.x), np.max(self.x)), 'left')
-        self.__add_ymd_label(fig, ax1, (np.min(self.x), np.max(self.x)), 'right')
+        add_ymd_label(self.toi.bjd_ref, fig, ax1, (np.min(self.x), np.max(self.x)), 'left')
+        add_ymd_label(self.toi.bjd_ref, fig, ax1, (np.min(self.x), np.max(self.x)), 'right')
         
         # Top panel housekeeping
         ax1.set_xticklabels([])
