@@ -741,7 +741,7 @@ class TessSystem:
         if not self.is_joint_model:
             with open(os.path.join(self.model_dir, f"{self.name.replace(' ', '_')}_model.pkl"), "wb") as model_fname:
                 pickle.dump(model, model_fname, protocol=pickle.HIGHEST_PROTOCOL)
-                
+
         return model
 
     def __get_rv_model(self, t, K, orbit, trend_rv):
@@ -862,7 +862,7 @@ class TessSystem:
                 gp_svalue_params = []
                 BoundedNormalProt = pm.Bound(pm.Normal, lower=np.log(1), upper=np.log(50))
                 if self.svalue_gp_kernel == 'rotation':
-                    log_prot_rv_gp = BoundedNormalProt("log_prot_rv_gp", mu=np.log(self.rot_per), sd=np.log(5))
+                    log_prot_rv_gp = BoundedNormalProt("log_prot_rv_gp", mu=np.log(self.rot_per), sd=np.log(5)) # self.rot_per from LS periodogram of OoT flux but can be superseded
                     prot_rv_gp = pm.Deterministic("prot_rv_gp", tt.exp(log_prot_rv_gp))
                     gp_svalue_params += [log_prot_rv_gp]
                 elif self.svalue_gp_kernel == 'exp_decay':

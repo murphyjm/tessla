@@ -266,11 +266,15 @@ class RVPlot:
             x_fold = (self.toi.rv_df.time - planet.t0 + 0.5 * planet.per) % planet.per - 0.5 * planet.per
             x_fold /= planet.per # Put this in unitless phase
             
-            # RV contribution from other planets and background trend (if any)
-            other_rv = self.toi.extras['bkg_rv']
+            # RV contribution from background trend and other planets and GP
+            other_rv = pd.Series(self.toi.extras['bkg_rv'])
             if len(self.toi.extras['planet_rv'].shape) > 1:
-                other_rv = np.sum(np.delete(self.toi.extras['planet_rv'], i, axis=1), axis=1)
-
+                other_rv += np.sum(np.delete(self.toi.extras['planet_rv'], i, axis=1), axis=1)
+            if self.toi.include_svalue_gp:
+                for tel in self.toi.rv_inst_names:
+                    mask = self.toi.rv_df.tel.values == tel
+                    other_rv.loc[mask] += self.toi.extras[f'gp_rv_{tel}']
+            
             # Plot the data
             for tel in self.toi.rv_inst_names:
                 mask = self.toi.rv_df.tel.values == tel
