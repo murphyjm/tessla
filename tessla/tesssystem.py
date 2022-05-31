@@ -738,6 +738,10 @@ class TessSystem:
                 print("Updating transiting planet properties to MAP solution values")
             self.update_transiting_planet_props_to_map_soln()
 
+        if not self.is_joint_model:
+            with open(os.path.join(self.model_dir, f"{self.name.replace(' ', '_')}_model.pkl"), "wb") as model_fname:
+                pickle.dump(model, model_fname, protocol=pickle.HIGHEST_PROTOCOL)
+                
         return model
 
     def __get_rv_model(self, t, K, orbit, trend_rv):
@@ -1029,7 +1033,73 @@ class TessSystem:
                 print("Updating transiting planet properties to MAP solution values")
             self.update_transiting_planet_props_to_map_soln()
 
+        # Pickle the model
+        with open(os.path.join(self.model_dir, f"{self.name.replace(' ', '_')}_model.pkl"), "wb") as model_fname:
+            pickle.dump(model, model_fname, protocol=pickle.HIGHEST_PROTOCOL)
+
         return model
+    
+    def count_num_vars(self, model):
+        '''
+        Count the number of free variables in the model.
+        '''
+        num_vars = 0
+        for var in model.cont_vars:
+            name = str(var).split(' ')[0]
+            num_vars += model.named_vars[name].dsize
+        self.num_vars = num_vars
+        return num_vars
+
+    def count_num_data(self):
+        '''
+        Count the number of data points in the model.
+        '''
+        num_data = len(self.cleaned_flux)
+        if self.is_joint_model:
+            num_data += len(self.rv_df)
+            if self.include_svalue_gp:
+                num_data += len(self.svalue_df)
+        self.num_data = num_data
+        return num_data
+    
+    def compute_AIC(self, model):
+        '''
+        Compute the AIC
+        '''
+        try:
+            first_term = 2 * self.num_vars
+        except AttributeError:
+            first_term = 2 * self.count_num_vars(model)
+        
+        AIC = first_term - 2 * model.logp(self.map_soln)
+        self.AIC = AIC
+        return AIC
+
+    def compute_AICc(self, model):
+        '''
+        Compute the AIC with small sample-size correction.
+        '''
+        AIC = self.compute_AIC(model)
+        numerator = 2 * self.num_vars * (self.num_vars + 1)
+        try:
+            denominator = self.num_data - self.num_vars - 1
+        except AttributeError:
+            denominator = self.count_num_data() - self.num_vars - 1
+        AICc = AIC + numerator / denominator
+        self.AICc = AICc
+        return AICc
+    
+    def compute_BIC(self, model):
+        '''
+        Compute the BIC
+        '''
+        try:
+            first_term = self.num_vars * np.log(self.num_data)
+        except AttributeError:
+            first_term = self.count_num_vars(model) * np.log(self.count_num_data())
+        BIC = first_term - 2 * model.logp(self.map_soln)
+        self.BIC = BIC
+        return BIC
 
     def __flat_samps_to_csv(self, model, flat_samps, chains_output_fname):
         '''
