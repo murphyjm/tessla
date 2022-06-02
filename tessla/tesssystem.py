@@ -781,7 +781,6 @@ class TessSystem:
             assert all([planet.bjd_ref == self.bjd_ref for planet in self.transiting_planets.values()]), assert_msg
             t0 = pm.Normal("t0", mu=np.array([planet.t0 for planet in self.transiting_planets.values()]), sd=1, shape=self.n_transiting)
             log_K = pm.Normal("log_K", mu=np.log(np.std(self.rv_df.mnvel) * np.ones(self.n_transiting)), sigma=np.log(50), shape=self.n_transiting)
-            # log_K = pm.Normal("log_K", mu=np.log(5) * np.ones(self.n_transiting), sigma=np.log(2), shape=self.n_transiting)
             K = pm.Deterministic("K", tt.exp(log_K))
             log_period = pm.Normal("log_period", mu=np.log(np.array([planet.per for planet in self.transiting_planets.values()])), sd=1, shape=self.n_transiting)
             period = pm.Deterministic("period", tt.exp(log_period))
@@ -892,7 +891,7 @@ class TessSystem:
                     elif self.svalue_gp_kernel == 'exp_decay':
                         log_sigma_dec_svalue_gp = pm.Normal(f"log_sigma_dec_svalue_gp_{tel}", mu=0., sigma=10)
                         gp_svalue_params += [log_sigma_dec_svalue_gp]
-                        kernel_svalue = terms.SHOTerm(sigma=tt.exp(log_sigma_dec_svalue_gp), rho=tt.exp(log_rho_svalue_gp), Q=1/2) # Critically-damped oscillator
+                        kernel_svalue = terms.SHOTerm(sigma=tt.exp(log_sigma_dec_svalue_gp), rho=tt.exp(log_rho_svalue_gp), Q=0.9) # Underdamped oscillator.
 
                     gp_svalue = GaussianProcess(kernel_svalue, mean=gp_svalue_mean, t=self.svalue_df.loc[tel_mask, 'time'].values, diag=(self.svalue_df.loc[tel_mask, 'svalue_err'].values)**2 + tt.exp(2 * log_jitter_svalue_gp[i]))
                     gp_svalue.marginal(f"gp_svalue_{tel}", observed=self.svalue_df.loc[tel_mask, 'svalue'].values)
