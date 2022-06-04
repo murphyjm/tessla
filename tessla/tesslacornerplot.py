@@ -66,7 +66,9 @@ class TesslaCornerPlot:
                             labelpad=0.1, 
                             show_titles=True,
                             title_kwargs={'fontsize':12},
-                            color=self.color
+                            color=self.color,
+                            use_math_text=True,
+                            plot_datapoints=False
                             )
         fig.suptitle(self.title, fontsize=14, y=1.01)
 
