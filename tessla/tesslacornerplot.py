@@ -19,6 +19,7 @@ class TesslaCornerPlot:
                 chain_labels,
                 chains=None,
                 title='',
+                color='k',
                 save_format='.png',
                 save_dpi=400) -> None:
 
@@ -34,6 +35,7 @@ class TesslaCornerPlot:
         self.chains = chains
 
         self.title = title
+        self.color = color
 
         # Save/output hyperparameters
         self.save_format = save_format
@@ -63,7 +65,8 @@ class TesslaCornerPlot:
                             quantiles=[0.16, 0.5, 0.84], 
                             labelpad=0.1, 
                             show_titles=True,
-                            title_kwargs={'fontsize':12}
+                            title_kwargs={'fontsize':12},
+                            color=self.color
                             )
         fig.suptitle(self.title, fontsize=14, y=1.01)
 

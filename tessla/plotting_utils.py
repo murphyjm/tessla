@@ -272,7 +272,7 @@ def plot_phot_only_corners(toi, df_derived_chains, overwrite=False):
                 df_derived_chains[f'b_{letter}'],
                 df_derived_chains[f'dur_hr_{letter}']
             ]).T
-            planet_corner = TesslaCornerPlot(toi, planet_labels, planet_chains, f"{toi.name} {letter} measured parameters")
+            planet_corner = TesslaCornerPlot(toi, planet_labels, planet_chains, f"{toi.name} {letter} measured parameters", color=toi.transiting_planets[letter].color)
             planet_corner.plot(overwrite=overwrite)
 
             # Corner plot for derived planet parameters
@@ -286,7 +286,7 @@ def plot_phot_only_corners(toi, df_derived_chains, overwrite=False):
                 df_derived_chains[f"ecc_{letter}"],
                 df_derived_chains[f"omega_folded_deg_{letter}"]
             ]).T
-            derived_corner = TesslaCornerPlot(toi, derived_labels, derived_chains, f"{toi.name} {letter} derived parameters")
+            derived_corner = TesslaCornerPlot(toi, derived_labels, derived_chains, f"{toi.name} {letter} derived parameters", color=toi.transiting_planets[letter].color)
             derived_corner.plot(overwrite=overwrite)
     else:
         # TODO: Fix? Or just leave it like this and people can make corner plots on their own if they use a different kernel.
@@ -358,7 +358,7 @@ def plot_joint_corners(toi, df_derived_chains, overwrite=False):
                 df_derived_chains[f'omega_{letter}'],
                 df_derived_chains[f'K_{letter}']
             ]).T
-            planet_corner = TesslaCornerPlot(toi, planet_labels, planet_chains, f"{toi.name} {letter} measured parameters")
+            planet_corner = TesslaCornerPlot(toi, planet_labels, planet_chains, f"{toi.name} {letter} measured parameters", color=toi.transiting_planets[letter].color)
             planet_corner.plot(overwrite=overwrite)
 
             # Corner plot for derived planet parameters
@@ -376,7 +376,7 @@ def plot_joint_corners(toi, df_derived_chains, overwrite=False):
                 df_derived_chains[f"a_{letter}"],
                 df_derived_chains[f"teq_{letter}"],
             ]).T
-            derived_corner = TesslaCornerPlot(toi, derived_labels, derived_chains, f"{toi.name} {letter} derived parameters")
+            derived_corner = TesslaCornerPlot(toi, derived_labels, derived_chains, f"{toi.name} {letter} derived parameters", color=toi.transiting_planets[letter].color)
             derived_corner.plot(overwrite=overwrite)
     else:
         # TODO: Fix? Or just leave it like this and people can make corner plots on their own if they use a different kernel.
