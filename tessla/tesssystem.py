@@ -66,7 +66,6 @@ class TessSystem:
                 cadence=120, # By default, extract the 2-minute cadence data.
                 use_long_cadence_data=False, # By default, don't use the 30-min cadence data if it's the only data available for a sector. If true, treat it as a different instrument.
                 flux_origin='sap_flux', # By default, use the SAP flux. Can also specify "pdcsap_flux" but this may not be available for all sectors.
-                n_transiting=1, # Number of transiting planets
                 bjd_ref=2457000, # BJD offset. BTJD as default
                 phot_gp_kernel='exp_decay', # What GP kernel to use to flatten the light curve. 
                                             # Options are: ['activity', 'exp_decay', 'rotation']. Activity is exp_decay + rotation. See celerite2 documentation.
@@ -94,11 +93,13 @@ class TessSystem:
         self.toi_catalog_csv_path = '~/code/tessla/data/toi_list.csv'
         self.use_long_cadence_data = use_long_cadence_data
 
-        # Planet-related attributes
-        self.n_transiting = n_transiting # Should get rid of this attribute eventually, and just go by the length of the dictionary self.transiting_planets.
+        # Transiting planet-related attributes
         self.transiting_planets = {}
         self.all_transits_mask = None
         self.toi_catalog = None
+
+        # Transiting and non-transiting planets
+        self.planets = {}
 
         self.bjd_ref = bjd_ref
         self.phot_gp_kernel = phot_gp_kernel
@@ -192,20 +193,37 @@ class TessSystem:
 
         self.model_dir = model_out_dir
         self.sampling_dir = sampling_out_dir
-
-    def add_transiting_planet(self, planet) -> None:
-        '''
-        Add a transiting planet to the TessSystem object.
-        '''
-        self.transiting_planets[planet.pl_letter] = planet
-        self.n_transiting = len(self.transiting_planets)
     
-    def remove_transiting_planet(self, pl_letter):
+    def add_planet(self, planet) -> None:
         '''
-        Remove a transiting planet.
+        Add a planet to the planets dictionary
         '''
-        return self.transiting_planets.pop(pl_letter)
+        self.planets[planet.pl_letter] = planet
+        self.n_planets = len(self.planets)
 
+        if planet.is_transiting:
+            self.transiting_planets[planet.pl_letter] = planet
+            self.n_transiting = len(self.transiting_planets)
+        else:
+            self.nontransiting_planets[planet.pl_letter] = planet
+            self.n_nontransiting = len(self.nontransiting_planets)
+    
+    def remove_planet(self, pl_letter):
+        '''
+        Remove a planet from the system.
+        '''
+        planet = self.planets.pop(pl_letter)
+        self.n_planets = len(self.planets)
+
+        if planet.is_transiting:
+            _ = self.transiting_planets.pop(pl_letter)
+            self.n_transiting = len(self.transiting_planets)
+        else:
+            _ = self.nontransiting_planets.pop(pl_letter)
+            self.n_nontransiting = len(self.nontransiting_planets)
+
+        return planet
+    
     def update_transiting_planet_props_to_map_soln(self):
         '''
         Update the transiting planet properties to the MAP solution values. Is optionally automatically run after the MAP fitting procedure.
@@ -215,8 +233,33 @@ class TessSystem:
             planet.per = self.map_soln["period"][i]
             planet.t0 = self.map_soln["t0"][i]
             planet.depth = (self.map_soln["ror"][i])**2 * 1e3 # Places in units of PPT
+            planet.b = self.map_soln["b"][i]
             if not self.is_joint_model:
                 planet.dur = self.map_soln["dur"][i]
+    
+    def update_planet_props_to_map_soln(self):
+        '''
+        Update the planet properties to the MAP solution values. Is optionally automatically run after the MAP fitting procedure.
+        '''
+        assert self.map_soln is not None, "MAP Solution is none. Must run MAP fitting procedure first."
+        for i,planet in enumerate(self.planets.values()): # BUG: This means that planets must be added to the self.planets dictionary in the same order they appear in the model. I think this should already be the case, though.
+            planet.per = self.map_soln["period"][i]
+            planet.t0 = self.map_soln["t0"][i]
+        
+            # Transiting-specific properties
+            if planet.is_transiting:
+                planet.depth = (self.map_soln["ror"][i])**2 * 1e3 # Places in units of PPT
+                planet.b = self.map_soln["b"][i]
+                if not self.is_joint_model:
+                    planet.dur = self.map_soln["dur"][i]
+            
+            # If a joint model was fit then there are also Keplerian orbit attributes
+            if self.is_joint_model:
+                planet.kamp = self.map_soln["K"][i]
+                planet.ecc = self.map_soln["ecc"][i]
+                planet.omega = self.map_soln["omega"][i]
+        
+            
 
     def search_for_tois(self):
         '''
@@ -257,10 +300,37 @@ class TessSystem:
                             per=row['Orbital Period Value'], 
                             t0=row['Epoch Value'], 
                             dur=row['Transit Duration Value']/24, 
-                            depth=row['Transit Depth Value'] * 1e-3)
-            self.add_transiting_planet(planet)
+                            depth=row['Transit Depth Value'] * 1e-3, 
+                            is_transiting=True)
+            self.add_planet(planet)
         
         self.create_transit_mask()
+
+    def fix_tois(self, planet_objs_dir):
+        '''
+        Fix incorrect entries in the TOI catalog or manually add planets that don't appear there.
+
+        TODO: This needs to be updated so that it's a member function of the TESSSYSTEM object itself.
+        '''
+        if not os.path.exists(planet_objs_dir):
+            print(f"{planet_objs_dir} is not a valid path. Assuming there are no TOI entries to fix or manual planets to add. Continuing.")
+        else:
+            if self.verbose:
+                print(f"Loading {len(os.listdir(planet_objs_dir))} non-TOI transiting planet(s) from {planet_objs_dir}")
+            for fname in os.listdir(planet_objs_dir):
+                f = os.path.join(planet_objs_dir, fname)
+                with open(f, 'rb') as planet_fname:
+                    # Load the planet from the pickled file.
+                    planet = pickle.load(planet_fname)
+                    # If we're replacing a planet remove that planet first.
+                    if planet.pl_letter in self.transiting_planets.keys():
+                        self.remove_planet(planet.pl_letter)
+                    # Add the planet.
+                    self.add_planet(planet)
+            
+            # Reset the transit mask and create the new one with the correct transiting planets.
+            self.reset_transit_mask()
+            self.create_transit_mask()
 
     def update_t0s_to_near_data_middle(self, buffer=100): # If t0 is already within buffer days of the data middle, that's fine.
         '''
@@ -416,10 +486,6 @@ class TessSystem:
     def create_transit_mask(self):
         '''
         Create a mask for the in-transit data.
-
-        Args
-        ----------
-        transiting_planets (Iterable): An iterable of tessla.Planet objects containing estimates of the planet duration  
 
         Returns
         ----------
@@ -736,7 +802,7 @@ class TessSystem:
         if update_planet_props_to_map_soln:
             if self.verbose:
                 print("Updating transiting planet properties to MAP solution values")
-            self.update_transiting_planet_props_to_map_soln()
+            self.update_planet_props_to_map_soln()
 
         if not self.is_joint_model:
             with open(os.path.join(self.model_dir, f"{self.name.replace(' ', '_')}_model.pkl"), "wb") as model_fname:
@@ -1029,8 +1095,8 @@ class TessSystem:
         # Update planet properties with MAP values
         if update_planet_props_to_map_soln:
             if self.verbose:
-                print("Updating transiting planet properties to MAP solution values")
-            self.update_transiting_planet_props_to_map_soln()
+                print("Updating planet properties to MAP solution values")
+            self.update_planet_props_to_map_soln()
 
         # Pickle the model
         with open(os.path.join(self.model_dir, f"{self.name.replace(' ', '_')}_model.pkl"), "wb") as model_fname:

@@ -58,33 +58,6 @@ def parse_args():
     parser.add_argument("--quiet", action="store_true", help="Disable print statements.")
     return parser.parse_args()
 
-def fix_tois(toi, args):
-    '''
-    Fix incorrect entries in the TOI catalog or manually add planets that don't appear there.
-
-    TODO: This needs to be updated so that it's a member function of the TESSSYSTEM object itself.
-    '''
-    planet_dir = args.planet_objs_dir
-    if not os.path.exists(planet_dir):
-        print(f"{planet_dir} is not a valid path. Assuming there are no TOI entries to fix or manual planets to add. Continuing.")
-    else:
-        if not args.quiet:
-            print(f"Loading {len(os.listdir(planet_dir))} non-TOI transiting planet(s) from {planet_dir}")
-        for fname in os.listdir(planet_dir):
-            f = os.path.join(planet_dir, fname)
-            with open(f, 'rb') as planet_fname:
-                # Load the planet from the pickled file.
-                planet = pickle.load(planet_fname)
-                # If we're replacing a planet remove that planet first.
-                if planet.pl_letter in toi.transiting_planets.keys():
-                    toi.remove_transiting_planet(planet.pl_letter)
-                # Add the planet.
-                toi.add_transiting_planet(planet)
-        
-        # Reset the transit mask and create the new one with the correct transiting planets.
-        toi.reset_transit_mask()
-        toi.create_transit_mask()
-
 def main():
     args = parse_args()
 
@@ -106,7 +79,7 @@ def main():
     
     # If there are TOIs that are not in the catalog or the TOIs in the catalog have incorrect properties, fix them manually.
     if args.planet_objs_dir is not None:
-        fix_tois(toi, args)
+        toi.fix_tois(args.planet_objs_dir)
 
     # Initial outlier removal with a SG filter
     toi.initial_outlier_removal(positive_outliers_only=False, max_iters=10, sigma_thresh=3, time_window=1)
