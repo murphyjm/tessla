@@ -307,8 +307,15 @@ class TessSystem:
                 with open(f, 'rb') as planet_fname:
                     # Load the planet from the pickled file.
                     planet = pickle.load(planet_fname)
-                    if planet.is_transiting:
+                    
+                    # Assumes that if the planet doesn't have the attribute then it's transiting
+                    try:
+                        if planet.is_transiting:
+                            any_transiting = True
+                    except AttributeError:
+                        planet.is_transiting = True
                         any_transiting = True
+
                     # If we're replacing a planet remove that planet first.
                     if planet.pl_letter in self.planets.keys():
                         self.remove_planet(planet.pl_letter)
@@ -328,7 +335,7 @@ class TessSystem:
               Let's just leave it as the phot data middle for now since they should be relatively close.
         '''
         phot_data_middle = 0.5 * (np.max(self.lc.time.value) - np.min(self.lc.time.value))
-        for planet in self.transiting_planets.values():
+        for planet in self.planets.values():
             if np.abs(phot_data_middle - planet.t0) < buffer:
                 continue
             else:
@@ -816,7 +823,7 @@ class TessSystem:
         else:
             return planet_rv, bkg, planet_rv + bkg
 
-    def __get_nontrans_K_and_orbit(self, mstar, rstar, sd_t0=100, sd_log_period=10, prefix="nontrans"):
+    def __get_nontrans_params_and_orbit(self, mstar, rstar, sd_t0=100, sd_log_period=10, prefix="nontrans"):
         t0 = pm.Normal(f"{prefix}_t0", mu=np.array([planet.t0 for planet in self.nontransiting_planets.values()]), sd=sd_t0, shape=self.n_nontransiting) # width of t0 is just a placeholder for now
         log_K = pm.Normal(f"{prefix}_log_K", mu=np.log(np.std(self.rv_df.mnvel) * np.ones(self.n_nontransiting)), sigma=np.log(50), shape=self.n_nontransiting)
         K = pm.Deterministic(f"{prefix}_K", tt.exp(log_K))
@@ -941,10 +948,12 @@ class TessSystem:
                 nontrans_planet_rv_pred, bkg_rv_pred, nontrans_full_rv_model_pred = self.__get_rv_model(t_rv, nontrans_params['K'], nontrans_orbit, trend_rv)
 
                 # Combine the RVs for the transiting and non-transiting planets
-                planet_rv = np.vstack(planet_rv, nontrans_planet_rv)
-                full_rv_model += nontrans_full_rv_model
-                planet_rv_pred = np.vstack(planet_rv_pred, nontrans_planet_rv_pred)
-                full_rv_model_pred += nontrans_full_rv_model_pred
+                # TODO: FIX THIS. Broken somehow.
+                planet_rv = tt.stacklists([planet_rv, nontrans_planet_rv])
+                planet_rv_pred = tt.stacklists([planet_rv_pred, nontrans_planet_rv_pred])
+                
+                full_rv_model = full_rv_model + nontrans_full_rv_model
+                full_rv_model_pred = full_rv_model_pred + nontrans_full_rv_model_pred
 
             else:
                 # If no nontransiting planets
