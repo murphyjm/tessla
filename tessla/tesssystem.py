@@ -88,14 +88,17 @@ class TessSystem:
 
         # Transiting planet-related attributes
         self.transiting_planets = {}
+        self.n_transiting = len(self.transiting_planets)
         self.all_transits_mask = None
         self.toi_catalog = None
 
         # Nontransiting planets
         self.nontransiting_planets = {}
+        self.n_nontransiting = len(self.nontransiting_planets)
 
         # Transiting and non-transiting planets
         self.planets = {}
+        self.n_planets = len(self.planets)
 
         self.bjd_ref = bjd_ref
         self.phot_gp_kernel = phot_gp_kernel
@@ -808,11 +811,36 @@ class TessSystem:
             A = np.vander(t - self.rv_trend_time_ref, self.rv_trend_order + 1, increasing=True)# [:, :-1] # Don't use the offset term, we already have instrument offsets.
             bkg = tt.dot(A, trend_rv)
         
-        if self.n_transiting > 1:
+        if self.n_planets > 1:
             return planet_rv, bkg, tt.sum(planet_rv, axis=-1) + bkg
         else:
             return planet_rv, bkg, planet_rv + bkg
-        
+
+    def __get_nontrans_K_and_orbit(self, mstar, rstar, sd_t0=100, sd_log_period=10, prefix="nontrans"):
+        t0 = pm.Normal(f"{prefix}_t0", mu=np.array([planet.t0 for planet in self.nontransiting_planets.values()]), sd=sd_t0, shape=self.n_nontransiting) # width of t0 is just a placeholder for now
+        log_K = pm.Normal(f"{prefix}_log_K", mu=np.log(np.std(self.rv_df.mnvel) * np.ones(self.n_nontransiting)), sigma=np.log(50), shape=self.n_nontransiting)
+        K = pm.Deterministic(f"{prefix}_K", tt.exp(log_K))
+        log_period = pm.Normal(f"{prefix}_log_period", mu=np.log(np.array([planet.per for planet in self.nontransiting_planets.values()])), sd=sd_log_period, shape=self.n_nontransiting)
+        period = pm.Deterministic(f"{prefix}_period", tt.exp(log_period))
+
+        # Eccentricity and omega
+        ecs = pmx.UnitDisk(f"{prefix}_ecs", shape=(2, self.n_nontransiting), testval=0.01 * np.ones((2, self.n_nontransiting)))
+        ecc = pm.Deterministic(f"{prefix}_ecc", tt.sum(ecs**2, axis=0))
+        omega = pm.Deterministic(f"{prefix}_omega", tt.arctan2(ecs[1], ecs[0]))
+        xo.eccentricity.vaneylen19(f"{prefix}_ecc_prior", multi=(self.n_planets > 1), shape=self.n_nontransiting, fixed=True, observed=ecc)
+
+        nontrans_params = { # A little hacky
+            't0':t0,
+            'log_K':log_K,
+            'K':K,
+            'log_period':log_period,
+            'period':period,
+            'ecs':ecs,
+            'ecc':ecc,
+            'omega':omega
+        }
+        return nontrans_params, xo.orbits.KeplerianOrbit(r_star=rstar, m_star=mstar, period=period, t0=t0, ecc=ecc, omega=omega)
+
     def __build_joint_model(self, x_phot, y_phot, yerr_phot, start=None, phase_lim=0.3, n_eval_points=500, t_rv_buffer=5):
         '''
         '''
@@ -846,7 +874,7 @@ class TessSystem:
             ecs = pmx.UnitDisk("ecs", shape=(2, self.n_transiting), testval=0.01 * np.ones((2, self.n_transiting)))
             ecc = pm.Deterministic("ecc", tt.sum(ecs**2, axis=0))
             omega = pm.Deterministic("omega", tt.arctan2(ecs[1], ecs[0]))
-            xo.eccentricity.vaneylen19("ecc_prior", multi=(self.n_transiting > 1), shape=self.n_transiting, fixed=True, observed=ecc)
+            xo.eccentricity.vaneylen19("ecc_prior", multi=(self.n_planets > 1), shape=self.n_transiting, fixed=True, observed=ecc)
 
             # Light curve jitter
             log_sigma_lc = pm.Normal("log_sigma_lc", mu=np.log(np.median(yerr_phot.values)), sd=2)
@@ -859,7 +887,7 @@ class TessSystem:
             light_curve = tt.sum(light_curves, axis=-1) + mean_flux
             resid_phot = y_phot.values - light_curve
 
-            # Build the GP kernel
+            # Build the photometry GP kernel
             gp_params = None
             kernel = None
             if self.phot_gp_kernel == 'exp_decay':
@@ -903,8 +931,27 @@ class TessSystem:
                 diag_rv += ((self.rv_df.errvel.values)**2 + sigma_rv[i]**2) * np.array(self.rv_df['tel'] == tel, dtype=int)
             
             # RV model
-            planet_rv, bkg_rv, full_rv_model = self.__get_rv_model(self.rv_df.time, K, orbit, trend_rv)
-            planet_rv_pred, bkg_rv_pred, full_rv_model_pred = self.__get_rv_model(t_rv, K, orbit, trend_rv)
+            if self.n_nontransiting > 0:
+                # If nontransiting planets, put the rv trend (if any) in their orbit object.
+                planet_rv, _, full_rv_model = self.__get_rv_model(self.rv_df.time, K, orbit, None)
+                planet_rv_pred, _, full_rv_model_pred = self.__get_rv_model(t_rv, K, orbit, None)
+
+                nontrans_params, nontrans_orbit = self.__get_nontrans_params_and_orbit(mstar, rstar)
+                nontrans_planet_rv, bkg_rv, nontrans_full_rv_model = self.__get_rv_model(self.rv_df.time, nontrans_params['K'], nontrans_orbit, trend_rv)
+                nontrans_planet_rv_pred, bkg_rv_pred, nontrans_full_rv_model_pred = self.__get_rv_model(t_rv, nontrans_params['K'], nontrans_orbit, trend_rv)
+
+                # Combine the RVs for the transiting and non-transiting planets
+                planet_rv = np.vstack(planet_rv, nontrans_planet_rv)
+                full_rv_model += nontrans_full_rv_model
+                planet_rv_pred = np.vstack(planet_rv_pred, nontrans_planet_rv_pred)
+                full_rv_model_pred += nontrans_full_rv_model_pred
+
+            else:
+                # If no nontransiting planets
+                planet_rv, bkg_rv, full_rv_model = self.__get_rv_model(self.rv_df.time, K, orbit, trend_rv)
+                planet_rv_pred, bkg_rv_pred, full_rv_model_pred = self.__get_rv_model(t_rv, K, orbit, trend_rv)
+
+            # RV residuals
             resid_rv = self.rv_df.mnvel.values - mean_rv - full_rv_model
             if not self.include_svalue_gp:
                 pm.Normal("obs_rv", mu=0, sd=tt.sqrt(diag_rv), observed=resid_rv)
@@ -995,6 +1042,8 @@ class TessSystem:
             # Order of parameters to be optimized is a bit arbitrary
             map_soln = pmx.optimize(start=start, vars=[log_sigma_lc])
             map_soln = pmx.optimize(start=map_soln, vars=[log_K])
+            if self.n_nontransiting > 0:
+                map_soln = pmx.optimize(start=map_soln, vars=[nontrans_params['log_K']])
             if self.rv_trend:
                 map_soln = pmx.optimize(start=map_soln, vars=[trend_rv])
             map_soln = pmx.optimize(start=map_soln, vars=[gamma_rv])
@@ -1007,7 +1056,11 @@ class TessSystem:
             map_soln = pmx.optimize(start=map_soln, vars=[log_ror])
             map_soln = pmx.optimize(start=map_soln, vars=[b])
             map_soln = pmx.optimize(start=map_soln, vars=[log_period, t0])
+            if self.n_nontransiting > 0:
+                map_soln = pmx.optimize(start=map_soln, vars=[nontrans_params['log_period'],nontrans_params['t0'] ])
             map_soln = pmx.optimize(start=map_soln, vars=[log_K])
+            if self.n_nontransiting > 0:
+                map_soln = pmx.optimize(start=map_soln, vars=[nontrans_params['log_K']])
             map_soln = pmx.optimize(start=map_soln, vars=[u])
             map_soln = pmx.optimize(start=map_soln, vars=[log_ror])
             map_soln = pmx.optimize(start=map_soln, vars=[b])
@@ -1170,11 +1223,14 @@ class TessSystem:
             except KeyError:
                 continue
             if num_dim > 1 and param != 'u' and param != 'gamma_rv' and param != 'sigma_rv' and param != 'trend_rv':
-                msg = "Chains and number of transiting planets have shape mismatch."
-                assert len(self.transiting_planets) == flat_samps[param].shape[0], msg
-                for i, pl_letter in enumerate(self.transiting_planets.keys()):
+                msg = "Chains and number of planets have shape mismatch."
+                assert any(self.n_transiting == flat_samps[param].shape[0], self.n_nontransiting == flat_samps[param].shape[0]), msg
+                for i, pl_letter in enumerate(self.planets.keys()):
+                    prefix = ''
+                    if not self.planets[pl_letter].is_transiting:
+                        prefix = 'nontrans_'
                     try:
-                        df_chains[f"{param}_{pl_letter}"] = flat_samps[param][i, :].data
+                        df_chains[f"{prefix}{param}_{pl_letter}"] = flat_samps[param][i, :].data
                     except ValueError:
                         continue
             elif param == 'u':
@@ -1304,24 +1360,35 @@ class TessSystem:
             mstar_samples = np.random.normal(self.star.mstar, self.star.mstar_err, N)
             rstar_samples = np.random.normal(self.star.rstar, self.star.rstar_err, N)
         teff_samples = np.random.normal(self.star.teff, self.star.teff_err, N)
+
+        # Orbit derived parameters
+        for letter, planet in self.planets.items():
+            prefix = ""
+            if not planet.is_transiting:
+                prefix = "nontrans_"
+            df_chains[f"{prefix}t0_BTJD_{letter}"] = df_chains[f"{prefix}t0_{letter}"] + self.bjd_ref - T0_BTJD # T0 in BTJD
+            df_chains[f"{prefix}omega_folded_{letter}"] = df_chains[f"{prefix}omega_{letter}"].apply(convert_negative_angles)
+            df_chains[f"{prefix}omega_folded_deg_{letter}"] = df_chains[f"{prefix}omega_folded_{letter}"].values * 180 / np.pi # Convert omega from radians to degrees to have for convenience
+            df_chains[f"{prefix}a_{letter}"] = get_semimajor_axis(df_chains[f"{prefix}period_{letter}"].values, mstar_samples)
+            df_chains[f"{prefix}aor_{letter}"] = get_aor(df_chains[f"{prefix}a_{letter}"].values, rstar_samples)
+            df_chains[f"{prefix}sinc_{letter}"] = get_sinc(df_chains[f"{prefix}a_{letter}"].values, teff_samples, rstar_samples)
+            df_chains[f"{prefix}teq_{letter}"] = get_teq(df_chains[f"{prefix}a_{letter}"].values, teff_samples, rstar_samples) # Calculated assuming zero Bond albedo
+            
+            if self.is_joint_model:
+                df_chains[f"{prefix}msini_{letter}"] = Msini(df_chains[f"{prefix}K_{letter}"], 
+                                                             df_chains[f"{prefix}period_{letter}"], 
+                                                             mstar_samples, 
+                                                             df_chains[f"{prefix}ecc_{letter}"], 
+                                                             Msini_units='earth')
+
+        # Transit-specific derived parameters
         for letter in self.transiting_planets.keys():
             df_chains[f"rp_{letter}"] = units.R_sun.to(units.R_earth, df_chains[f"ror_{letter}"] * rstar_samples) # Planet radius in earth radius
-            df_chains[f"t0_BTJD_{letter}"] = df_chains[f"t0_{letter}"] + self.bjd_ref - T0_BTJD # T0 in BTJD
-
+            df_chains[f"i_rad_{letter}"], df_chains[f"i_deg_{letter}"] = get_inclination(df_chains[f"b_{letter}"].values, df_chains[f"a_{letter}"].values, rstar_samples)
             if not self.is_joint_model:
                 df_chains[f"dur_hr_{letter}"] = df_chains[f"dur_{letter}"] * 24 # Transit duration in hours
-
-            df_chains[f"omega_folded_{letter}"] = df_chains[f"omega_{letter}"].apply(convert_negative_angles)
-            df_chains[f"omega_folded_deg_{letter}"] = df_chains[f"omega_folded_{letter}"].values * 180 / np.pi # Convert omega from radians to degrees to have for convenience
-            df_chains[f"a_{letter}"] = get_semimajor_axis(df_chains[f"period_{letter}"].values, mstar_samples)
-            df_chains[f"aor_{letter}"] = get_aor(df_chains[f"a_{letter}"].values, rstar_samples)
-            df_chains[f"sinc_{letter}"] = get_sinc(df_chains[f"a_{letter}"].values, teff_samples, rstar_samples)
-            df_chains[f"teq_{letter}"] = get_teq(df_chains[f"a_{letter}"].values, teff_samples, rstar_samples) # Calculated assuming zero Bond albedo
-            
-            df_chains[f"i_rad_{letter}"], df_chains[f"i_deg_{letter}"] = get_inclination(df_chains[f"b_{letter}"].values, df_chains[f"a_{letter}"].values, rstar_samples)
-            if self.is_joint_model:
-                df_chains[f"msini_{letter}"] = Msini(df_chains[f"K_{letter}"], df_chains[f"period_{letter}"], mstar_samples, df_chains[f"ecc_{letter}"], Msini_units='earth')
-                df_chains[f"mp_{letter}"] = df_chains[f"msini_{letter}"] / np.sin(df_chains[f"i_rad_{letter}"])
+            else:
                 df_chains[f"rho_{letter}"] = get_density(df_chains[f"mp_{letter}"].values, df_chains[f"rp_{letter}"].values, 'earthMass', 'earthRad', 'g', 'cm')
+                df_chains[f"mp_{letter}"] = df_chains[f"msini_{letter}"] / np.sin(df_chains[f"i_rad_{letter}"])
 
         df_chains.to_csv(self.chains_derived_path, index=False, compression="gzip")
