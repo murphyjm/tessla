@@ -1,9 +1,11 @@
 import os
+from re import I
 import warnings
 from tqdm import tqdm
 
 import pandas as pd
 import numpy as np
+from math import ceil
 from scipy.stats import binned_statistic
 
 # Exoplanet stuff
@@ -152,9 +154,12 @@ class RVPlot:
         fig = plt.figure(figsize=self.figsize)
 
         # Create the GridSpec objects
-        gs0, gs1 = gridspec.GridSpec(2, 1, figure=fig, height_ratios=[1, 0.66])
+        height_ratios = [1, 0.66]
+        if self.toi.n_planets > 2:
+            height_ratios = [1, 1]
+        gs0, gs1 = gridspec.GridSpec(2, 1, figure=fig, height_ratios=height_ratios)
         heights = [1, 0.25]
-        sps1, sps2 = gridspec.GridSpecFromSubplotSpec(2, 1, subplot_spec=gs0, height_ratios=heights, hspace=0.1)
+        sps1, sps2 = gridspec.GridSpecFromSubplotSpec(2, 1, subplot_spec=gs0, height_ratios=heights, hspace=0.05)
         
         ################################################################################################
         ############################### TOP PANEL: RVs and full RV model ###############################
@@ -252,8 +257,9 @@ class RVPlot:
         '''
         Plot the folded transits for each planet.
         '''
-        heights = [1, 0.25]
-        sps = gridspec.GridSpecFromSubplotSpec(2, len(self.toi.planets), subplot_spec=gs1, height_ratios=heights, hspace=0.05)
+        num_planet_rows = ceil(self.toi.n_planets / 2)
+        heights = [1, 0.25] * num_planet_rows
+        sps = gridspec.GridSpecFromSubplotSpec(2, num_planet_rows, subplot_spec=gs1, height_ratios=heights, hspace=0.05)
         
         residuals = pd.Series(self.toi.rv_df.mnvel.values - self.toi.extras['full_rv_model'] - self.toi.extras['mean_rv']).copy()
         if self.toi.include_svalue_gp:
@@ -267,8 +273,17 @@ class RVPlot:
         phase_folded_axes = []
         phase_folded_resid_axes = []
         for i,planet in enumerate(self.toi.planets.values()):
-
-            ax0 = fig.add_subplot(sps[0, i])
+            
+            # Indexing kung-fu
+            if i % 2 == 0:
+                planet_row_ind = i
+                planet_col_ind = 0
+            else:
+                planet_row_ind = i - 1
+                if i == self.toi.n_planets - 1:
+                    planet_col_ind = slice(None)
+            
+            ax0 = fig.add_subplot(sps[planet_row_ind, planet_col_ind])
             phase_folded_axes.append(ax0)
 
             # Plot the folded data
@@ -340,7 +355,7 @@ class RVPlot:
                         ax0.plot(x_fold_pred[inds_pred], planet_rv_pred[inds_pred], color=planet.color, alpha=0.3, zorder=999)
 
             # Plot the residuals below
-            ax1 = fig.add_subplot(sps[1, i])
+            ax1 = fig.add_subplot(sps[planet_row_ind + 1, planet_col_ind])
             phase_folded_resid_axes.append(ax1)
             for tel in self.toi.rv_inst_names:
                 mask = self.toi.rv_df.tel.values == tel
