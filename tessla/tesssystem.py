@@ -34,13 +34,6 @@ import arviz as az
 # Radvel
 from radvel.utils import Msini, bintels
 
-'''
-NOTE: Right now, nontransiting planets won't work, so don't add them!
-
-Problem: How to have different length period vectors for the exoplanet orbit model. E.g. 3 transiting planet periods and 2 additional nontransiting planets. 
-Might just make sense to use RadVel in that case.
-'''
-
 RV_INST_NAME_MAPPER = {
     'apf':'APF',
     'j':'HIRES',
@@ -97,6 +90,9 @@ class TessSystem:
         self.transiting_planets = {}
         self.all_transits_mask = None
         self.toi_catalog = None
+
+        # Nontransiting planets
+        self.nontransiting_planets = {}
 
         # Transiting and non-transiting planets
         self.planets = {}
@@ -224,25 +220,12 @@ class TessSystem:
 
         return planet
     
-    def update_transiting_planet_props_to_map_soln(self):
-        '''
-        Update the transiting planet properties to the MAP solution values. Is optionally automatically run after the MAP fitting procedure.
-        '''
-        assert self.map_soln is not None, "MAP Solution is none. Must run MAP fitting procedure first."
-        for i,planet in enumerate(self.transiting_planets.values()):
-            planet.per = self.map_soln["period"][i]
-            planet.t0 = self.map_soln["t0"][i]
-            planet.depth = (self.map_soln["ror"][i])**2 * 1e3 # Places in units of PPT
-            planet.b = self.map_soln["b"][i]
-            if not self.is_joint_model:
-                planet.dur = self.map_soln["dur"][i]
-    
     def update_planet_props_to_map_soln(self):
         '''
         Update the planet properties to the MAP solution values. Is optionally automatically run after the MAP fitting procedure.
         '''
         assert self.map_soln is not None, "MAP Solution is none. Must run MAP fitting procedure first."
-        for i,planet in enumerate(self.planets.values()): # BUG: This means that planets must be added to the self.planets dictionary in the same order they appear in the model. I think this should already be the case, though.
+        for i,planet in enumerate(self.planets.values()): # TODO: This means that planets must be added to the self.planets dictionary in the same order they appear in the model. I think this should already be the case, though.
             planet.per = self.map_soln["period"][i]
             planet.t0 = self.map_soln["t0"][i]
         
@@ -258,8 +241,6 @@ class TessSystem:
                 planet.kamp = self.map_soln["K"][i]
                 planet.ecc = self.map_soln["ecc"][i]
                 planet.omega = self.map_soln["omega"][i]
-        
-            
 
     def search_for_tois(self):
         '''
@@ -306,35 +287,42 @@ class TessSystem:
         
         self.create_transit_mask()
 
-    def fix_tois(self, planet_objs_dir):
+    def fix_planets(self, planet_objs_dir):
         '''
-        Fix incorrect entries in the TOI catalog or manually add planets that don't appear there.
+        Fix incorrect entries in the TOI catalog or manually add planets that don't appear there or add non-transiting planets
+        '''
 
-        TODO: This needs to be updated so that it's a member function of the TESSSYSTEM object itself.
-        '''
+        any_transiting = False # Any of the planets to add transiting? Then must reset and recreate the all-planet transit mask.
+
         if not os.path.exists(planet_objs_dir):
             print(f"{planet_objs_dir} is not a valid path. Assuming there are no TOI entries to fix or manual planets to add. Continuing.")
         else:
             if self.verbose:
-                print(f"Loading {len(os.listdir(planet_objs_dir))} non-TOI transiting planet(s) from {planet_objs_dir}")
+                print(f"Loading {len(os.listdir(planet_objs_dir))} manual planets from {planet_objs_dir}")
             for fname in os.listdir(planet_objs_dir):
                 f = os.path.join(planet_objs_dir, fname)
                 with open(f, 'rb') as planet_fname:
                     # Load the planet from the pickled file.
                     planet = pickle.load(planet_fname)
+                    if planet.is_transiting:
+                        any_transiting = True
                     # If we're replacing a planet remove that planet first.
-                    if planet.pl_letter in self.transiting_planets.keys():
+                    if planet.pl_letter in self.planets.keys():
                         self.remove_planet(planet.pl_letter)
                     # Add the planet.
                     self.add_planet(planet)
             
-            # Reset the transit mask and create the new one with the correct transiting planets.
-            self.reset_transit_mask()
-            self.create_transit_mask()
+            # Reset the transit mask and create the new one with the correct planets.
+            if any_transiting:
+                self.reset_transit_mask()
+                self.create_transit_mask()
 
     def update_t0s_to_near_data_middle(self, buffer=100): # If t0 is already within buffer days of the data middle, that's fine.
         '''
         To reduce the covariance bewteen period and t0, use a t0 initial guess that is close to the middle of the photometry timeseries.
+        
+        TODO: Optional, but could change to updating t0 to near center of photometry data center to middle of phot and RV data.
+              Let's just leave it as the phot data middle for now since they should be relatively close.
         '''
         phot_data_middle = 0.5 * (np.max(self.lc.time.value) - np.min(self.lc.time.value))
         for planet in self.transiting_planets.values():

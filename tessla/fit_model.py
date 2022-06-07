@@ -79,7 +79,7 @@ def main():
     
     # If there are TOIs that are not in the catalog or the TOIs in the catalog have incorrect properties, fix them manually.
     if args.planet_objs_dir is not None:
-        toi.fix_tois(args.planet_objs_dir)
+        toi.fix_planets(args.planet_objs_dir)
 
     # Initial outlier removal with a SG filter
     toi.initial_outlier_removal(positive_outliers_only=False, max_iters=10, sigma_thresh=3, time_window=1)
