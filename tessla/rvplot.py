@@ -326,8 +326,8 @@ class RVPlot:
                     t0 = np.array([chains[f"{prefix}t0_{letter}"].values[ind] for letter in self.toi.planets.keys()])
                     rstar = chains["rstar"].values[ind]
                     mstar = chains["mstar"].values[ind]
-                    ecc = np.array([chains[f"{prefix}ecc_{letter}"].values[ind] for letter in self.toi.transiting_planets.keys()])
-                    omega = np.array([chains[f"{prefix}omega_{letter}"].values[ind] for letter in self.toi.transiting_planets.keys()])
+                    ecc = np.array([chains[f"{prefix}ecc_{letter}"].values[ind] for letter in self.toi.planets.keys()])
+                    omega = np.array([chains[f"{prefix}omega_{letter}"].values[ind] for letter in self.toi.planets.keys()])
                     orbit = xo.orbits.KeplerianOrbit(r_star=rstar, m_star=mstar, period=period, t0=t0, ecc=ecc, omega=omega)
 
                     # Get RV for planet

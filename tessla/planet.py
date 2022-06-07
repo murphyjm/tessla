@@ -5,7 +5,8 @@ import numpy as np
 planet_color_dict = {
     'b':'cornflowerblue',
     'c':'orange',
-    'd':'forestgreen'
+    'd':'forestgreen',
+    'e':'purple'
 }
 
 class Planet:
