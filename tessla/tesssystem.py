@@ -228,22 +228,39 @@ class TessSystem:
         Update the planet properties to the MAP solution values. Is optionally automatically run after the MAP fitting procedure.
         '''
         assert self.map_soln is not None, "MAP Solution is none. Must run MAP fitting procedure first."
-        for i,planet in enumerate(self.planets.values()): # TODO: This means that planets must be added to the self.planets dictionary in the same order they appear in the model. I think this should already be the case, though.
+        for i,planet in enumerate(self.transiting_planets.values()):
             planet.per = self.map_soln["period"][i]
             planet.t0 = self.map_soln["t0"][i]
-        
-            # Transiting-specific properties
-            if planet.is_transiting:
-                planet.depth = (self.map_soln["ror"][i])**2 * 1e3 # Places in units of PPT
-                planet.b = self.map_soln["b"][i]
-                if not self.is_joint_model:
-                    planet.dur = self.map_soln["dur"][i]
+            planet.depth = (self.map_soln["ror"][i])**2 * 1e3 # Places in units of PPT
+            planet.b = self.map_soln["b"][i]
+            if not self.is_joint_model:
+                planet.dur = self.map_soln["dur"][i]
             
             # If a joint model was fit then there are also Keplerian orbit attributes
             if self.is_joint_model:
-                planet.kamp = self.map_soln["K"][i]
-                planet.ecc = self.map_soln["ecc"][i]
-                planet.omega = self.map_soln["omega"][i]
+                try: # Maybe RVs haven't been included yet. i.e. when running flatten_light_curve()
+                    planet.kamp = self.map_soln["K"][i]
+                    planet.ecc = self.map_soln["ecc"][i]
+                    planet.omega = self.map_soln["omega"][i]
+                except KeyError:
+                    continue
+            
+            self.planets[planet.pl_letter] = planet
+        
+        for i, planet in enumerate(self.nontransiting_planets.values()):
+            prefix = 'nontrans_'
+            try: # Maybe RVs haven't been included yet. i.e. when running flatten_light_curve()
+                planet.per = self.map_soln[f"{prefix}period"][i]
+            except KeyError:
+                break
+            planet.t0 = self.map_soln[f"{prefix}t0"][i]
+            planet.kamp = self.map_soln[f"{prefix}K"][i]
+            planet.ecc = self.map_soln[f"{prefix}ecc"][i]
+            planet.omega = self.map_soln[f"{prefix}omega"][i]
+            
+            
+            self.planets[planet.pl_letter] = planet
+        
 
     def search_for_tois(self):
         '''
@@ -301,7 +318,7 @@ class TessSystem:
             print(f"{planet_objs_dir} is not a valid path. Assuming there are no TOI entries to fix or manual planets to add. Continuing.")
         else:
             if self.verbose:
-                print(f"Loading {len(os.listdir(planet_objs_dir))} manual planets from {planet_objs_dir}")
+                print(f"Loading {len(os.listdir(planet_objs_dir))} manual planet(s) from {planet_objs_dir}")
             for fname in os.listdir(planet_objs_dir):
                 f = os.path.join(planet_objs_dir, fname)
                 with open(f, 'rb') as planet_fname:
@@ -808,7 +825,7 @@ class TessSystem:
 
         return model
 
-    def __get_rv_model(self, t, K, orbit, trend_rv):
+    def __get_rv_model(self, t, K, orbit, trend_rv, n_planets):
 
         planet_rv = orbit.get_radial_velocity(t, K=K)
 
@@ -818,23 +835,23 @@ class TessSystem:
             A = np.vander(t - self.rv_trend_time_ref, self.rv_trend_order + 1, increasing=True)# [:, :-1] # Don't use the offset term, we already have instrument offsets.
             bkg = tt.dot(A, trend_rv)
         
-        if self.n_planets > 1:
+        if n_planets > 1:
             return planet_rv, bkg, tt.sum(planet_rv, axis=-1) + bkg
         else:
             return planet_rv, bkg, planet_rv + bkg
 
-    def __get_nontrans_params_and_orbit(self, mstar, rstar, sd_t0=100, sd_log_period=10, prefix="nontrans"):
-        t0 = pm.Normal(f"{prefix}_t0", mu=np.array([planet.t0 for planet in self.nontransiting_planets.values()]), sd=sd_t0, shape=self.n_nontransiting) # width of t0 is just a placeholder for now
-        log_K = pm.Normal(f"{prefix}_log_K", mu=np.log(np.std(self.rv_df.mnvel) * np.ones(self.n_nontransiting)), sigma=np.log(50), shape=self.n_nontransiting)
-        K = pm.Deterministic(f"{prefix}_K", tt.exp(log_K))
-        log_period = pm.Normal(f"{prefix}_log_period", mu=np.log(np.array([planet.per for planet in self.nontransiting_planets.values()])), sd=sd_log_period, shape=self.n_nontransiting)
-        period = pm.Deterministic(f"{prefix}_period", tt.exp(log_period))
+    def __get_nontrans_params_and_orbit(self, mstar, rstar, sd_t0=100, sd_log_period=10, prefix="nontrans_"):
+        t0 = pm.Normal(f"{prefix}t0", mu=np.array([planet.t0 for planet in self.nontransiting_planets.values()]), sd=sd_t0, shape=self.n_nontransiting) # width of t0 is just a placeholder for now
+        log_K = pm.Normal(f"{prefix}log_K", mu=np.log(np.std(self.rv_df.mnvel) * np.ones(self.n_nontransiting)), sigma=np.log(50), shape=self.n_nontransiting)
+        K = pm.Deterministic(f"{prefix}K", tt.exp(log_K))
+        log_period = pm.Normal(f"{prefix}log_period", mu=np.log(np.array([planet.per for planet in self.nontransiting_planets.values()])), sd=sd_log_period, shape=self.n_nontransiting)
+        period = pm.Deterministic(f"{prefix}period", tt.exp(log_period))
 
         # Eccentricity and omega
-        ecs = pmx.UnitDisk(f"{prefix}_ecs", shape=(2, self.n_nontransiting), testval=0.01 * np.ones((2, self.n_nontransiting)))
-        ecc = pm.Deterministic(f"{prefix}_ecc", tt.sum(ecs**2, axis=0))
-        omega = pm.Deterministic(f"{prefix}_omega", tt.arctan2(ecs[1], ecs[0]))
-        xo.eccentricity.vaneylen19(f"{prefix}_ecc_prior", multi=(self.n_planets > 1), shape=self.n_nontransiting, fixed=True, observed=ecc)
+        ecs = pmx.UnitDisk(f"{prefix}ecs", shape=(2, self.n_nontransiting), testval=0.01 * np.ones((2, self.n_nontransiting)))
+        ecc = pm.Deterministic(f"{prefix}ecc", tt.sum(ecs**2, axis=0))
+        omega = pm.Deterministic(f"{prefix}omega", tt.arctan2(ecs[1], ecs[0]))
+        xo.eccentricity.vaneylen19(f"{prefix}ecc_prior", multi=(self.n_planets > 1), shape=self.n_nontransiting, fixed=True, observed=ecc)
 
         nontrans_params = { # A little hacky
             't0':t0,
@@ -940,25 +957,33 @@ class TessSystem:
             # RV model
             if self.n_nontransiting > 0:
                 # If nontransiting planets, put the rv trend (if any) in their orbit object.
-                planet_rv, _, full_rv_model = self.__get_rv_model(self.rv_df.time, K, orbit, None)
-                planet_rv_pred, _, full_rv_model_pred = self.__get_rv_model(t_rv, K, orbit, None)
+                planet_rv, _, full_rv_model = self.__get_rv_model(self.rv_df.time, K, orbit, None, self.n_transiting)
+                planet_rv_pred, _, full_rv_model_pred = self.__get_rv_model(t_rv, K, orbit, None, self.n_transiting)
 
                 nontrans_params, nontrans_orbit = self.__get_nontrans_params_and_orbit(mstar, rstar)
-                nontrans_planet_rv, bkg_rv, nontrans_full_rv_model = self.__get_rv_model(self.rv_df.time, nontrans_params['K'], nontrans_orbit, trend_rv)
-                nontrans_planet_rv_pred, bkg_rv_pred, nontrans_full_rv_model_pred = self.__get_rv_model(t_rv, nontrans_params['K'], nontrans_orbit, trend_rv)
+                nontrans_planet_rv, bkg_rv, nontrans_full_rv_model = self.__get_rv_model(self.rv_df.time, nontrans_params['K'], nontrans_orbit, trend_rv, self.n_nontransiting)
+                nontrans_planet_rv_pred, bkg_rv_pred, nontrans_full_rv_model_pred = self.__get_rv_model(t_rv, nontrans_params['K'], nontrans_orbit, trend_rv, self.n_nontransiting)
 
                 # Combine the RVs for the transiting and non-transiting planets
-                # TODO: FIX THIS. Broken somehow.
-                planet_rv = tt.stacklists([planet_rv, nontrans_planet_rv])
-                planet_rv_pred = tt.stacklists([planet_rv_pred, nontrans_planet_rv_pred])
-                
+                # Annoying dimension stuff. Can't stack a theano tensor with a vector, so need to add additional axis with dimshuffle
+                # Each planet corresponds to a **column** of planet_rv
+                if self.n_transiting <= 1:
+                    planet_rv = planet_rv.dimshuffle(0, 'x')
+                    planet_rv_pred = planet_rv_pred.dimshuffle(0, 'x')
+                if self.n_nontransiting <= 1:
+                    nontrans_planet_rv = nontrans_planet_rv.dimshuffle(0, 'x')
+                    nontrans_planet_rv_pred = nontrans_planet_rv_pred.dimshuffle(0, 'x')
+
+                planet_rv = tt.concatenate([planet_rv, nontrans_planet_rv], axis=1)
+                planet_rv_pred = tt.concatenate([planet_rv_pred, nontrans_planet_rv_pred], axis=1)
+
                 full_rv_model = full_rv_model + nontrans_full_rv_model
                 full_rv_model_pred = full_rv_model_pred + nontrans_full_rv_model_pred
 
             else:
                 # If no nontransiting planets
-                planet_rv, bkg_rv, full_rv_model = self.__get_rv_model(self.rv_df.time, K, orbit, trend_rv)
-                planet_rv_pred, bkg_rv_pred, full_rv_model_pred = self.__get_rv_model(t_rv, K, orbit, trend_rv)
+                planet_rv, bkg_rv, full_rv_model = self.__get_rv_model(self.rv_df.time, K, orbit, trend_rv, self.n_transiting)
+                planet_rv_pred, bkg_rv_pred, full_rv_model_pred = self.__get_rv_model(t_rv, K, orbit, trend_rv, self.n_transiting)
 
             # RV residuals
             resid_rv = self.rv_df.mnvel.values - mean_rv - full_rv_model
