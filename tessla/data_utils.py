@@ -118,8 +118,8 @@ def quick_look_summary(toi, df_derived_chains):
     if toi.rv_data_path is None:
         params = ['period', 't0', 'rp', 'dur_hr', 'b', 'ecc', 'omega_folded_deg']
     else:
-        params = ['period', 't0', 'rp', 'b', 'ecc', 'omega', 'mp', 'rho', 'a', 'teq']
-    for letter in toi.transiting_planets.keys():
+        params = ['period', 't0', 'rp', 'b', 'ecc', 'omega', 'msini', 'mp', 'rho', 'a', 'teq']
+    for letter in toi.planets.keys():
         for param in params:
             df.loc[f"{param}_{letter}"] = __get_summary_info(df_derived_chains[f"{param}_{letter}"])
     save_fname = f"{toi.name.replace(' ', '_')}_quick_look_summary.csv"

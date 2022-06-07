@@ -253,7 +253,7 @@ class RVPlot:
         Plot the folded transits for each planet.
         '''
         heights = [1, 0.25]
-        sps = gridspec.GridSpecFromSubplotSpec(2, len(self.toi.transiting_planets), subplot_spec=gs1, height_ratios=heights, hspace=0.05)
+        sps = gridspec.GridSpecFromSubplotSpec(2, len(self.toi.planets), subplot_spec=gs1, height_ratios=heights, hspace=0.05)
         
         residuals = pd.Series(self.toi.rv_df.mnvel.values - self.toi.extras['full_rv_model'] - self.toi.extras['mean_rv']).copy()
         if self.toi.include_svalue_gp:
@@ -266,7 +266,7 @@ class RVPlot:
             chains = pd.read_csv(self.toi.chains_path)
         phase_folded_axes = []
         phase_folded_resid_axes = []
-        for i,planet in enumerate(self.toi.transiting_planets.values()):
+        for i,planet in enumerate(self.toi.planets.values()):
 
             ax0 = fig.add_subplot(sps[0, i])
             phase_folded_axes.append(ax0)
@@ -318,15 +318,17 @@ class RVPlot:
 
                     # Build the model we used before
                     # Orbit
-                    K = np.array([chains[f"K_{letter}"].values[ind] for letter in self.toi.transiting_planets.keys()])
-                    period = np.array([chains[f"period_{letter}"].values[ind] for letter in self.toi.transiting_planets.keys()])
-                    t0 = np.array([chains[f"t0_{letter}"].values[ind] for letter in self.toi.transiting_planets.keys()])
-                    b = np.array([chains[f"b_{letter}"].values[ind] for letter in self.toi.transiting_planets.keys()])
+                    prefix = ''
+                    if not planet.is_transiting:
+                        prefix = "nontrans_"
+                    K = np.array([chains[f"{prefix}K_{letter}"].values[ind] for letter in self.toi.planets.keys()])
+                    period = np.array([chains[f"{prefix}period_{letter}"].values[ind] for letter in self.toi.planets.keys()])
+                    t0 = np.array([chains[f"{prefix}t0_{letter}"].values[ind] for letter in self.toi.planets.keys()])
                     rstar = chains["rstar"].values[ind]
                     mstar = chains["mstar"].values[ind]
-                    ecc = np.array([chains[f"ecc_{letter}"].values[ind] for letter in self.toi.transiting_planets.keys()])
-                    omega = np.array([chains[f"omega_{letter}"].values[ind] for letter in self.toi.transiting_planets.keys()])
-                    orbit = xo.orbits.KeplerianOrbit(r_star=rstar, m_star=mstar, period=period, t0=t0, b=b, ecc=ecc, omega=omega)
+                    ecc = np.array([chains[f"{prefix}ecc_{letter}"].values[ind] for letter in self.toi.transiting_planets.keys()])
+                    omega = np.array([chains[f"{prefix}omega_{letter}"].values[ind] for letter in self.toi.transiting_planets.keys()])
+                    orbit = xo.orbits.KeplerianOrbit(r_star=rstar, m_star=mstar, period=period, t0=t0, ecc=ecc, omega=omega)
 
                     # Get RV for planet
                     planet_rv_pred = orbit.get_radial_velocity(self.toi.t_rv, K=K).eval()
@@ -368,21 +370,35 @@ class RVPlot:
                 ax0.set_ylabel("RV [m s$^{-1}$]", fontsize=14)
                 ax1.set_ylabel("Residuals", fontsize=14)
             
-
+            # Label phase plots with orbit parameters
+            prefix = ''
+            if not planet.is_transiting:
+                prefix = "nontrans_"
+            # Include errors
             if self.df_summary is not None:
-                per_str = f"$P =$ {self.df_summary.loc[f'period_{planet.pl_letter}', 'median']:.2f} d"
-                ecc_med = self.df_summary.loc[f'ecc_{planet.pl_letter}', 'median']
-                ecc_err = self.df_summary.loc[f'ecc_{planet.pl_letter}', 'std']
+                per_str = f"$P =$ {self.df_summary.loc[f'{prefix}period_{planet.pl_letter}', 'median']:.2f} d"
+                ecc_med = self.df_summary.loc[f'{prefix}ecc_{planet.pl_letter}', 'median']
+                ecc_err = self.df_summary.loc[f'{prefix}ecc_{planet.pl_letter}', 'std']
                 ecc_str = f"$e = {ecc_med:.2f} \pm {ecc_err:.2f}$"
-                mp_med = self.df_summary.loc[f'mp_{planet.pl_letter}', 'median']
-                mp_err = self.df_summary.loc[f'mp_{planet.pl_letter}', 'std']
-                mp_str = f"$M_\mathrm{{p}} = {mp_med:.1f} \pm {mp_err:.1f}$ $M_\oplus$"
-                planet_str = per_str + '\n' + ecc_str + '\n' + mp_str
-                text = ax0.text(0.05, 0.05, planet_str, ha='left', va='bottom', transform=ax0.transAxes)
-                alpha = 0.5
-                if self.rms_yscale_phase_folded_panels:
-                    alpha=0.8
-                text.set_bbox(dict(facecolor='white', alpha=alpha, edgecolor='none'))
+                if planet.is_transiting:
+                    mp_med = self.df_summary.loc[f'mp_{planet.pl_letter}', 'median']
+                    mp_err = self.df_summary.loc[f'mp_{planet.pl_letter}', 'std']
+                    mp_str = f"$M_\mathrm{{p}} = {mp_med:.1f} \pm {mp_err:.1f}$ $M_\oplus$"
+                else:
+                    mp_med = self.df_summary.loc[f'{prefix}msini_{planet.pl_letter}', 'median']
+                    mp_err = self.df_summary.loc[f'{prefix}msini_{planet.pl_letter}', 'std']
+                    mp_str = f"$M_\mathrm{{p}} \sin i = {mp_med:.1f} \pm {mp_err:.1f}$ $M_\oplus$"
+            else:
+                per_str = f"$P =$ {self.toi.map_soln[f'{prefix}period_{planet.pl_letter}']:.2f} d"
+                ecc_str = f"$e =$ {self.toi.map_soln[f'{prefix}ecc_{planet.pl_letter}']:.2f}"
+                mp_str = f"$K =$ {self.toi.map_soln[f'{prefix}K_{planet.pl_letter}']:.2f} m s$^{-1}$" # This is actually K-amplitude but just horrible naming here.
+
+            planet_str = per_str + '\n' + ecc_str + '\n' + mp_str
+            text = ax0.text(0.05, 0.05, planet_str, ha='left', va='bottom', transform=ax0.transAxes)
+            alpha = 0.5
+            if self.rms_yscale_phase_folded_panels:
+                alpha=0.8
+            text.set_bbox(dict(facecolor='white', alpha=alpha, edgecolor='none'))
         
         # Make the y-axes range the same for all of the phase-folded plots
         for k, axes in enumerate([phase_folded_axes, phase_folded_resid_axes]):
