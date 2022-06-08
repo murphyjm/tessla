@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 from scipy.stats import binned_statistic
 from tessla.data_utils import find_breaks
+from astropy import units
 
 # Exoplanet stuff
 import exoplanet as xo
@@ -594,6 +595,16 @@ class ThreePanelPhotPlot:
                 rp_med = self.df_summary.loc[f'rp_{planet.pl_letter}', 'median']
                 rp_err = self.df_summary.loc[f'rp_{planet.pl_letter}', 'std']
                 rp_str = f"$R_\mathrm{{p}} = {rp_med:.2f} \pm {rp_err:.2f}$ $R_\oplus$"
+                text_rp = ax0.text(0.95, 0.9, rp_str, ha='right', va='top', transform=ax0.transAxes)
+                text_rp.set_bbox(dict(facecolor='white', alpha=0.5, edgecolor='none'))
+            else:
+                # Annotate with MAP solution values for Period and radius
+                per_str = f"$P =$ {planet.per:.2f} d"
+                text_per = ax0.text(0.05, 0.9, per_str, ha='left', va='top', transform=ax0.transAxes)
+                text_per.set_bbox(dict(facecolor='white', alpha=0.5, edgecolor='none'))
+                
+                rp_map = (units.Rsun.to(units.Rearth, np.sqrt(planet.depth * 1e-3) * self.toi.star.rstar))
+                rp_str = f"$R_\mathrm{{p}} = {rp_map:.2f}$ $R_\oplus$"
                 text_rp = ax0.text(0.95, 0.9, rp_str, ha='right', va='top', transform=ax0.transAxes)
                 text_rp.set_bbox(dict(facecolor='white', alpha=0.5, edgecolor='none'))
         

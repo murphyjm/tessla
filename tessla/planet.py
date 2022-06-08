@@ -5,7 +5,8 @@ import numpy as np
 planet_color_dict = {
     'b':'cornflowerblue',
     'c':'orange',
-    'd':'forestgreen'
+    'd':'forestgreen',
+    'e':'purple'
 }
 
 class Planet:
@@ -16,19 +17,24 @@ class Planet:
                 toi_bjd_ref,
                 pl_letter='b',
                 pl_toi_suffix='.01',
-                per=None,
-                per_err=None,
-                t0=None,
-                t0_err=None,
+                per=None, # days
+                per_err=None, # days
+                t0=None, # days
+                t0_err=None, # days
                 bjd_ref=2457000, # By default, assume that t0 is reported in BTJD i.e., BJD - 2457000. If you want to start the light curve modeling at t = 0, then there will be an additional offset.
-                dur=None,
-                dur_err=None,
-                depth=None,
-                depth_err=None,
+                b=None,
+                b_err=None,
+                dur=None, # days
+                dur_err=None, # days
+                depth=None, # ppt
+                depth_err=None, # ppt
                 ecc=None,
                 ecc_err=None,
                 omega=None, # In degrees
                 omega_err=None, # In degrees
+                kamp=None, # m/s
+                kamp_err=None, # m/s
+                is_transiting=True,
                 ) -> None:
     
         self.pl_letter = pl_letter
@@ -43,6 +49,8 @@ class Planet:
             self.bjd_ref = toi_bjd_ref
             self.t0 = self.t0 + bjd_ref - toi_bjd_ref
 
+        self.b = b
+        self.b_err = b_err
         self.dur = dur
         self.dur_err = dur_err
         self.depth = depth
@@ -52,11 +60,14 @@ class Planet:
         self.color = planet_color_dict[pl_letter]
 
         # Additional quantities
+        self.kamp = kamp
+        self.kamp_err = kamp_err
         self.ecc = ecc
         self.ecc_err = ecc_err
         self.omega = omega
         self.omega_err = omega_err
 
+        self.is_transiting = is_transiting
 
     def __create_transit_mask(self, time):
         '''
