@@ -404,7 +404,7 @@ class RVPlot:
                 ax1.yaxis.set_major_locator(MultipleLocator(major))
                 ax1.yaxis.set_minor_locator(MultipleLocator(minor))
 
-                if planet_col_ind == 0 or isinstance(planet_col_ind, slice) :
+                if planet_col_ind == 0 or isinstance(planet_col_ind, slice):
                     ax0.set_ylabel("RV [m s$^{-1}$]", fontsize=14)
                     ax1.set_ylabel("Resid.", fontsize=14)
                 
