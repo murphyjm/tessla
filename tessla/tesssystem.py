@@ -1424,7 +1424,7 @@ class TessSystem:
             else:
                 df_chains[f"rho_{letter}"] = get_density(df_chains[f"mp_{letter}"].values, df_chains[f"rp_{letter}"].values, 'earthMass', 'earthRad', 'g', 'cm')
                 df_chains[f"mp_{letter}"] = df_chains[f"msini_{letter}"] / np.sin(df_chains[f"i_rad_{letter}"])
-                if self.star.jmag is not None:
+                if self.star.jmag is not None and self.star.jmag_err is not None:
                     jmag_samples = np.random.normal(self.star.jmag, self.star.jmag_err, N)
                     df_chains[f"tsm_{letter}"] = get_tsm(df_chains[f'rp_{letter}'], df_chains[f"mp_{letter}"], df_chains[f"aor_{letter}"], rstar_samples, teff_samples, jmag_samples)
 
