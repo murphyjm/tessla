@@ -102,6 +102,29 @@ def get_inclination(b_samples, a_samples, rstar_samples):
     
     return inclination_samples_rad, inclination_samples_deg
 
+def get_tsm(pl_rade, pl_masse, pl_aor, rstar, teff, jmag):
+    '''
+    Calculate TSM from derived chains.
+    '''
+    pl_rade_med = np.median(pl_rade) # Determine the scale factor using the median of the planet's radius measurement.
+    scale_factor = None
+    if pl_rade_med < 1.5:
+        scale_factor = 0.190
+    elif pl_rade_med >= 1.5 and pl_rade_med < 2.75:
+        scale_factor = 1.26
+    elif pl_rade_med >= 2.75 and pl_rade_med < 4.0:
+        scale_factor = 1.28
+    elif pl_rade_med >= 4.0 and pl_rade_med < 10:
+        scale_factor = 1.15
+    else:
+        scale_factor = -1 # Planet too large
+    teq = teff * (np.sqrt(1/pl_aor)*(0.25**0.25))
+
+    numerator = scale_factor * pl_rade**3 * teq * 10**(-1 * jmag / 5)
+    denominator = pl_masse * rstar**2
+
+    return numerator / denominator
+
 def __get_summary_info(chain):
     median = np.median(chain)
     mean = np.mean(chain)
