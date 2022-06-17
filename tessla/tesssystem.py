@@ -150,32 +150,34 @@ class TessSystem:
                                                                                                                rv_df['errvel'].values, 
                                                                                                                rv_df['tel'].values, 
                                                                                                                binsize=self.rv_bin_size)
-            if self.include_svalue_gp:
-                assert svalue_gp_kernel.lower() in ['rotation', 'exp_decay'], "Svalue/RV GP must have kernel that is either 'rotation' or 'exp_decay'"
-                self.svalue_gp_kernel = svalue_gp_kernel.lower()
-                # Pick and choose which instruments have valid Svalues
-                valid_svalue_mask = np.zeros(len(rv_df), dtype=bool)
-                for tel in VALID_SVALUE_INST:
-                    valid_svalue_mask |= rv_df['tel'].values == tel
-                self.svalue_inst_names = np.unique(rv_df.loc[valid_svalue_mask, 'tel'])
-
-                svalue_df = rv_df[valid_svalue_mask].reset_index(drop=True)
-                svalue_df = svalue_df[svalue_df.svalue > 0].reset_index(drop=True) # All Svalues should be > 0.
-                svalue_df_binned = pd.DataFrame()
-                svalue_df_binned['time'], svalue_df_binned['svalue'], svalue_df_binned['svalue_err'], svalue_df_binned['tel'] = bintels(svalue_df['time'].values, 
-                                                                                                                                        svalue_df['svalue'].values, 
-                                                                                                                                        svalue_df['svalue_err'].values, 
-                                                                                                                                        svalue_df['tel'].values, 
-                                                                                                                                        binsize=self.rv_bin_size)
-                svalue_df_binned = svalue_df_binned.sort_values(by='time').reset_index(drop=True)
-                self.svalue_df = svalue_df_binned
-                self.num_svalue_inst = len(self.svalue_inst_names)
-                if self.verbose:
-                    print(f"Including GP model using S-Values with a {self.svalue_gp_kernel} kernel.")
             rv_df_binned = rv_df_binned.sort_values(by='time').reset_index(drop=True)
             self.rv_df = rv_df_binned
             self.rv_inst_names = np.unique(rv_df['tel'])
             self.num_rv_inst = len(self.rv_inst_names)
+            
+            # Add svalue data set even if not including Svalue GP
+            if self.include_svalue_gp:
+                assert svalue_gp_kernel.lower() in ['rotation', 'exp_decay'], "Svalue/RV GP must have kernel that is either 'rotation' or 'exp_decay'"
+                self.svalue_gp_kernel = svalue_gp_kernel.lower()
+                if self.verbose:
+                    print(f"Including GP model using S-Values with a {self.svalue_gp_kernel} kernel.")
+            # Pick and choose which instruments have valid Svalues
+            valid_svalue_mask = np.zeros(len(rv_df), dtype=bool)
+            for tel in VALID_SVALUE_INST:
+                valid_svalue_mask |= rv_df['tel'].values == tel
+            self.svalue_inst_names = np.unique(rv_df.loc[valid_svalue_mask, 'tel'])
+
+            svalue_df = rv_df[valid_svalue_mask].reset_index(drop=True)
+            svalue_df = svalue_df[svalue_df.svalue > 0].reset_index(drop=True) # All Svalues should be > 0.
+            svalue_df_binned = pd.DataFrame()
+            svalue_df_binned['time'], svalue_df_binned['svalue'], svalue_df_binned['svalue_err'], svalue_df_binned['tel'] = bintels(svalue_df['time'].values, 
+                                                                                                                                    svalue_df['svalue'].values, 
+                                                                                                                                    svalue_df['svalue_err'].values, 
+                                                                                                                                    svalue_df['tel'].values, 
+                                                                                                                                    binsize=self.rv_bin_size)
+            svalue_df_binned = svalue_df_binned.sort_values(by='time').reset_index(drop=True)
+            self.svalue_df = svalue_df_binned
+            self.num_svalue_inst = len(self.svalue_inst_names)
 
         # Photometry-only
         else:

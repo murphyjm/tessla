@@ -27,8 +27,8 @@ class StackedPeriodogram:
         self.toi = toi
         self.min_period = min_period
         self.max_period = max_period
-        self.samples_per_peaks = samples_per_peak
-        
+        self.samples_per_peak = samples_per_peak
+
         # For a 1 planet system there should 5 periodograms:
         # 1. Photometry, 2. RVs with offsets applied, trend/curvature removed 3. RV residuals, 4. S-Values, 5. RV Window Function
         num_periodograms = 5
@@ -38,6 +38,8 @@ class StackedPeriodogram:
         self.num_periodograms = num_periodograms
 
         self.title = title
+        if self.title == '':
+            self.title = self.toi.name
         self.figsize = figsize
 
         self.save_format = save_format
@@ -94,7 +96,12 @@ class StackedPeriodogram:
                                             self.toi.lc.norm_flux_err.value[oot_mask])
 
         ax[i].plot(periods, power, color='k')
-        text = ax[i].text(xtext, ytext, 'TESS OoT SAP Flux', transform=ax[i].transAxes, ha='right')
+        phot_str = 'TESS OoT '
+        if self.toi.flux_origin == 'sap_flux':
+            phot_str += "SAP Flux"
+        elif self.toi.flux_origin == 'pdcsap_flux':
+            phot_str += "PDCSAP Flux"
+        text = ax[i].text(xtext, ytext, phot_str, transform=ax[i].transAxes, ha='right')
         text.set_bbox(dict(facecolor='white', alpha=0.8, edgecolor='none'))
         i += 1
 
@@ -109,7 +116,7 @@ class StackedPeriodogram:
                                                     self.toi.rv_df.errvel)
         ax[i].plot(periods, power, color='k')
         rv_str = 'RVs - offsets'
-        if self.rv_trend:
+        if self.toi.rv_trend:
             rv_str += ' - trend'
         text = ax[i].text(xtext, ytext, rv_str, transform=ax[i].transAxes, ha='right')
         text.set_bbox(dict(facecolor='white', alpha=0.8, edgecolor='none'))
@@ -134,9 +141,9 @@ class StackedPeriodogram:
         # Remove planets from RVs
         for planet_ind, planet in enumerate(self.toi.planets.values()):
             if len(self.toi.extras['planet_rv'].shape) > 1:
-                rv_residuals -= self.toi.extras['planet_rv_pred'][:, planet_ind]
+                rv_residuals -= self.toi.extras['planet_rv'][:, planet_ind]
             else:
-                rv_residuals -= self.toi.extras['planet_rv_pred']
+                rv_residuals -= self.toi.extras['planet_rv']
             periods, power, peak_per, ls = self.__get_ls(self.toi.rv_df.time,
                                                         rv_residuals,
                                                         self.toi.rv_df.errvel)
@@ -158,18 +165,19 @@ class StackedPeriodogram:
         # RV Window function
         periods, power, peak_per, ls = self.__get_ls(self.toi.rv_df.time, 
                                             1, 
-                                            1e-12)
+                                            1e-6)
         ax[i].plot(periods, power, color='k')
+        # ax[i].set_ylim([0, 0.25])
         text = ax[i].text(xtext, ytext, 'RV Window Function', transform=ax[i].transAxes, ha='right')
         text.set_bbox(dict(facecolor='white', alpha=0.8, edgecolor='none'))
 
         # Plot vertical lines for planets
         for j in range(self.num_periodograms):
-            for planet in self.planets.values():
+            for planet in self.toi.planets.values():
                 linestyle = '-'
                 if not planet.is_transiting:
                     linestyle = '--' # Give non-transiting planets a different linestyle
-                ax[j].axvline(planet.per, color=planet.color, ls=linestyle)
+                ax[j].axvline(planet.per, color=planet.color, ls=linestyle, zorder=0)
             # Rotation period peak from OoT photometry
             ax[j].axvline(self.toi.rot_per, color='blue', lw=5, alpha=0.5)
             ax[j].axvline(self.toi.rot_per/2, color='cornflowerblue', lw=5, alpha=0.5)
