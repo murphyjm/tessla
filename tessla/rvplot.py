@@ -272,6 +272,7 @@ class RVPlot:
         # Set up the outer gridspec
         num_planet_rows = ceil(self.toi.n_planets / 2)
         outer_sps = gridspec.GridSpecFromSubplotSpec(num_planet_rows, 2, subplot_spec=gs1, hspace=0.3)
+        param_fontsize = 16
         if num_planet_rows > 1:
             param_fontsize = 12 # For the orbital parameter textbox
 

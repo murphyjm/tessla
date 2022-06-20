@@ -1260,7 +1260,10 @@ class TessSystem:
                 continue
             if num_dim > 1 and param != 'u' and param != 'gamma_rv' and param != 'sigma_rv' and param != 'trend_rv':
                 msg = "Chains and number of planets have shape mismatch."
-                assert any(self.n_transiting == flat_samps[param].shape[0], self.n_nontransiting == flat_samps[param].shape[0]), msg
+                ind = 0
+                if param == 'ecs':
+                    ind = 1
+                assert any([self.n_transiting == flat_samps[param].shape[ind], self.n_nontransiting == flat_samps[param].shape[ind]]), msg
                 for i, pl_letter in enumerate(self.planets.keys()):
                     prefix = ''
                     if not self.planets[pl_letter].is_transiting:
@@ -1342,8 +1345,8 @@ class TessSystem:
         flat_samps =  trace.posterior.stack(sample=("chain", "draw"))
         with open(os.path.join(self.sampling_dir, f"{self.name.replace(' ', '_')}_flat_samples.pkl"), "wb") as flat_samples_fname:
             pickle.dump(flat_samps, flat_samples_fname, protocol=pickle.HIGHEST_PROTOCOL)
-        self.__flat_samps_to_csv(model, flat_samps, chains_output_fname)
-        self.chains_path = chains_output_fname
+        self.__flat_samps_to_csv(model, flat_samps, chains_output_fname)     
+        self.chains_path = chains_output_fname   
 
         return flat_samps
 
@@ -1424,8 +1427,8 @@ class TessSystem:
             if not self.is_joint_model:
                 df_chains[f"dur_hr_{letter}"] = df_chains[f"dur_{letter}"] * 24 # Transit duration in hours
             else:
-                df_chains[f"rho_{letter}"] = get_density(df_chains[f"mp_{letter}"].values, df_chains[f"rp_{letter}"].values, 'earthMass', 'earthRad', 'g', 'cm')
                 df_chains[f"mp_{letter}"] = df_chains[f"msini_{letter}"] / np.sin(df_chains[f"i_rad_{letter}"])
+                df_chains[f"rho_{letter}"] = get_density(df_chains[f"mp_{letter}"].values, df_chains[f"rp_{letter}"].values, 'earthMass', 'earthRad', 'g', 'cm')
                 if self.star.jmag is not None and self.star.jmag_err is not None:
                     jmag_samples = np.random.normal(self.star.jmag, self.star.jmag_err, N)
                     df_chains[f"tsm_{letter}"] = get_tsm(df_chains[f'rp_{letter}'], df_chains[f"mp_{letter}"], df_chains[f"aor_{letter}"], rstar_samples, teff_samples, jmag_samples)
