@@ -133,12 +133,12 @@ def __get_summary_info(chain):
     err16, err84 = q[0], q[-1]
     min = np.min(chain)
     max = np.max(chain)
-    return [median, mean, std, err16, err84, min, max]
+    return [median, std, err16, err84, mean, min, max]
 
 def quick_look_summary(toi, df_derived_chains):
-    columns = ['median', 'mean', 'std', 'err16', 'err84', 'min', 'max']
+    columns = ['median', 'std', 'err16', 'err84', 'mean', 'min', 'max'] # Labels must correspond to what's returned by __get_summary_info()
     df = pd.DataFrame(columns=columns)
-    if toi.rv_data_path is None:
+    if not toi.is_joint_model:
         params = ['period', 't0', 'rp', 'dur_hr', 'b', 'ecc', 'omega_folded_deg']
     else:
         params = ['period', 't0', 'rp', 'b', 'ecc', 'omega', 'msini', 'mp', 'rho', 'a', 'teq']
