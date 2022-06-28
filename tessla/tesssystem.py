@@ -68,7 +68,7 @@ class TessSystem:
                 errvel_cut=None, # If a float is provided, cut all mnvel and errvel absolute values above this limit. To get rid of bad data.
                 rv_bin_size=0.33, # Bin RVs collected in the same night (within 8 hours)
                 include_svalue_gp=False, # If true, add a GP simultaneously fit to the RVs and HIRES S-values
-                svalue_gp_kernel='rotation', # Which kernel to use for the GP
+                svalue_gp_kernel='exp_decay', # Which kernel to use for the GP
                 # General stuff
                 verbose=True, # Print out messages
                 plotting=True, # Create plots as you go
@@ -631,8 +631,10 @@ class TessSystem:
         log_sigma_dec_gp = pm.Normal("log_sigma_dec_gp", mu=0., sigma=10)
         BoundedNormal = pm.Bound(pm.Normal, lower=np.log(1), upper=np.log(50)) # Bounded normal for the periodic length scale so it's forced to be longer than 12 hours so it doesn't interfere with transit fitting. 
         log_rho_gp = BoundedNormal("log_rho_gp", mu=np.log(10), sd=np.log(50))
-        kernel = terms.SHOTerm(sigma=tt.exp(log_sigma_dec_gp), rho=tt.exp(log_rho_gp), Q=1/np.sqrt(2))
-        noise_params = [log_sigma_dec_gp, log_rho_gp]
+        BoundedNormalTau = pm.Bound(pm.Normal, lower=np.log(1), upper=np.log(200))
+        log_tau_gp = BoundedNormalTau("log_tau_gp", mu=np.log(10), sd=np.log(50))
+        kernel = terms.SHOTerm(sigma=tt.exp(log_sigma_dec_gp), rho=tt.exp(log_rho_gp), tau=tt.exp(log_tau_gp))
+        noise_params = [log_sigma_dec_gp, log_rho_gp, log_tau_gp]
         return noise_params, kernel
 
     def __get_rotation_kernel(self, suffix=''):
@@ -1003,7 +1005,9 @@ class TessSystem:
                     gp_svalue_params += [log_prot_rv_gp]
                 elif self.svalue_gp_kernel == 'exp_decay':
                     log_rho_svalue_gp = BoundedNormalProt("log_rho_svalue_gp", mu=np.log(10), sd=np.log(50))
-                    gp_svalue_params += [log_rho_svalue_gp]
+                    BoundedNormalTau = pm.Bound(pm.Normal, lower=np.log(1), upper=np.log(200))
+                    log_tau_svalue_gp = BoundedNormalTau("log_tau_svalue_gp", mu=np.log(10), sd=np.log(50))
+                    gp_svalue_params += [log_rho_svalue_gp, log_tau_svalue_gp]
                 
                 gp_svalue_dict = {}
                 
@@ -1028,7 +1032,7 @@ class TessSystem:
                     elif self.svalue_gp_kernel == 'exp_decay':
                         log_sigma_dec_svalue_gp = pm.Normal(f"log_sigma_dec_svalue_gp_{tel}", mu=0., sigma=10)
                         gp_svalue_params += [log_sigma_dec_svalue_gp]
-                        kernel_svalue = terms.SHOTerm(sigma=tt.exp(log_sigma_dec_svalue_gp), rho=tt.exp(log_rho_svalue_gp), Q=0.9) # Underdamped oscillator.
+                        kernel_svalue = terms.SHOTerm(sigma=tt.exp(log_sigma_dec_svalue_gp), rho=tt.exp(log_rho_svalue_gp), tau=tt.exp(log_tau_svalue_gp))
 
                     gp_svalue = GaussianProcess(kernel_svalue, mean=gp_svalue_mean, t=self.svalue_df.loc[tel_mask, 'time'].values, diag=(self.svalue_df.loc[tel_mask, 'svalue_err'].values)**2 + tt.exp(2 * log_jitter_svalue_gp[i]))
                     gp_svalue.marginal(f"gp_svalue_{tel}", observed=self.svalue_df.loc[tel_mask, 'svalue'].values)
@@ -1055,7 +1059,7 @@ class TessSystem:
                     elif self.svalue_gp_kernel == 'exp_decay':
                         log_sigma_dec_rv_gp = pm.Normal(f"log_sigma_dec_rv_gp_{tel}", mu=0., sigma=10) # Different amplitude for each instrument.
                         gp_rv_params += [log_sigma_dec_rv_gp]
-                        kernel_rv = terms.SHOTerm(sigma=tt.exp(log_sigma_dec_rv_gp), rho=tt.exp(log_rho_svalue_gp), Q=1/2) # Critically-damped oscillator when Q=1/2. Shares periodic length scale with svalues.
+                        kernel_rv = terms.SHOTerm(sigma=tt.exp(log_sigma_dec_rv_gp), rho=tt.exp(log_rho_svalue_gp), tau=tt.exp(log_tau_svalue_gp))
                     
                     gp_rv = GaussianProcess(kernel_rv, t=self.rv_df.loc[tel_mask, 'time'].values, diag=diag_rv[tel_mask])
                     gp_rv.marginal(f"gp_rv_{tel}", observed=resid_rv[tel_mask])

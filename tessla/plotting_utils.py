@@ -241,20 +241,53 @@ def star_noise_corner(toi, df_derived_chains, overwrite=False):
     
         # Corner plot for star properties and noise parameters
         star_labels = ['$\mu$ [ppt]', '$u_1$', '$u_2$']
-        noise_labels = ['$\sigma_\mathrm{jitter}$ [ppt]', '$\sigma_\mathrm{GP}$ [PPT]', r'$\rho$ [d]']
+        noise_labels = ['$\sigma_\mathrm{jitter}$ [ppt]', '$\sigma_\mathrm{GP}$ [PPT]', r'$\rho$ [d]', r'$\tau$ [d]']
         star_noise_chains = np.vstack([
             df_derived_chains['mean_flux'], 
             df_derived_chains['u_0'],
             df_derived_chains['u_1'],
             np.exp(df_derived_chains['log_sigma_lc']),
             np.exp(df_derived_chains['log_sigma_dec_gp']),
-            np.exp(df_derived_chains['log_rho_gp'])
+            np.exp(df_derived_chains['log_rho_gp']),
+            np.exp(df_derived_chains['log_tau_gp'])
         ]).T
         star_noise_corner = TesslaCornerPlot(toi, star_labels + noise_labels, star_noise_chains, toi.name)
         star_noise_corner.plot(overwrite=overwrite)
     else:
         # TODO: Fix? Or just leave it like this and people can make corner plots on their own if they use a different kernel.
         print("NOTE: Right now automated corner plot generation only works if phot_gp_kernel == 'exp_decay'")
+
+def svalue_gp_corner(toi, df_derived_chains, overwrite=False):
+    if toi.svalue_gp_kernel == "exp_decay":
+    
+        # Corner plot for Svalue GP hyperparameters
+        # GP amplitudes for each RV instrument
+        noise_labels = [f'$\sigma_{{{tel}}}$ [m/s]' for tel in toi.rv_inst_names]
+        chains = [np.exp(df_derived_chains[f'log_sigma_dec_rv_gp_{tel}']) for tel in toi.rv_inst_names]
+        
+        # GP amplitudes for each Svalue instrument
+        noise_labels += [f'$\sigma_{{{tel}}}$ [dex]' for tel in toi.svalue_inst_names]
+        chains += [np.exp(df_derived_chains[f'log_sigma_dec_svalue_gp_{tel}']) for tel in toi.svalue_inst_names]
+        
+        # Global GP hyperparameters
+        noise_labels += [
+            '$\mu_{S_\mathrm{HK}}$ [dex]', 
+            '$\sigma_{S_\mathrm{HK}}$ [dex]', 
+            r'$\rho_{S_\mathrm{HK}}$ [d]', 
+            r'$\tau_{S_\mathrm{HK}}$ [d]'
+        ]
+        chains += [
+            df_derived_chains['gp_svalue_mean'],
+            np.exp(df_derived_chains['log_jitter_svalue_gp']),
+            np.exp(df_derived_chains['log_rho_svalue_gp']),
+            np.exp(df_derived_chains['log_tau_svalue_gp'])
+        ]
+        svalue_gp_chains = np.vstack(chains).T
+        star_noise_corner = TesslaCornerPlot(toi, noise_labels, svalue_gp_chains, toi.name + " RV-$S_\mathrm{HK}$ GP hyperparameters")
+        star_noise_corner.plot(overwrite=overwrite)
+    else:
+        # TODO: Fix? Or just leave it like this and people can make corner plots on their own if they use a different kernel.
+        print("NOTE: Right now automated corner plot generation only works if svalue_gp_kernel == 'exp_decay'")
 
 def plot_phot_only_corners(toi, df_derived_chains, overwrite=False):
     '''
@@ -300,6 +333,9 @@ def plot_joint_corners(toi, df_derived_chains, overwrite=False):
     Make the corner plots!
     '''
     star_noise_corner(toi, df_derived_chains, overwrite=overwrite)
+    
+    if toi.include_svalue_gp:
+        svalue_gp_corner(toi, df_derived_chains, overwrite=overwrite)
 
     # Corner plot for instrument parameters
     rv_trend_labels_dict = {
