@@ -297,7 +297,7 @@ class RVPlot:
                 # Get the correct column.
                 if planet_ind % 2 == 0 and planet_ind < self.toi.n_planets - 1:
                     planet_col_ind = 0
-                elif planet_ind == self.toi.n_planets - 1:
+                elif planet_ind % 2 == 0 and planet_ind == self.toi.n_planets - 1:
                     planet_col_ind = slice(None)
                 else:
                     planet_col_ind = 1
