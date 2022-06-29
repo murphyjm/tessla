@@ -583,7 +583,7 @@ class ThreePanelPhotPlot:
             ax1.set_ylim([-3, 3])
             axis_to_data = ax.transAxes + ax.transData.inverted()
             points_data = axis_to_data.transform((0.04, 0.15))
-            ax0.errorbar(points_data[0], points_data[1], yerr=np.sqrt(np.exp(self.toi.map_soln['log_sigma_lc'])**2 + np.median(self.yerr)**2), fmt='none', color='k', elinewidth=2, capsize=4)
+            ax0.errorbar(points_data[0], points_data[1], yerr=np.sqrt(np.exp(self.toi.map_soln['log_sigma_phot'])**2 + np.median(self.yerr)**2), fmt='none', color='k', elinewidth=2, capsize=4)
             if i == 0:
                 text = ax0.text(points_data[0] + 0.3/24, points_data[1], 'Data uncert.', fontsize=12)
                 text.set_bbox(dict(facecolor='white', alpha=0.5, edgecolor='none'))

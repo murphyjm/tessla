@@ -629,9 +629,9 @@ class TessSystem:
         Create an exponentially-decaying SHOTerm GP kernel.
         '''
         log_sigma_phot_gp = pm.Normal("log_sigma_phot_gp", mu=0., sigma=10)
-        BoundedNormalRho = pm.Bound(pm.Normal, lower=np.log(1), upper=np.log(50)) # Bounded normal for the periodic length scale so it's forced to be longer than 12 hours so it doesn't interfere with transit fitting. 
+        BoundedNormalRho = pm.Bound(pm.Normal, lower=np.log(1), upper=np.log(50)) # Bounded normal for the periodic length scale so it's forced to be longer than 1 day so it doesn't interfere with transit fitting. 
         log_rho_phot_gp = BoundedNormalRho("log_rho_phot_gp", mu=np.log(10), sd=np.log(50))
-        BoundedNormalTau = pm.Bound(pm.Normal, lower=log_rho_phot_gp, upper=np.log(200))
+        BoundedNormalTau = pm.Bound(pm.Normal, lower=log_rho_phot_gp, upper=np.log(200)) # Force to be larger than undamped period to keep GP smooth
         log_tau_phot_gp = BoundedNormalTau("log_tau_phot_gp", mu=np.log(10), sd=np.log(50))
         kernel = terms.SHOTerm(sigma=tt.exp(log_sigma_phot_gp), rho=tt.exp(log_rho_phot_gp), tau=tt.exp(log_tau_phot_gp))
         noise_params = [log_sigma_phot_gp, log_rho_phot_gp, log_tau_phot_gp]
@@ -1006,7 +1006,7 @@ class TessSystem:
                 elif self.svalue_gp_kernel == 'exp_decay':
                     BoundedNormalRho = pm.Bound(pm.Normal, lower=np.log(1), upper=np.log(50))
                     log_rho_svalue_gp = BoundedNormalRho("log_rho_svalue_gp", mu=np.log(10), sd=np.log(50)) # Maybe change this to be informed from the periodogram of the photometry.
-                    BoundedNormalTau = pm.Bound(pm.Normal, lower=log_rho_svalue_gp, upper=np.log(200))
+                    BoundedNormalTau = pm.Bound(pm.Normal, lower=log_rho_svalue_gp, upper=np.log(200)) # Force to always be larger than undamped period to make GP smooth
                     log_tau_svalue_gp = BoundedNormalTau("log_tau_svalue_gp", mu=np.log(10), sd=np.log(50)) # Maybe change this to be seeded with longer period.
                     gp_svalue_params += [log_rho_svalue_gp, log_tau_svalue_gp]
                 
