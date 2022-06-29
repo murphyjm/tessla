@@ -241,15 +241,15 @@ def star_noise_corner(toi, df_derived_chains, overwrite=False):
     
         # Corner plot for star properties and noise parameters
         star_labels = ['$\mu$ [ppt]', '$u_1$', '$u_2$']
-        noise_labels = ['$\sigma_\mathrm{jitter}$ [ppt]', '$\sigma_\mathrm{GP}$ [PPT]', r'$\rho$ [d]', r'$\tau$ [d]']
+        noise_labels = ['$\sigma_\mathrm{jitter}$ [ppt]', '$\sigma_\mathrm{GP,\:phot}$ [PPT]', r'$\rho_\mathrm{GP,\:phot}$ [d]', r'$\tau_\mathrm{GP,\:phot}$ [d]']
         star_noise_chains = np.vstack([
             df_derived_chains['mean_flux'], 
             df_derived_chains['u_0'],
             df_derived_chains['u_1'],
-            np.exp(df_derived_chains['log_sigma_lc']),
-            np.exp(df_derived_chains['log_sigma_dec_gp']),
-            np.exp(df_derived_chains['log_rho_gp']),
-            np.exp(df_derived_chains['log_tau_gp'])
+            np.exp(df_derived_chains['log_sigma_phot']),
+            np.exp(df_derived_chains['log_sigma_phot_gp']),
+            np.exp(df_derived_chains['log_rho_phot_gp']),
+            np.exp(df_derived_chains['log_tau_phot_gp'])
         ]).T
         star_noise_corner = TesslaCornerPlot(toi, star_labels + noise_labels, star_noise_chains, toi.name)
         star_noise_corner.plot(overwrite=overwrite)
@@ -263,11 +263,11 @@ def svalue_gp_corner(toi, df_derived_chains, overwrite=False):
         # Corner plot for Svalue GP hyperparameters
         # GP amplitudes for each RV instrument
         noise_labels = [f'$\sigma_{{\mathrm{{GP,\:RV,\:}}{tel}}}$ [m s$^{{-1}}$]' for tel in toi.rv_inst_names]
-        chains = [np.exp(df_derived_chains[f'log_sigma_dec_rv_gp_{tel}']) for tel in toi.rv_inst_names]
+        chains = [np.exp(df_derived_chains[f'log_sigma_rv_gp_{tel}']) for tel in toi.rv_inst_names]
         
         # GP amplitudes and jitter for each Svalue instrument
         noise_labels += [f'$\sigma_{{\mathrm{{GP,\:S_{{HK}},\:}}{tel}}}$ [dex]' for tel in toi.svalue_inst_names]
-        chains += [np.exp(df_derived_chains[f'log_sigma_dec_svalue_gp_{tel}']) for tel in toi.svalue_inst_names]
+        chains += [np.exp(df_derived_chains[f'log_sigma_svalue_gp_{tel}']) for tel in toi.svalue_inst_names]
         noise_labels += [f'Jitter$_{{S_\mathrm{{HK}},\:{tel}}}$ [dex]' for tel in toi.svalue_inst_names]
         chains += [np.exp(df_derived_chains[f'log_jitter_svalue_gp_{tel}']) for tel in toi.svalue_inst_names]
         

@@ -628,13 +628,13 @@ class TessSystem:
         '''
         Create an exponentially-decaying SHOTerm GP kernel.
         '''
-        log_sigma_dec_phot_gp = pm.Normal("log_sigma_phot_gp", mu=0., sigma=10)
+        log_sigma_phot_gp = pm.Normal("log_sigma_phot_gp", mu=0., sigma=10)
         BoundedNormal = pm.Bound(pm.Normal, lower=np.log(1), upper=np.log(50)) # Bounded normal for the periodic length scale so it's forced to be longer than 12 hours so it doesn't interfere with transit fitting. 
         log_rho_phot_gp = BoundedNormal("log_rho_phot_gp", mu=np.log(10), sd=np.log(50))
         BoundedNormalTau = pm.Bound(pm.Normal, lower=log_rho_phot_gp, upper=np.log(200))
         log_tau_phot_gp = BoundedNormalTau("log_tau_phot_gp", mu=np.log(10), sd=np.log(50))
-        kernel = terms.SHOTerm(sigma=tt.exp(log_sigma_dec_phot_gp), rho=tt.exp(log_rho_phot_gp), tau=tt.exp(log_tau_phot_gp))
-        noise_params = [log_sigma_dec_phot_gp, log_rho_phot_gp, log_tau_phot_gp]
+        kernel = terms.SHOTerm(sigma=tt.exp(log_sigma_phot_gp), rho=tt.exp(log_rho_phot_gp), tau=tt.exp(log_tau_phot_gp))
+        noise_params = [log_sigma_phot_gp, log_rho_phot_gp, log_tau_phot_gp]
         return noise_params, kernel
 
     def __get_rotation_kernel(self, suffix=''):
@@ -686,7 +686,7 @@ class TessSystem:
             dur = pm.Deterministic("dur", tt.exp(log_dur))
             
             # Light curve jitter
-            log_sigma_lc = pm.Normal("log_sigma_lc", mu=np.log(np.median(yerr.values[mask])), sd=2)
+            log_sigma_phot = pm.Normal("log_sigma_phot", mu=np.log(np.median(yerr.values[mask])), sd=2)
 
             # Orbit model
             orbit = xo.orbits.KeplerianOrbit(period=period, t0=t0, b=b, ror=ror, duration=dur)
@@ -721,7 +721,7 @@ class TessSystem:
 
             self.phot_gp_params = gp_params
             # Compute the GP model for the light curve
-            gp = GaussianProcess(kernel, t=x.values[mask], diag=yerr.values[mask]**2 + tt.exp(2 * log_sigma_lc)) # diag= is the variance of the observational model.
+            gp = GaussianProcess(kernel, t=x.values[mask], diag=yerr.values[mask]**2 + tt.exp(2 * log_sigma_phot)) # diag= is the variance of the observational model.
             gp.marginal("gp", observed=resid)
 
             # Compute and save the phased light curve models
@@ -739,7 +739,7 @@ class TessSystem:
             if start is None:
                 start = model.test_point
             # Order of parameters to be optimized is a bit arbitrary
-            map_soln = pmx.optimize(start=start, vars=[log_sigma_lc])
+            map_soln = pmx.optimize(start=start, vars=[log_sigma_phot])
             map_soln = pmx.optimize(start=map_soln, vars=gp_params)
             map_soln = pmx.optimize(start=map_soln, vars=[log_ror])
             map_soln = pmx.optimize(start=map_soln, vars=[b])
@@ -750,7 +750,7 @@ class TessSystem:
             map_soln = pmx.optimize(start=map_soln, vars=[b])
             map_soln = pmx.optimize(start=map_soln, vars=[log_dur])
             map_soln = pmx.optimize(start=map_soln, vars=[mean_flux])
-            map_soln = pmx.optimize(start=map_soln, vars=[log_sigma_lc])
+            map_soln = pmx.optimize(start=map_soln, vars=[log_sigma_phot])
             map_soln = pmx.optimize(start=map_soln, vars=gp_params)
             map_soln = pmx.optimize(start=map_soln)
 
@@ -905,7 +905,7 @@ class TessSystem:
             xo.eccentricity.vaneylen19("ecc_prior", multi=(self.n_planets > 1), shape=self.n_transiting, fixed=True, observed=ecc)
 
             # Light curve jitter
-            log_sigma_lc = pm.Normal("log_sigma_lc", mu=np.log(np.median(yerr_phot.values)), sd=2)
+            log_sigma_phot = pm.Normal("log_sigma_phot", mu=np.log(np.median(yerr_phot.values)), sd=2)
 
             # Orbit model
             orbit = xo.orbits.KeplerianOrbit(r_star=rstar, m_star=mstar, period=period, t0=t0, b=b, ecc=ecc, omega=omega)
@@ -937,7 +937,7 @@ class TessSystem:
 
             self.phot_gp_params = gp_params
             # Compute the GP model for the light curve
-            gp = GaussianProcess(kernel, t=x_phot.values, diag=yerr_phot.values**2 + tt.exp(2 * log_sigma_lc)) # diag= is the variance of the observational model.
+            gp = GaussianProcess(kernel, t=x_phot.values, diag=yerr_phot.values**2 + tt.exp(2 * log_sigma_phot)) # diag= is the variance of the observational model.
             gp.marginal("gp", observed=resid_phot)
 
             # Build the RV model
@@ -1031,9 +1031,9 @@ class TessSystem:
                         gp_svalue_params += [sigma_gp_svalue, log_Q0_gp_svalue, log_dQ_gp_svalue, f_gp_svalue]
                         kernel_svalue = terms.RotationTerm(sigma=sigma_gp_svalue, period=prot_rv_gp, Q0=tt.exp(log_Q0_gp_svalue), dQ=tt.exp(log_dQ_gp_svalue), f=f_gp_svalue)
                     elif self.svalue_gp_kernel == 'exp_decay':
-                        log_sigma_dec_svalue_gp = pm.Normal(f"log_sigma_dec_svalue_gp_{tel}", mu=0., sigma=10)
-                        gp_svalue_params += [log_sigma_dec_svalue_gp]
-                        kernel_svalue = terms.SHOTerm(sigma=tt.exp(log_sigma_dec_svalue_gp), rho=tt.exp(log_rho_svalue_gp), tau=tt.exp(log_tau_svalue_gp))
+                        log_sigma_svalue_gp = pm.Normal(f"log_sigma_svalue_gp_{tel}", mu=0., sigma=10)
+                        gp_svalue_params += [log_sigma_svalue_gp]
+                        kernel_svalue = terms.SHOTerm(sigma=tt.exp(log_sigma_svalue_gp), rho=tt.exp(log_rho_svalue_gp), tau=tt.exp(log_tau_svalue_gp))
 
                     gp_svalue = GaussianProcess(kernel_svalue, mean=gp_svalue_mean, t=self.svalue_df.loc[tel_mask, 'time'].values, diag=(self.svalue_df.loc[tel_mask, 'svalue_err'].values)**2 + tt.exp(2 * log_jitter_svalue_gp[i]))
                     gp_svalue.marginal(f"gp_svalue_{tel}", observed=self.svalue_df.loc[tel_mask, 'svalue'].values)
@@ -1058,9 +1058,9 @@ class TessSystem:
                         gp_svalue_params += [sigma_gp_rv]
                         kernel_rv = terms.RotationTerm(sigma=sigma_gp_rv, period=prot_rv_gp, Q0=tt.exp(log_Q0_gp_rv), dQ=tt.exp(log_dQ_gp_rv), f=f_gp_rv)
                     elif self.svalue_gp_kernel == 'exp_decay':
-                        log_sigma_dec_rv_gp = pm.Normal(f"log_sigma_dec_rv_gp_{tel}", mu=0., sigma=10) # Different amplitude for each instrument.
-                        gp_rv_params += [log_sigma_dec_rv_gp]
-                        kernel_rv = terms.SHOTerm(sigma=tt.exp(log_sigma_dec_rv_gp), rho=tt.exp(log_rho_svalue_gp), tau=tt.exp(log_tau_svalue_gp))
+                        log_sigma_rv_gp = pm.Normal(f"log_sigma_rv_gp_{tel}", mu=0., sigma=10) # Different amplitude for each instrument.
+                        gp_rv_params += [log_sigma_rv_gp]
+                        kernel_rv = terms.SHOTerm(sigma=tt.exp(log_sigma_rv_gp), rho=tt.exp(log_rho_svalue_gp), tau=tt.exp(log_tau_svalue_gp))
                     
                     gp_rv = GaussianProcess(kernel_rv, t=self.rv_df.loc[tel_mask, 'time'].values, diag=diag_rv[tel_mask])
                     gp_rv.marginal(f"gp_rv_{tel}", observed=resid_rv[tel_mask])
@@ -1081,7 +1081,7 @@ class TessSystem:
             if start is None:
                 start = model.test_point
             # Order of parameters to be optimized is a bit arbitrary
-            map_soln = pmx.optimize(start=start, vars=[log_sigma_lc])
+            map_soln = pmx.optimize(start=start, vars=[log_sigma_phot])
             map_soln = pmx.optimize(start=map_soln, vars=[log_K])
             if self.n_nontransiting > 0:
                 map_soln = pmx.optimize(start=map_soln, vars=[nontrans_params['log_K']])
@@ -1106,7 +1106,7 @@ class TessSystem:
             map_soln = pmx.optimize(start=map_soln, vars=[log_ror])
             map_soln = pmx.optimize(start=map_soln, vars=[b])
             map_soln = pmx.optimize(start=map_soln, vars=[mean_flux])
-            map_soln = pmx.optimize(start=map_soln, vars=[log_sigma_lc])
+            map_soln = pmx.optimize(start=map_soln, vars=[log_sigma_phot])
             map_soln = pmx.optimize(start=map_soln, vars=gp_params)
             map_soln = pmx.optimize(start=map_soln)
             
