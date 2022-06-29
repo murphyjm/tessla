@@ -1004,9 +1004,9 @@ class TessSystem:
                     prot_rv_gp = pm.Deterministic("prot_rv_gp", tt.exp(log_prot_rv_gp))
                     gp_svalue_params += [log_prot_rv_gp]
                 elif self.svalue_gp_kernel == 'exp_decay':
-                    log_rho_svalue_gp = BoundedNormalProt("log_rho_svalue_gp", mu=np.log(10), sd=np.log(50))
+                    log_rho_svalue_gp = BoundedNormalProt("log_rho_svalue_gp", mu=np.log(10), sd=np.log(50)) # Maybe change this to be informed from the periodogram of the photometry.
                     BoundedNormalTau = pm.Bound(pm.Normal, lower=np.log(1), upper=np.log(200))
-                    log_tau_svalue_gp = BoundedNormalTau("log_tau_svalue_gp", mu=np.log(10), sd=np.log(50))
+                    log_tau_svalue_gp = BoundedNormalTau("log_tau_svalue_gp", mu=np.log(10), sd=np.log(50)) # Maybe change this to be seeded with longer period.
                     gp_svalue_params += [log_rho_svalue_gp, log_tau_svalue_gp]
                 
                 gp_svalue_dict = {}
