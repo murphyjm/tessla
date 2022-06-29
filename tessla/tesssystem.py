@@ -1262,7 +1262,7 @@ class TessSystem:
                 num_dim = len(flat_samps[param].shape)
             except KeyError:
                 continue
-            if num_dim > 1 and param != 'u' and param != 'gamma_rv' and param != 'sigma_rv' and param != 'trend_rv':
+            if num_dim > 1 and param != 'u' and param != 'gamma_rv' and param != 'sigma_rv' and param != 'trend_rv' and param != 'log_jitter_svalue_gp':
                 msg = "Chains and number of planets have shape mismatch."
                 ind = 0
                 if param == 'ecs':
@@ -1292,6 +1292,9 @@ class TessSystem:
             elif param == 'trend_rv':
                 for i in range(self.rv_trend_order + 1):
                     df_chains[f"trend_rv_{i}"] = flat_samps[param][i, :].data
+            elif param == 'log_jitter_svalue_gp':
+                for i,tel in enumerate(self.svalue_inst_names):
+                    df_chains[f"log_jitter_svalue_gp_{tel}"] = flat_samps[param][i, :].data
             else:
                 try:
                     df_chains[param] = flat_samps[param].data
@@ -1317,7 +1320,7 @@ class TessSystem:
         
         # Do some output directory housekeeping
         assert os.path.isdir(self.sampling_dir), "Output directory does not exist." # This should be redundant, but just in case.
-        chains_output_fname = os.path.join(self.sampling_dir, f"{self.name.replace(' ', '_')}_phot_chains{output_fname_suffix}.csv.gz")
+        chains_output_fname = os.path.join(self.sampling_dir, f"{self.name.replace(' ', '_')}_chains{output_fname_suffix}.csv.gz")
         if not overwrite and os.path.isfile(chains_output_fname):
             warnings.warn("Exiting before starting the sampling to avoid overwriting exisiting chains file.")
             return None, None
