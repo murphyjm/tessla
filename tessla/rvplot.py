@@ -352,23 +352,25 @@ class RVPlot:
 
                         # Build the model we used before
                         # Orbit
-                        prefix = ''
-                        if not planet.is_transiting:
-                            prefix = "nontrans_"
-                        K = np.array([chains[f"{prefix}K_{letter}"].values[ind] for letter in self.toi.planets.keys()])
-                        period = np.array([chains[f"{prefix}period_{letter}"].values[ind] for letter in self.toi.planets.keys()])
-                        t0 = np.array([chains[f"{prefix}t0_{letter}"].values[ind] for letter in self.toi.planets.keys()])
+                        if planet.is_transiting:
+                            prefix = ''
+                        else:
+                            prefix = 'nontrans_'
+                        K = chains[f"{prefix}K_{planet.pl_letter}"].values[ind]
+                        period = chains[f"{prefix}period_{planet.pl_letter}"].values[ind]
+                        t0 = chains[f"{prefix}t0_{planet.pl_letter}"].values[ind]
                         rstar = chains["rstar"].values[ind]
                         mstar = chains["mstar"].values[ind]
-                        ecc = np.array([chains[f"{prefix}ecc_{letter}"].values[ind] for letter in self.toi.planets.keys()])
-                        omega = np.array([chains[f"{prefix}omega_{letter}"].values[ind] for letter in self.toi.planets.keys()])
+                        ecc = chains[f"{prefix}ecc_{planet.pl_letter}"].values[ind]
+                        omega = chains[f"{prefix}omega_{planet.pl_letter}"].values[ind]
                         orbit = xo.orbits.KeplerianOrbit(r_star=rstar, m_star=mstar, period=period, t0=t0, ecc=ecc, omega=omega)
 
                         # Get RV for planet
                         planet_rv_pred = orbit.get_radial_velocity(self.toi.t_rv, K=K).eval()
                         
                         # Plot the random draw
-                        if len(self.toi.extras['planet_rv_pred'].shape) > 1:
+                        # if len(self.toi.extras['planet_rv_pred'].shape) > 1:
+                        if len(planet_rv_pred.shape) > 1:
                             ax0.plot(x_fold_pred[inds_pred], planet_rv_pred[:, planet_ind][inds_pred], color=planet.color, alpha=0.3, zorder=999)
                         else:
                             ax0.plot(x_fold_pred[inds_pred], planet_rv_pred[inds_pred], color=planet.color, alpha=0.3, zorder=999)
