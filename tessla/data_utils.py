@@ -140,11 +140,21 @@ def quick_look_summary(toi, df_derived_chains):
     df = pd.DataFrame(columns=columns)
     if not toi.is_joint_model:
         params = ['period', 't0', 'rp', 'dur_hr', 'b', 'ecc', 'omega_folded_deg']
+        for letter in toi.transiting_planets.keys():
+            prefix = ''
+            for param in params:
+                df.loc[f"{prefix}{param}_{letter}"] = __get_summary_info(df_derived_chains[f"{prefix}{param}_{letter}"])
     else:
-        params = ['period', 't0', 'rp', 'b', 'ecc', 'omega', 'msini', 'mp', 'rho', 'a', 'teq']
-    for letter in toi.planets.keys():
-        for param in params:
-            df.loc[f"{param}_{letter}"] = __get_summary_info(df_derived_chains[f"{param}_{letter}"])
+        for letter in toi.transiting_planets.keys():
+            params = ['period', 't0', 'rp', 'b', 'ecc', 'omega', 'K', 'msini', 'mp', 'rho', 'a', 'teq']
+            prefix = ''
+            for param in params:
+                df.loc[f"{prefix}{param}_{letter}"] = __get_summary_info(df_derived_chains[f"{prefix}{param}_{letter}"])
+        for letter in toi.nontransiting_planets.keys():
+            params = ['period', 't0', 'ecc', 'omega', 'K', 'msini', 'a', 'teq']
+            prefix = 'nontrans_'
+            for param in params:
+                df.loc[f"{prefix}{param}_{letter}"] = __get_summary_info(df_derived_chains[f"{prefix}{param}_{letter}"])
     save_fname = f"{toi.name.replace(' ', '_')}_quick_look_summary.csv"
     save_path = os.path.join(toi.output_dir, save_fname)
     df.to_csv(save_path)
