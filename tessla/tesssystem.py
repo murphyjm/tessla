@@ -835,7 +835,8 @@ class TessSystem:
 
         # Background model
         bkg = tt.zeros(len(t))
-        if self.rv_trend:
+        if self.rv_trend and trend_rv is not None:
+            # TODO: What to do with the constant term when including a linear trend.
             A = np.vander(t - self.rv_trend_time_ref, self.rv_trend_order + 1, increasing=True)# [:, :-1] # Don't use the offset term, we already have instrument offsets.
             bkg = tt.dot(A, trend_rv)
         
@@ -1268,14 +1269,17 @@ class TessSystem:
                 ind = 0
                 if param == 'ecs':
                     ind = 1
-                assert any([self.n_transiting == flat_samps[param].shape[ind], self.n_nontransiting == flat_samps[param].shape[ind]]), msg
-                for i, pl_letter in enumerate(self.planets.keys()):
+                for i, pl_letter in enumerate(self.transiting_planets.keys()):
                     prefix = ''
-                    if not self.planets[pl_letter].is_transiting:
-                        prefix = 'nontrans_'
                     try:
-                        df_chains[f"{prefix}{param}_{pl_letter}"] = flat_samps[param][i, :].data
+                        df_chains[f"{prefix}{param}_{pl_letter}"] = flat_samps[f"{prefix}{param}"][i, :].data
                     except ValueError:
+                        continue
+                for i, pl_letter in enumerate(self.nontransiting_planets.keys()):
+                    prefix = 'nontrans_'
+                    try:
+                        df_chains[f"{prefix}{param}_{pl_letter}"] = flat_samps[f"{prefix}{param}"][i, :].data
+                    except (KeyError, ValueError):
                         continue
             elif param == 'u':
                 for i in range(flat_samps[param].shape[0]):
