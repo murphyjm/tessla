@@ -519,19 +519,19 @@ class ThreePanelPhotPlot:
                     xo_star = xo.LimbDarkLightCurve(u)
 
                     # Orbit
-                    period = np.array([chains[f"period_{letter}"].values[ind] for letter in self.toi.transiting_planets.keys()])
-                    t0 = np.array([chains[f"t0_{letter}"].values[ind] for letter in self.toi.transiting_planets.keys()])
-                    ror = np.array([chains[f"ror_{letter}"].values[ind] for letter in self.toi.transiting_planets.keys()])
-                    b = np.array([chains[f"b_{letter}"].values[ind] for letter in self.toi.transiting_planets.keys()])
+                    period = chains[f"period_{planet.pl_letter}"].values[ind]
+                    t0 = chains[f"t0_{planet.pl_letter}"].values[ind]
+                    ror = chains[f"ror_{planet.pl_letter}"].values[ind]
+                    b = chains[f"b_{planet.pl_letter}"].values[ind]
                     if not self.toi.is_joint_model:
-                        dur = np.array([chains[f"dur_{letter}"].values[ind] for letter in self.toi.transiting_planets.keys()])
+                        dur = chains[f"dur_{planet.pl_letter}"].values[ind]
                         orbit = xo.orbits.KeplerianOrbit(period=period, t0=t0, b=b, ror=ror, duration=dur)
                     else:
                         # If a joint model, parameterized in terms of stellar density and ecc and omega directly
                         rstar = chains["rstar"].values[ind]
                         mstar = chains["mstar"].values[ind]
-                        ecc = np.array([chains[f"ecc_{letter}"].values[ind] for letter in self.toi.transiting_planets.keys()])
-                        omega = np.array([chains[f"omega_{letter}"].values[ind] for letter in self.toi.transiting_planets.keys()])
+                        ecc = chains[f"ecc_{planet.pl_letter}"].values[ind]
+                        omega = chains[f"omega_{planet.pl_letter}"].values[ind]
                         orbit = xo.orbits.KeplerianOrbit(r_star=rstar, m_star=mstar, period=period, t0=t0, b=b, ecc=ecc, omega=omega)
 
                     # Light curves
@@ -548,7 +548,7 @@ class ThreePanelPhotPlot:
                     lc_phase_pred = lc_phase_pred.eval()
 
                     # Plot the random draw. Wasteful because it only uses one of the planet light curves and does this again for the next planet
-                    ax0.plot(phase_lc, lc_phase_pred[:, i], color=planet.color, alpha=0.3, zorder=999, label='Random posterior draw')
+                    ax0.plot(phase_lc, lc_phase_pred, color=planet.color, alpha=0.3, zorder=999, label='Random posterior draw')
 
             # Plot the residuals below
             ax1 = fig.add_subplot(sps[1, i])
