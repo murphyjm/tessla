@@ -138,6 +138,13 @@ def __get_summary_info(chain):
 def quick_look_summary(toi, df_derived_chains):
     columns = ['median', 'std', 'err16', 'err84', 'mean', 'min', 'max'] # Labels must correspond to what's returned by __get_summary_info()
     df = pd.DataFrame(columns=columns)
+
+    # Stellar properties
+    stellar_params = ['mstar', 'rstar', 'teff']
+    for param in stellar_params:
+        df.loc[param] = __get_summary_info(df_derived_chains[param])
+
+    # Planet properties
     if not toi.is_joint_model:
         params = ['period', 't0', 'rp', 'dur_hr', 'b', 'ecc', 'omega_folded_deg']
         for letter in toi.transiting_planets.keys():
