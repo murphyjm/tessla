@@ -369,11 +369,7 @@ class RVPlot:
                         planet_rv_pred = orbit.get_radial_velocity(self.toi.t_rv, K=K).eval()
                         
                         # Plot the random draw
-                        # if len(self.toi.extras['planet_rv_pred'].shape) > 1:
-                        if len(planet_rv_pred.shape) > 1:
-                            ax0.plot(x_fold_pred[inds_pred], planet_rv_pred[:, planet_ind][inds_pred], color=planet.color, alpha=0.3, zorder=999)
-                        else:
-                            ax0.plot(x_fold_pred[inds_pred], planet_rv_pred[inds_pred], color=planet.color, alpha=0.3, zorder=999)
+                        ax0.plot(x_fold_pred[inds_pred], planet_rv_pred[inds_pred], color=planet.color, alpha=0.3, zorder=999)
 
                 # Plot the residuals below
                 ax1 = fig.add_subplot(sps[1, planet_col_ind], sharex=ax0)
