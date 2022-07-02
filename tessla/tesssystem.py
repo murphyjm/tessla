@@ -601,7 +601,8 @@ class TessSystem:
 
         Returns
         -----
-        self.rot_per (float): Estimated rotation period of the star based on the OoT photometry. Peak of the periodogram.
+        self.prot (float): Estimated rotation period of the star based on the OoT photometry. Peak of the periodogram.
+        self.prot_err (float): Estimated uncertainty on rotation period of the star based on the OoT photometry.
         (fig, ax) (tuple): Figure and axes objects of the plot. Both None if plot=False.
         '''
         oot_mask = self.sg_outlier_mask & ~self.all_transits_mask
@@ -609,11 +610,12 @@ class TessSystem:
                                                     min_period=min_per, max_period=max_per, samples_per_peak=samples_per_peak)
         try:
             peak = xo_ls['peaks'][0]
-            rot_per_guess = peak['period']
-            self.rot_per = rot_per_guess
+            self.prot = peak['period']
+            self.prot_err = peak['period_uncert']
         except IndexError:
             print("There were no peaks detected in the LS periodogram of the OoT data.")
-            self.rot_per = None
+            self.prot = None
+            self.prot_err = None
 
         fig, ax = None, None
         if self.plotting:
@@ -622,17 +624,17 @@ class TessSystem:
                         self.transiting_planets,
                         verbose=self.verbose,
                         **kwargs) # What to do with figure and ax that is returned?
-        return self.rot_per, (fig, ax)
+        return self.prot, self.prot_err, (fig, ax)
 
     def __get_exp_decay_kernel(self):
         '''
         Create an exponentially-decaying SHOTerm GP kernel.
         '''
         log_sigma_phot_gp = pm.Normal("log_sigma_phot_gp", mu=0., sigma=10)
-        BoundedNormalRho = pm.Bound(pm.Normal, lower=np.log(1), upper=np.log(50)) # Bounded normal for the periodic length scale so it's forced to be longer than 1 day so it doesn't interfere with transit fitting. 
-        log_rho_phot_gp = BoundedNormalRho("log_rho_phot_gp", mu=np.log(10), sd=np.log(50))
-        BoundedNormalTau = pm.Bound(pm.Normal, lower=log_rho_phot_gp, upper=np.log(200)) # Force to be larger than undamped period to keep GP smooth
-        log_tau_phot_gp = BoundedNormalTau("log_tau_phot_gp", mu=np.log(10), sd=np.log(50))
+        BoundedNormalRho = pm.Bound(pm.Normal, lower=np.log(30), upper=np.log(200)) # Bounded normal for the periodic length scale so it's forced to be longer than 1 day so it doesn't interfere with transit fitting. 
+        log_rho_phot_gp = BoundedNormalRho("log_rho_phot_gp", mu=np.log(40), sd=np.log(50))
+        BoundedNormalTau = pm.Bound(pm.Normal, lower=np.log(30), upper=np.log(200)) # Force to be larger than undamped period to keep GP smooth?
+        log_tau_phot_gp = BoundedNormalTau("log_tau_phot_gp", mu=np.log(40), sd=np.log(50))
         kernel = terms.SHOTerm(sigma=tt.exp(log_sigma_phot_gp), rho=tt.exp(log_rho_phot_gp), tau=tt.exp(log_tau_phot_gp))
         noise_params = [log_sigma_phot_gp, log_rho_phot_gp, log_tau_phot_gp]
         return noise_params, kernel
@@ -646,9 +648,9 @@ class TessSystem:
             suffix = f"_{suffix}"
 
         sigma_rot_gp = pm.InverseGamma(
-            f"sigma_rot_gp{suffix}", **pmx.estimate_inverse_gamma_parameters(1, 5)
+            f"sigma_rot{suffix}", **pmx.estimate_inverse_gamma_parameters(1, 5)
         )
-        log_prot = pm.Normal(f"log_prot{suffix}", mu=np.log(self.rot_per), sd=np.log(5))
+        log_prot = pm.Normal(f"log_prot{suffix}", mu=np.log(self.prot), sd=np.log(self.prot_err))
         prot = pm.Deterministic(f"prot{suffix}", tt.exp(log_prot))
         log_Q0 = pm.Normal(f"log_Q0{suffix}", mu=0, sd=2)
         log_dQ = pm.Normal(f"log_dQ{suffix}", mu=0, sd=2)
@@ -686,7 +688,7 @@ class TessSystem:
             dur = pm.Deterministic("dur", tt.exp(log_dur))
             
             # Light curve jitter
-            log_sigma_phot = pm.Normal("log_sigma_phot", mu=np.log(np.median(yerr.values[mask])), sd=2)
+            log_sigma_phot = pm.Normal("log_sigma_phot", mu=np.log(np.std(y.values[mask])), sd=2)
 
             # Orbit model
             orbit = xo.orbits.KeplerianOrbit(period=period, t0=t0, b=b, ror=ror, duration=dur)
@@ -696,6 +698,7 @@ class TessSystem:
 
             # Light curves
             light_curves = xo_star.get_light_curve(orbit=orbit, r=ror, t=x.values[mask], texp=self.cadence/60/60/24) * 1e3 # Converts self.cadence from seconds to days.
+            # import pdb; pdb.set_trace()
             light_curve = tt.sum(light_curves, axis=-1) + mean_flux
             resid = y.values[mask] - light_curve
 
@@ -906,7 +909,7 @@ class TessSystem:
             xo.eccentricity.vaneylen19("ecc_prior", multi=(self.n_planets > 1), shape=self.n_transiting, fixed=True, observed=ecc)
 
             # Light curve jitter
-            log_sigma_phot = pm.Normal("log_sigma_phot", mu=np.log(np.median(yerr_phot.values)), sd=2)
+            log_sigma_phot = pm.Normal("log_sigma_phot", mu=np.log(np.std(y_phot.values)), sd=2)
 
             # Orbit model
             orbit = xo.orbits.KeplerianOrbit(r_star=rstar, m_star=mstar, period=period, t0=t0, b=b, ecc=ecc, omega=omega)
@@ -1000,8 +1003,8 @@ class TessSystem:
                 # These parameters shared by all GPs
                 gp_svalue_params = []
                 if self.svalue_gp_kernel == 'rotation':
-                    BoundedNormalProt = pm.Bound(pm.Normal, lower=np.log(1), upper=np.log(50))
-                    log_prot_rv_gp = BoundedNormalProt("log_prot_rv_gp", mu=np.log(self.rot_per), sd=np.log(5)) # self.rot_per from LS periodogram of OoT flux but can be superseded
+                    BoundedNormalProt = pm.Bound(pm.Normal, lower=np.log(1), upper=np.log(100))
+                    log_prot_rv_gp = BoundedNormalProt("log_prot_rv_gp", mu=np.log(self.prot), sd=np.log(self.prot_err)) # self.prot from LS periodogram of OoT flux but can be superseded
                     prot_rv_gp = pm.Deterministic("prot_rv_gp", tt.exp(log_prot_rv_gp))
                     gp_svalue_params += [log_prot_rv_gp]
                 elif self.svalue_gp_kernel == 'exp_decay':
@@ -1055,7 +1058,7 @@ class TessSystem:
                     
                     # Kernels
                     if self.svalue_gp_kernel == 'rotation':
-                        sigma_gp_rv = pm.InverseGamma(f"sigma_gp_rv_{tel}", **pmx.estimate_inverse_gamma_parameters(0.001, 1))
+                        sigma_gp_rv = pm.InverseGamma(f"sigma_gp_rv_{tel}", **pmx.estimate_inverse_gamma_parameters(1, 5))
                         gp_svalue_params += [sigma_gp_rv]
                         kernel_rv = terms.RotationTerm(sigma=sigma_gp_rv, period=prot_rv_gp, Q0=tt.exp(log_Q0_gp_rv), dQ=tt.exp(log_dQ_gp_rv), f=f_gp_rv)
                     elif self.svalue_gp_kernel == 'exp_decay':

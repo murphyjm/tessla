@@ -217,6 +217,8 @@ class ThreePanelPhotPlot:
         left_xlims = xlim_tuple[0]
         add_ymd_label(self.toi.bjd_ref, fig, ax_left, left_xlims, 'left')
 
+        ax_left.set_xlim([0, 10])
+
         # ------------- #
         # Middle chunks #
         # ------------- #
