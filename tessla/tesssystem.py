@@ -611,7 +611,7 @@ class TessSystem:
         try:
             peak = xo_ls['peaks'][0]
             self.prot = peak['period']
-            self.prot_err = peak['period_uncert']
+            self.prot_err = np.max([peak['period_uncert'], 1.5]) # Lower limit on the uncertainty on rotation period being 1.5 d
         except IndexError:
             print("There were no peaks detected in the LS periodogram of the OoT data.")
             self.prot = None
@@ -631,10 +631,10 @@ class TessSystem:
         Create an exponentially-decaying SHOTerm GP kernel.
         '''
         log_sigma_phot_gp = pm.Normal("log_sigma_phot_gp", mu=0., sigma=10)
-        BoundedNormalRho = pm.Bound(pm.Normal, lower=np.log(30), upper=np.log(200)) # Bounded normal for the periodic length scale so it's forced to be longer than 1 day so it doesn't interfere with transit fitting. 
-        log_rho_phot_gp = BoundedNormalRho("log_rho_phot_gp", mu=np.log(40), sd=np.log(50))
-        BoundedNormalTau = pm.Bound(pm.Normal, lower=np.log(30), upper=np.log(200)) # Force to be larger than undamped period to keep GP smooth?
-        log_tau_phot_gp = BoundedNormalTau("log_tau_phot_gp", mu=np.log(40), sd=np.log(50))
+        BoundedNormalRho = pm.Bound(pm.Normal, lower=np.log(1), upper=np.log(200)) # Bounded normal for the periodic length scale so it's forced to be longer than 1 day so it doesn't interfere with transit fitting. 
+        log_rho_phot_gp = BoundedNormalRho("log_rho_phot_gp", mu=np.log(10), sd=np.log(50))
+        BoundedNormalTau = pm.Bound(pm.Normal, lower=np.log(1), upper=np.log(200)) # Force to be larger than undamped period to keep GP smooth?
+        log_tau_phot_gp = BoundedNormalTau("log_tau_phot_gp", mu=np.log(10), sd=np.log(50))
         kernel = terms.SHOTerm(sigma=tt.exp(log_sigma_phot_gp), rho=tt.exp(log_rho_phot_gp), tau=tt.exp(log_tau_phot_gp))
         noise_params = [log_sigma_phot_gp, log_rho_phot_gp, log_tau_phot_gp]
         return noise_params, kernel
@@ -873,13 +873,13 @@ class TessSystem:
         }
         return nontrans_params, xo.orbits.KeplerianOrbit(r_star=rstar, m_star=mstar, period=period, t0=t0, ecc=ecc, omega=omega)
 
-    def __build_joint_model(self, x_phot, y_phot, yerr_phot, start=None, phase_lim=0.3, n_eval_points=500, t_rv_buffer=5):
+    def __build_joint_model(self, x_phot, y_phot, yerr_phot, start=None, phase_lim=0.3, n_eval_points=500, t_rv_buffer=5, N_t_rv=1000):
         '''
         '''
-        t_rv = np.linspace(self.rv_df.time.min() - t_rv_buffer, self.rv_df.time.max() + t_rv_buffer, n_eval_points)
+        t_rv = np.linspace(self.rv_df.time.min() - t_rv_buffer, self.rv_df.time.max() + t_rv_buffer, N_t_rv)
         self.t_rv = t_rv
         if self.include_svalue_gp:
-            t_svalue = np.linspace(self.svalue_df.time.min() - t_rv_buffer, self.svalue_df.time.max() + t_rv_buffer, n_eval_points)
+            t_svalue = np.linspace(self.svalue_df.time.min() - t_rv_buffer, self.svalue_df.time.max() + t_rv_buffer, N_t_rv)
             self.t_svalue = t_svalue
 
         with pm.Model() as model:
@@ -1173,7 +1173,8 @@ class TessSystem:
         self.rv_trend_order = rv_trend_order
         self.rv_trend_time_ref = 0.5 * (np.max(self.rv_df.time) - np.min(self.rv_df.time)) # Reference time for the background trend model, if needed.
         # You may want to call self.flatten_light_curve() first because it will remove photometric outliers.
-        model, map_soln, extras = self.__build_joint_model(self.cleaned_time, self.cleaned_flux, self.cleaned_flux_err, start=self.map_soln)
+        N_t_rv = int(2 * (np.max(self.rv_df.time) - np.min(self.rv_df.time)))
+        model, map_soln, extras = self.__build_joint_model(self.cleaned_time, self.cleaned_flux, self.cleaned_flux_err, start=self.map_soln, N_t_rv=N_t_rv)
 
         self.map_soln = map_soln
         self.extras = extras

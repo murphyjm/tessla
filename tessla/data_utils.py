@@ -140,7 +140,7 @@ def quick_look_summary(toi, df_derived_chains):
     df = pd.DataFrame(columns=columns)
 
     # Stellar properties
-    stellar_params = ['mstar', 'rstar', 'teff']
+    stellar_params = ['mstar', 'rstar']
     for param in stellar_params:
         df.loc[param] = __get_summary_info(df_derived_chains[param])
 
