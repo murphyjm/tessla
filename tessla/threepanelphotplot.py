@@ -216,7 +216,7 @@ class ThreePanelPhotPlot:
         # Add label for years to the upper axis for the left-most chunk
         left_xlims = xlim_tuple[0]
         add_ymd_label(self.toi.bjd_ref, fig, ax_left, left_xlims, 'left')
-
+        # ax_left.set_xlim([0, 10])
         # ------------- #
         # Middle chunks #
         # ------------- #
@@ -537,14 +537,7 @@ class ThreePanelPhotPlot:
                     # Light curves
                     N_EVAL_POINTS = 500
                     phase_lc = np.linspace(-xlim, xlim, N_EVAL_POINTS)
-                    lc_phase_pred = 1e3 * tt.stack(
-                                            [
-                                                xo_star.get_light_curve(
-                                                    orbit=orbit, r=ror, t=t0[n] + phase_lc, texp=self.toi.cadence/60/60/24)[..., n]
-                                                    for n in range(self.toi.n_transiting)
-                                            ],
-                                            axis=-1,
-                    )
+                    lc_phase_pred = 1e3 * xo_star.get_light_curve(orbit=orbit, r=ror, t=t0 + phase_lc, texp=self.toi.cadence/60/60/24)
                     lc_phase_pred = lc_phase_pred.eval()
 
                     # Plot the random draw. Wasteful because it only uses one of the planet light curves and does this again for the next planet

@@ -179,8 +179,8 @@ class StackedPeriodogram:
                     linestyle = '--' # Give non-transiting planets a different linestyle
                 ax[j].axvline(planet.per, color=planet.color, ls=linestyle, zorder=0)
             # Rotation period peak from OoT photometry
-            ax[j].axvline(self.toi.rot_per, color='blue', lw=5, alpha=0.5)
-            ax[j].axvline(self.toi.rot_per/2, color='cornflowerblue', lw=5, alpha=0.5)
+            ax[j].axvline(self.toi.prot, color='blue', lw=5, alpha=0.5)
+            ax[j].axvline(self.toi.prot/2, color='cornflowerblue', lw=5, alpha=0.5)
 
         # Y-axis label
         fig.supylabel('LS Power', fontsize=22)

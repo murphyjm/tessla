@@ -417,20 +417,24 @@ class RVPlot:
                     ecc_med = self.df_summary.loc[f'{prefix}ecc_{planet.pl_letter}', 'median']
                     ecc_err = self.df_summary.loc[f'{prefix}ecc_{planet.pl_letter}', 'std']
                     ecc_str = f"$e = {ecc_med:.2f} \pm {ecc_err:.2f}$"
+                    kamp_med = self.df_summary.loc[f'{prefix}K_{planet.pl_letter}', 'median']
+                    kamp_err = self.df_summary.loc[f'{prefix}K_{planet.pl_letter}', 'std']
+                    kamp_str = f"$K = {kamp_med:.2f} \pm {kamp_err:.2f}$ m s$^{{-1}}$"
                     if planet.is_transiting:
                         mp_med = self.df_summary.loc[f'mp_{planet.pl_letter}', 'median']
                         mp_err = self.df_summary.loc[f'mp_{planet.pl_letter}', 'std']
-                        mp_str = f"$M_\mathrm{{p}} = {mp_med:.1f} \pm {mp_err:.1f}$ $M_\oplus$"
+                        mp_str = '\n' + f"$M_\mathrm{{p}} = {mp_med:.1f} \pm {mp_err:.1f}$ $M_\oplus$"
                     else:
                         mp_med = self.df_summary.loc[f'{prefix}msini_{planet.pl_letter}', 'median']
                         mp_err = self.df_summary.loc[f'{prefix}msini_{planet.pl_letter}', 'std']
-                        mp_str = f"$M_\mathrm{{p}} \sin i = {mp_med:.1f} \pm {mp_err:.1f}$ $M_\oplus$"
+                        mp_str = '\n' + f"$M_\mathrm{{p}} \sin i = {mp_med:.1f} \pm {mp_err:.1f}$ $M_\oplus$"
                 else:
                     per_str = f"$P =$ {planet.per:.2f} d"
                     ecc_str = f"$e =$ {planet.ecc:.2f}"
-                    mp_str = f"$K =$ {planet.kamp:.2f} m s$^{{-1}}$" # This is actually K-amplitude but just horrible naming here.
+                    kamp_str = f"$K =$ {planet.kamp:.2f} m s$^{{-1}}$"
+                    mp_str = ''
 
-                planet_str = per_str + '\n' + ecc_str + '\n' + mp_str
+                planet_str = per_str + '\n' + ecc_str + '\n' + kamp_str + mp_str
                 text = ax0.text(0.05, 0.05, planet_str, ha='left', va='bottom', transform=ax0.transAxes, fontsize=param_fontsize)
                 alpha = 0.5
                 if self.rms_yscale_phase_folded_panels:
