@@ -102,6 +102,25 @@ def get_inclination(b_samples, a_samples, rstar_samples):
     
     return inclination_samples_rad, inclination_samples_deg
 
+def get_dur(period_samples, aor_samples, b_samples, i_samples, ecc_samples, omega_samples):
+    '''
+    Transit duration. Equation 14 from Winn 2010
+    '''
+    factor_one = period_samples / np.pi
+    arcsin_arg = (1/aor_samples) * np.sqrt(1 - b_samples**2) / np.sin(i_samples)
+    arcsin_arg = arcsin_arg % 1 # arcsin only defined on [-1, 1]
+    factor_two = np.arcsin(arcsin_arg)
+    factor_three = np.sqrt(1 - ecc_samples**2) / (1 + ecc_samples * np.sin(omega_samples))
+    return factor_one * factor_two * factor_three
+
+def get_dur_circ(period_samples, aor_samples):
+    '''
+    Transit duration assuming a circular orbit and b = 0. See Equation 4 in Petigura 2020.
+
+    Returns in units of days.
+    '''
+    return period_samples / np.pi * np.arcsin(1 / aor_samples)
+
 def get_tsm(pl_rade, pl_masse, pl_aor, rstar, teff, jmag):
     '''
     Calculate TSM from derived chains.
@@ -153,7 +172,7 @@ def quick_look_summary(toi, df_derived_chains):
                 df.loc[f"{prefix}{param}_{letter}"] = __get_summary_info(df_derived_chains[f"{prefix}{param}_{letter}"])
     else:
         for letter in toi.transiting_planets.keys():
-            params = ['period', 't0', 'rp', 'b', 'ecc', 'omega', 'K', 'msini', 'mp', 'rho', 'a', 'teq']
+            params = ['period', 't0', 'rp', 'b', 'ecc', 'omega', 'K', 'msini', 'mp', 'rho', 'a', 'teq', 'dur_hr', 'dur_circ_hr', 'Rtau_Petigura2020']
             prefix = ''
             for param in params:
                 df.loc[f"{prefix}{param}_{letter}"] = __get_summary_info(df_derived_chains[f"{prefix}{param}_{letter}"])

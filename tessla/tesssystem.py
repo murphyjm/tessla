@@ -8,7 +8,7 @@ from astropy import units
 import pickle
 
 # Data utils
-from tessla.data_utils import get_inclination, time_delta_to_data_delta, convert_negative_angles, get_semimajor_axis, get_sinc, get_aor, get_teq, get_density, get_inclination, get_t0s_in_range, get_tsm
+from tessla.data_utils import get_inclination, time_delta_to_data_delta, convert_negative_angles, get_semimajor_axis, get_sinc, get_aor, get_teq, get_density, get_inclination, get_t0s_in_range, get_dur, get_dur_circ, get_tsm
 from scipy.signal import savgol_filter
 
 # Enables sampling with multiple cores on Mac.
@@ -1428,7 +1428,6 @@ class TessSystem:
             df_chains[f"{prefix}aor_{letter}"] = get_aor(df_chains[f"{prefix}a_{letter}"].values, rstar_samples)
             df_chains[f"{prefix}sinc_{letter}"] = get_sinc(df_chains[f"{prefix}a_{letter}"].values, teff_samples, rstar_samples)
             df_chains[f"{prefix}teq_{letter}"] = get_teq(df_chains[f"{prefix}a_{letter}"].values, teff_samples, rstar_samples) # Calculated assuming zero Bond albedo
-            
             if self.is_joint_model:
                 df_chains[f"{prefix}msini_{letter}"] = Msini(df_chains[f"{prefix}K_{letter}"], 
                                                              df_chains[f"{prefix}period_{letter}"], 
@@ -1445,6 +1444,23 @@ class TessSystem:
             else:
                 df_chains[f"mp_{letter}"] = df_chains[f"msini_{letter}"] / np.sin(df_chains[f"i_rad_{letter}"])
                 df_chains[f"rho_{letter}"] = get_density(df_chains[f"mp_{letter}"].values, df_chains[f"rp_{letter}"].values, 'earthMass', 'earthRad', 'g', 'cm')
+                
+                # Equation 14 from Winn 2010
+                dur_d = get_dur(df_chains[f"{prefix}period_{letter}"].values, 
+                                df_chains[f"{prefix}aor_{letter}"].values,
+                                df_chains[f"{prefix}b_{letter}"].values,
+                                df_chains[f"i_rad_{letter}"].values,
+                                df_chains[f"{prefix}ecc_{letter}"].values,
+                                df_chains[f"{prefix}omega_folded_{letter}"].values
+                                )
+                df_chains[f"{prefix}dur_d_{letter}"] = dur_d
+                df_chains[f"{prefix}dur_hr_{letter}"] = dur_d * 24
+                dur_circ_d = get_dur_circ(df_chains[f"{prefix}period_{letter}"].values, df_chains[f"{prefix}aor_{letter}"].values)
+                df_chains[f"{prefix}dur_circ_d_{letter}"] = dur_circ_d
+                df_chains[f"{prefix}dur_circ_hr_{letter}"] = dur_circ_d * 24
+
+                df_chains[f"{prefix}Rtau_Petigura2020_{letter}"] = df_chains[f"{prefix}dur_d_{letter}"].values.copy() / df_chains[f"{prefix}dur_circ_d"].values.copy()
+
                 if self.star.jmag is not None and self.star.jmag_err is not None:
                     jmag_samples = np.random.normal(self.star.jmag, self.star.jmag_err, N)
                     df_chains[f"tsm_{letter}"] = get_tsm(df_chains[f'rp_{letter}'], df_chains[f"mp_{letter}"], df_chains[f"aor_{letter}"], rstar_samples, teff_samples, jmag_samples)
