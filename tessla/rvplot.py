@@ -7,6 +7,7 @@ import pandas as pd
 import numpy as np
 from math import ceil
 from scipy.stats import binned_statistic
+from astropy import units
 
 # Exoplanet stuff
 import exoplanet as xo
@@ -66,6 +67,7 @@ class RVPlot:
                 df_summary_fname=None,
                 tel_marker_mapper=None,
                 rms_yscale_phase_folded_panels=False,
+                param_fontsize=16 # Fontsize for annotating the phase folded plots
                 ) -> None:
     
         self.toi = toi
@@ -88,6 +90,7 @@ class RVPlot:
             self.tel_marker_mapper = tel_marker_mapper
         
         self.rms_yscale_phase_folded_panels = rms_yscale_phase_folded_panels # If true, set the Y axis limits for the phase-folded panels based on the residuals rms.
+        self.param_fontsize = param_fontsize
 
     def plot(self, save_fname=None, overwrite=False):
         '''
@@ -191,6 +194,10 @@ class RVPlot:
             ax1.errorbar(self.toi.rv_df.time[mask], 
                         self.toi.rv_df.mnvel[mask] - self.toi.extras['mean_rv'][mask], 
                         self.toi.extras['err_rv'][mask], fmt='.', **self.tel_marker_mapper[tel])
+        
+        # Plot the underlying trend, if any
+        if self.toi.rv_trend:
+            ax1.plot(self.toi.t_rv, self.toi.extras['bkg_rv_pred'], color="#aaaaaa", ls='--', lw=2, zorder=-1)
 
         # Plot the RV model
         if not self.toi.include_svalue_gp:
@@ -289,9 +296,6 @@ class RVPlot:
         # Set up the outer gridspec
         num_planet_rows = ceil(self.toi.n_planets / 2)
         outer_sps = gridspec.GridSpecFromSubplotSpec(num_planet_rows, 2, subplot_spec=gs1, hspace=0.3)
-        param_fontsize = 16
-        if num_planet_rows > 1:
-            param_fontsize = 12 # For the orbital parameter textbox
 
         for k in range(num_planet_rows):
             # Nested gridspec objects. One for each row of the phased plots. 
@@ -441,10 +445,18 @@ class RVPlot:
                         mp_med = self.df_summary.loc[f'mp_{planet.pl_letter}', 'median']
                         mp_err = self.df_summary.loc[f'mp_{planet.pl_letter}', 'std']
                         mp_str = '\n' + f"$M_\mathrm{{p}} = {mp_med:.1f} \pm {mp_err:.1f}$ $M_\oplus$"
+                        if mp_med > 200: # If mp > 200 Earth masses, put in Jupiter masses
+                            mp_map_med = units.Mearth.to(units.Mjup, mp_med)
+                            mp_map_err = units.Mearth.to(units.Mjup, mp_err)
+                            mp_str = '\n' + f"$M_\mathrm{{p}} = {mp_map_med:.1f} \pm {mp_map_err:.1f}$ $M_\mathrm{{Jup}}$"
                     else:
                         mp_med = self.df_summary.loc[f'{prefix}msini_{planet.pl_letter}', 'median']
                         mp_err = self.df_summary.loc[f'{prefix}msini_{planet.pl_letter}', 'std']
                         mp_str = '\n' + f"$M_\mathrm{{p}} \sin i = {mp_med:.1f} \pm {mp_err:.1f}$ $M_\oplus$"
+                        if mp_med > 200: # If mp sini > 200 Earth masses, put in Jupiter masses
+                            mp_map_med = units.Mearth.to(units.Mjup, mp_med)
+                            mp_map_err = units.Mearth.to(units.Mjup, mp_err)
+                            mp_str = '\n' + f"$M_\mathrm{{p}} \sin i = {mp_map_med:.1f} \pm {mp_map_err:.1f}$ $M_\mathrm{{Jup}}$"
                 else:
                     per_str = f"$P =$ {planet.per:.2f} d"
                     ecc_str = f"$e =$ {planet.ecc:.2f}"
@@ -452,7 +464,7 @@ class RVPlot:
                     mp_str = ''
 
                 planet_str = per_str + '\n' + ecc_str + '\n' + kamp_str + mp_str
-                text = ax0.text(0.05, 0.05, planet_str, ha='left', va='bottom', transform=ax0.transAxes, fontsize=param_fontsize, zorder=1002)
+                text = ax0.text(0.05, 0.05, planet_str, ha='left', va='bottom', transform=ax0.transAxes, fontsize=self.param_fontsize, zorder=1002)
                 alpha = 0.5
                 if self.rms_yscale_phase_folded_panels:
                     alpha=0.8
