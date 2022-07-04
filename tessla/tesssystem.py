@@ -1444,20 +1444,20 @@ class TessSystem:
                 df_chains[f"rho_{letter}"] = get_density(df_chains[f"mp_{letter}"].values, df_chains[f"rp_{letter}"].values, 'earthMass', 'earthRad', 'g', 'cm')
                 
                 # Equation 14 from Winn 2010
-                dur_d = get_dur(df_chains[f"{prefix}period_{letter}"].values, 
-                                df_chains[f"{prefix}aor_{letter}"].values,
-                                df_chains[f"{prefix}b_{letter}"].values,
+                dur_day = get_dur(df_chains[f"period_{letter}"].values, 
+                                df_chains[f"aor_{letter}"].values,
+                                df_chains[f"b_{letter}"].values,
                                 df_chains[f"i_rad_{letter}"].values,
-                                df_chains[f"{prefix}ecc_{letter}"].values,
-                                df_chains[f"{prefix}omega_folded_{letter}"].values
+                                df_chains[f"ecc_{letter}"].values,
+                                df_chains[f"omega_folded_{letter}"].values
                                 )
-                df_chains[f"{prefix}dur_d_{letter}"] = dur_d
-                df_chains[f"{prefix}dur_hr_{letter}"] = dur_d * 24
-                dur_circ_d = get_dur_circ(df_chains[f"{prefix}period_{letter}"].values, df_chains[f"{prefix}aor_{letter}"].values)
-                df_chains[f"{prefix}dur_circ_d_{letter}"] = dur_circ_d
-                df_chains[f"{prefix}dur_circ_hr_{letter}"] = dur_circ_d * 24
+                df_chains[f"dur_day_{letter}"] = dur_day
+                df_chains[f"dur_hr_{letter}"] = dur_day * 24
+                dur_circ_day = get_dur_circ(df_chains[f"period_{letter}"].values, df_chains[f"aor_{letter}"].values)
+                df_chains[f"dur_circ_day_{letter}"] = dur_circ_day
+                df_chains[f"dur_circ_hr_{letter}"] = dur_circ_day * 24
 
-                df_chains[f"{prefix}Rtau_Petigura2020_{letter}"] = df_chains[f"{prefix}dur_d_{letter}"].values.copy() / df_chains[f"{prefix}dur_circ_d"].values.copy()
+                df_chains[f"Rtau_Petigura2020_{letter}"] = df_chains[f"dur_day_{letter}"].values.copy() / df_chains[f"dur_circ_day_{letter}"].values.copy()
 
                 if self.star.jmag is not None and self.star.jmag_err is not None:
                     jmag_samples = np.random.normal(self.star.jmag, self.star.jmag_err, N)
