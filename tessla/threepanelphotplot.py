@@ -613,7 +613,7 @@ class ThreePanelPhotPlot:
                 text_rp_and_ror = ax0.text(0.95, 0.9, ror_str + '\n' + rp_str, ha='right', va='top', transform=ax0.transAxes)
                 text_rp_and_ror.set_bbox(dict(facecolor='white', alpha=0.5, edgecolor='none'))
 
-                b_str = f"$b =$ {planet.b}"
+                b_str = f"$b =$ {planet.b:.2f}"
                 text_b = ax0.text(0.95, 0.1, b_str, ha='right', va='bottom', transform=ax0.transAxes)
                 text_b.set_bbox(dict(facecolor='white', alpha=0.5, edgecolor='none'))
         
