@@ -585,13 +585,20 @@ class ThreePanelPhotPlot:
                 per_str = f"$P =$ {self.df_summary.loc[f'period_{planet.pl_letter}', 'median']:.2f} d"
                 text_per = ax0.text(0.05, 0.9, per_str, ha='left', va='top', transform=ax0.transAxes)
                 text_per.set_bbox(dict(facecolor='white', alpha=0.5, edgecolor='none'))
+                
                 rp_med = self.df_summary.loc[f'rp_{planet.pl_letter}', 'median']
                 rp_err = self.df_summary.loc[f'rp_{planet.pl_letter}', 'std']
                 rp_str = f"$R_\mathrm{{p}} = {rp_med:.2f} \pm {rp_err:.2f}$ $R_\oplus$"
                 text_rp = ax0.text(0.95, 0.9, rp_str, ha='right', va='top', transform=ax0.transAxes)
                 text_rp.set_bbox(dict(facecolor='white', alpha=0.5, edgecolor='none'))
+                
+                b_med = self.df_summary.loc[f'b_{planet.pl_letter}', 'median']
+                b_err = self.df_summary.loc[f'b_{planet.pl_letter}', 'std']
+                b_str = f"$b = {b_med:.2f} \pm {b_err:.2f}$"
+                text_b = ax0.text(0.95, 0.1, b_str, ha='right', va='bottom', transform=ax0.transAxes)
+                text_b.set_bbox(dict(facecolor='white', alpha=0.5, edgecolor='none'))
             else:
-                # Annotate with MAP solution values for Period and radius
+                # Annotate with MAP solution values for Period and radius and impact parameter
                 per_str = f"$P =$ {planet.per:.2f} d"
                 text_per = ax0.text(0.05, 0.9, per_str, ha='left', va='top', transform=ax0.transAxes)
                 text_per.set_bbox(dict(facecolor='white', alpha=0.5, edgecolor='none'))
@@ -600,6 +607,10 @@ class ThreePanelPhotPlot:
                 rp_str = f"$R_\mathrm{{p}} = {rp_map:.2f}$ $R_\oplus$"
                 text_rp = ax0.text(0.95, 0.9, rp_str, ha='right', va='top', transform=ax0.transAxes)
                 text_rp.set_bbox(dict(facecolor='white', alpha=0.5, edgecolor='none'))
+
+                b_str = f"$b =$ {planet.b}"
+                text_b = ax0.text(0.95, 0.1, b_str, ha='right', va='bottom', transform=ax0.transAxes)
+                text_b.set_bbox(dict(facecolor='white', alpha=0.5, edgecolor='none'))
         
         # Make the y-axes range the same for all of the phase-folded transit plots
         for axes in [phase_folded_axes, phase_folded_resid_axes]:

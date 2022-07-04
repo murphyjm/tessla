@@ -435,7 +435,7 @@ class RVPlot:
                     mp_str = ''
 
                 planet_str = per_str + '\n' + ecc_str + '\n' + kamp_str + mp_str
-                text = ax0.text(0.05, 0.05, planet_str, ha='left', va='bottom', transform=ax0.transAxes, fontsize=param_fontsize)
+                text = ax0.text(0.05, 0.05, planet_str, ha='left', va='bottom', transform=ax0.transAxes, fontsize=param_fontsize, zorder=1002)
                 alpha = 0.5
                 if self.rms_yscale_phase_folded_panels:
                     alpha=0.8
