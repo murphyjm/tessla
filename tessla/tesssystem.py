@@ -698,7 +698,6 @@ class TessSystem:
 
             # Light curves
             light_curves = xo_star.get_light_curve(orbit=orbit, r=ror, t=x.values[mask], texp=self.cadence/60/60/24) * 1e3 # Converts self.cadence from seconds to days.
-            # import pdb; pdb.set_trace()
             light_curve = tt.sum(light_curves, axis=-1) + mean_flux
             resid = y.values[mask] - light_curve
 
@@ -839,8 +838,7 @@ class TessSystem:
         # Background model
         bkg = tt.zeros(len(t))
         if self.rv_trend and trend_rv is not None:
-            # TODO: What to do with the constant term when including a linear trend.
-            A = np.vander(t - self.rv_trend_time_ref, self.rv_trend_order + 1, increasing=True)# [:, :-1] # Don't use the offset term, we already have instrument offsets.
+            A = np.vander(t - self.rv_trend_time_ref, self.rv_trend_order + 1, increasing=True)
             bkg = tt.dot(A, trend_rv)
         
         if n_planets > 1:
