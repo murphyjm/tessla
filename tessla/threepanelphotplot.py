@@ -586,11 +586,15 @@ class ThreePanelPhotPlot:
                 text_per = ax0.text(0.05, 0.9, per_str, ha='left', va='top', transform=ax0.transAxes)
                 text_per.set_bbox(dict(facecolor='white', alpha=0.5, edgecolor='none'))
                 
+                ror_med = np.median(chains[f"ror_{planet.pl_letter}"].values) * 100 # Note: This will break if self.df_summary is not None but you didn't ask to plot with random draws so the chains aren't loaded
+                ror_err = np.std(chains[f"ror_{planet.pl_letter}"].values) * 100
+                ror_str = f"$R_\mathrm{{p}}/R_* = {ror_med:.2f} \pm {ror_err:.2f}$ $\%$"
+
                 rp_med = self.df_summary.loc[f'rp_{planet.pl_letter}', 'median']
                 rp_err = self.df_summary.loc[f'rp_{planet.pl_letter}', 'std']
                 rp_str = f"$R_\mathrm{{p}} = {rp_med:.2f} \pm {rp_err:.2f}$ $R_\oplus$"
-                text_rp = ax0.text(0.95, 0.9, rp_str, ha='right', va='top', transform=ax0.transAxes)
-                text_rp.set_bbox(dict(facecolor='white', alpha=0.5, edgecolor='none'))
+                text_rp_and_ror = ax0.text(0.95, 0.9, ror_str + '\n' + rp_str, ha='right', va='top', transform=ax0.transAxes)
+                text_rp_and_ror.set_bbox(dict(facecolor='white', alpha=0.5, edgecolor='none'))
                 
                 b_med = self.df_summary.loc[f'b_{planet.pl_letter}', 'median']
                 b_err = self.df_summary.loc[f'b_{planet.pl_letter}', 'std']
@@ -598,15 +602,16 @@ class ThreePanelPhotPlot:
                 text_b = ax0.text(0.95, 0.1, b_str, ha='right', va='bottom', transform=ax0.transAxes)
                 text_b.set_bbox(dict(facecolor='white', alpha=0.5, edgecolor='none'))
             else:
-                # Annotate with MAP solution values for Period and radius and impact parameter
+                # Annotate with MAP solution values for Period and radius and rp/rstar and impact parameter.
                 per_str = f"$P =$ {planet.per:.2f} d"
                 text_per = ax0.text(0.05, 0.9, per_str, ha='left', va='top', transform=ax0.transAxes)
                 text_per.set_bbox(dict(facecolor='white', alpha=0.5, edgecolor='none'))
                 
+                ror_str = f"$R_\mathrm{{p}}/R_* = {np.sqrt(planet.depth * 1e-3) * 100:.2f}$ $\%$"
                 rp_map = (units.Rsun.to(units.Rearth, np.sqrt(planet.depth * 1e-3) * self.toi.star.rstar))
                 rp_str = f"$R_\mathrm{{p}} = {rp_map:.2f}$ $R_\oplus$"
-                text_rp = ax0.text(0.95, 0.9, rp_str, ha='right', va='top', transform=ax0.transAxes)
-                text_rp.set_bbox(dict(facecolor='white', alpha=0.5, edgecolor='none'))
+                text_rp_and_ror = ax0.text(0.95, 0.9, ror_str + '\n' + rp_str, ha='right', va='top', transform=ax0.transAxes)
+                text_rp_and_ror.set_bbox(dict(facecolor='white', alpha=0.5, edgecolor='none'))
 
                 b_str = f"$b =$ {planet.b}"
                 text_b = ax0.text(0.95, 0.1, b_str, ha='right', va='bottom', transform=ax0.transAxes)

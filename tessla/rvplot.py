@@ -123,13 +123,16 @@ class RVPlot:
         '''
         yspan = np.max(self.toi.rv_df.mnvel) - np.min(self.toi.rv_df.mnvel)
         major = 5
-        minor = 1
-        if yspan >= 50:
+        minor = 2.5
+        if yspan >= 50 and yspan < 100:
             major = 10
             minor = 5
-        elif yspan >= 100:
+        elif yspan >= 100 and yspan < 200:
             major = 20
             minor = 10
+        elif yspan >= 200:
+            major = 50
+            minor = 25
         return major, minor
 
     def __get_residuals_ytick_spacing(self, residuals):
@@ -140,11 +143,25 @@ class RVPlot:
         major = 10
         minor = 5
         if yspan >= 35:
-            major = 20
-            minor = 10
+            major = 30
+            minor = 15
         elif yspan >= 45:
-            major = 25
+            major = 50
+            minor = 25
+        return major, minor
+    
+    def __get_ytick_phase_spacing(self, kamp):
+        major = 5
+        minor = 2.5
+        if kamp >= 10 and kamp < 50:
+            major = 10
             minor = 5
+        elif kamp >= 50 and kamp < 100:
+            major = 30
+            minor = 15
+        elif kamp >= 100:
+            major = 50
+            minor = 25
         return major, minor
 
     def __rv_plot(self):
@@ -396,7 +413,7 @@ class RVPlot:
 
                 if k == num_planet_rows - 1: # Only add the xlabel to the bottom row
                     ax1.set_xlabel("Phase", fontsize=14)
-                major, minor = self.__get_ytick_spacing()
+                major, minor = self.__get_ytick_phase_spacing(planet.kamp)
                 ax0.yaxis.set_major_locator(MultipleLocator(major))
                 ax0.yaxis.set_minor_locator(MultipleLocator(minor))
                 major, minor = self.__get_residuals_ytick_spacing(residuals)
@@ -444,15 +461,25 @@ class RVPlot:
                 # Move on to the next planet!
                 planet_ind += 1
         
-        # Make the y-axes range the same for all of the phase-folded plots
-        for k, axes in enumerate([phase_folded_axes, phase_folded_resid_axes]):
-            y_phase_max = np.max([max(ax.get_ylim()) for ax in axes])
-            y_phase_min = np.min([min(ax.get_ylim()) for ax in axes])
-            y_phase_lim = (y_phase_min, y_phase_max)
-            if k == 0 and self.rms_yscale_phase_folded_panels:
-                y_phase_lim = (-3 * np.std(residuals), 3 * np.std(residuals))
-            for i in range(len(axes)):
-                axes[i].set_ylim(y_phase_lim)
+        # Make the y-axes range the same for all of the phase-folded plots IF the planets have reasonably similar K-amplitudes. Otherwise let them be on their own scales
+        kamp_planet_b = self.toi.planets['b'].kamp
+        kamps_all_planets = np.array([planet.kamp for planet in self.toi.planets.values()])
+        kamps_all_planets_minus_b = np.abs(kamps_all_planets - kamp_planet_b)
+        if all(kamps_all_planets_minus_b < 7.5): # If all the planets' k-amplitude are within 7.5 m/s of eachother, share y-axis limits
+            for k, axes in enumerate([phase_folded_axes, phase_folded_resid_axes]):
+                y_phase_max = np.max([max(ax.get_ylim()) for ax in axes])
+                y_phase_min = np.min([min(ax.get_ylim()) for ax in axes])
+                y_phase_lim = (y_phase_min, y_phase_max)
+                if k == 0 and self.rms_yscale_phase_folded_panels:
+                    y_phase_lim = (-3 * np.std(residuals), 3 * np.std(residuals))
+                for i in range(len(axes)):
+                    axes[i].set_ylim(y_phase_lim)
+        elif self.rms_yscale_phase_folded_panels: # HACK
+            for k, ax in enumerate(phase_folded_axes):
+                kamp_current_planet = kamps_all_planets[k]
+                if kamp_current_planet < 10:
+                    y_phase_lim = (-5 * kamp_current_planet, 5 * kamp_current_planet)
+                    ax.set_ylim(y_phase_lim)
         
         fig.align_ylabels()
         return fig
