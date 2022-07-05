@@ -434,13 +434,21 @@ class RVPlot:
                     prefix = "nontrans_"
                 # Include errors
                 if self.df_summary is not None:
-                    per_str = f"$P =$ {self.df_summary.loc[f'{prefix}period_{planet.pl_letter}', 'median']:.2f} d"
+                    per_med = self.df_summary.loc[f'{prefix}period_{planet.pl_letter}', 'median']
+                    per_err = self.df_summary.loc[f'{prefix}period_{planet.pl_letter}', 'std']
+                    if per_err < 1:
+                        per_str = f"$P =$ {per_med:.2f} $\pm$ {per_err:.2e} d"
+                    else:
+                        per_str = f"$P =$ {per_med:.1f} $\pm$ {per_err:.1f} d"
+
                     ecc_med = self.df_summary.loc[f'{prefix}ecc_{planet.pl_letter}', 'median']
                     ecc_err = self.df_summary.loc[f'{prefix}ecc_{planet.pl_letter}', 'std']
                     ecc_str = f"$e = {ecc_med:.2f} \pm {ecc_err:.2f}$"
+
                     kamp_med = self.df_summary.loc[f'{prefix}K_{planet.pl_letter}', 'median']
                     kamp_err = self.df_summary.loc[f'{prefix}K_{planet.pl_letter}', 'std']
                     kamp_str = f"$K = {kamp_med:.2f} \pm {kamp_err:.2f}$ m s$^{{-1}}$"
+
                     if planet.is_transiting:
                         mp_med = self.df_summary.loc[f'mp_{planet.pl_letter}', 'median']
                         mp_err = self.df_summary.loc[f'mp_{planet.pl_letter}', 'std']
