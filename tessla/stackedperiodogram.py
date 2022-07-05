@@ -139,6 +139,7 @@ class StackedPeriodogram:
             i += 1
 
         # Remove planets from RVs
+        # TODO: Instead of removing planets in order, remove largest signal first each time 
         for planet_ind, planet in enumerate(self.toi.planets.values()):
             if len(self.toi.extras['planet_rv'].shape) > 1:
                 rv_residuals -= self.toi.extras['planet_rv'][:, planet_ind]

@@ -47,6 +47,9 @@ class ThreePanelPhotPlot:
                 save_format='.png',
                 save_dpi=400,
                 df_summary_fname=None,
+                rms_yscale_phase_folded_panels=True,
+                rms_yscale_multiplier=5,
+                data_uncert_label_rms_yscale_multiplier=-3
                 ) -> None:
         
         self.toi = toi
@@ -72,6 +75,9 @@ class ThreePanelPhotPlot:
         self.d = d
         self.save_format = save_format
         self.save_dpi = save_dpi
+        self.rms_yscale_phase_folded_panels = rms_yscale_phase_folded_panels
+        self.rms_yscale_multiplier = rms_yscale_multiplier
+        self.data_uncert_label_rms_yscale_multiplier = data_uncert_label_rms_yscale_multiplier
     
     def plot(self, save_fname=None, overwrite=False):
         '''
@@ -572,13 +578,16 @@ class ThreePanelPhotPlot:
             
             ax0.set_xlim([-xlim, xlim])
             ax0.set_ylim([-3, 3])
+            data_uncert = np.sqrt(np.exp(2 * self.toi.map_soln['log_sigma_phot']) + np.median(self.yerr)**2)
+            if self.rms_yscale_phase_folded_panels:
+                ax0.set_ylim([-self.rms_yscale_multiplier * data_uncert, self.rms_yscale_multiplier * data_uncert])
             ax1.set_xlim([-xlim, xlim])
             ax1.set_ylim([-3, 3])
-            axis_to_data = ax.transAxes + ax.transData.inverted()
-            points_data = axis_to_data.transform((0.04, 0.15))
-            ax0.errorbar(points_data[0], points_data[1], yerr=np.sqrt(np.exp(self.toi.map_soln['log_sigma_phot'])**2 + np.median(self.yerr)**2), fmt='none', color='k', elinewidth=2, capsize=4)
+
+            ax0.errorbar(-xlim + xlim*0.1, self.data_uncert_label_rms_yscale_multiplier * data_uncert, yerr=data_uncert, 
+                            fmt='none', color='k', elinewidth=2, capsize=4)
             if i == 0:
-                text = ax0.text(points_data[0] + 0.3/24, points_data[1], 'Data uncert.', fontsize=12)
+                text = ax0.text(-xlim + xlim*0.15, self.data_uncert_label_rms_yscale_multiplier * data_uncert, 'Data uncert.', fontsize=12)
                 text.set_bbox(dict(facecolor='white', alpha=0.5, edgecolor='none'))
             
             if self.df_summary is not None:
