@@ -164,6 +164,10 @@ class StackedPeriodogram:
         i += 1
 
         # RV Window function
+        # This is the last periodogram to plot. Since there is usually a strong peak in the window function at 1 day that messes up the y-axis scale, 
+        # make the minimum period slighly larger than 1 day for the RV window function, then set it back to whatever it was before.
+        true_min_period = self.min_period
+        self.min_period = 1.1
         periods, power, peak_per, ls = self.__get_ls(self.toi.rv_df.time, 
                                             1, 
                                             1e-6)
@@ -171,6 +175,7 @@ class StackedPeriodogram:
         # ax[i].set_ylim([0, 0.25])
         text = ax[i].text(xtext, ytext, 'RV Window Function', transform=ax[i].transAxes, ha='right')
         text.set_bbox(dict(facecolor='white', alpha=0.8, edgecolor='none'))
+        self.min_period = true_min_period
 
         # Plot vertical lines for planets
         for j in range(self.num_periodograms):
