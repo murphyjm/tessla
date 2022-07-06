@@ -1,7 +1,5 @@
-# TESS Photometry fitting pipeline
+# TESS Photometry and RV fitting pipeline
 
-Release 0.1. Updates and documentation to follow.
+Release 1.0. Updates and documentation to follow.
 
-Example script call:
-
-tessla_fit_phot "HIP 8152" 164767175 266 ../isoclassify_output_gaiadr2/iso_star_pickles/HIP8152_iso_star_obj.pkl --planet_objs_dir ../HIP_8152/manual_planets/
+Can now perform joint modeling of TESS photometry, RVs, and activity indicators.
