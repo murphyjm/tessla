@@ -49,7 +49,8 @@ class ThreePanelPhotPlot:
                 df_summary_fname=None,
                 rms_yscale_phase_folded_panels=True,
                 rms_yscale_multiplier=5,
-                data_uncert_label_rms_yscale_multiplier=-3
+                data_uncert_label_rms_yscale_multiplier=-3,
+                sector_marker_fontsize=12
                 ) -> None:
         
         self.toi = toi
@@ -57,6 +58,7 @@ class ThreePanelPhotPlot:
         self.y = toi.cleaned_flux.values
         self.yerr = toi.cleaned_flux_err.values
         self.residuals = None
+        self.num_sectors = len(np.unique(self.toi.lc.sector))
         
         self.use_broken_x_axis = use_broken_x_axis
         self.data_gap_thresh = data_gap_thresh
@@ -78,7 +80,8 @@ class ThreePanelPhotPlot:
         self.rms_yscale_phase_folded_panels = rms_yscale_phase_folded_panels
         self.rms_yscale_multiplier = rms_yscale_multiplier
         self.data_uncert_label_rms_yscale_multiplier = data_uncert_label_rms_yscale_multiplier
-    
+        self.sector_marker_fontsize = sector_marker_fontsize
+
     def plot(self, save_fname=None, overwrite=False):
         '''
         Make the plot!
@@ -140,12 +143,32 @@ class ThreePanelPhotPlot:
         if yspan < 3:
             major = 0.75
             minor = 0.25
-        elif yspan >= 3 and yspan < 4:
+        elif yspan >= 3 and yspan < 3.5:
             major = 1
             minor = 0.5
-        elif yspan >= 4:
+        elif yspan >= 3.5:
             major = 2
             minor = 1
+        return major, minor
+
+    def __get_xtick_spacing(self):
+        '''
+        Hacky.
+        '''
+        major = None
+        minor = None
+        if self.num_sectors < 3:
+            major = 10
+            minor = 1
+        elif self.num_sectors >= 3 and self.num_sectors < 6:
+            major = 20
+            minor = 10
+        elif self.num_sectors >= 6 and self.num_sectors < 12:
+            major = 25
+            minor = 12.5
+        elif self.num_sectors >= 12:
+            major = 40
+            minor = 20
         return major, minor
 
     def __get_xlim_tuple(self, break_inds):
@@ -210,7 +233,7 @@ class ThreePanelPhotPlot:
         
         xpos = (self.toi.cleaned_time.values[xstop_ind - 1] + xstart)/2
         ha = 'center'
-        text = ax.text(xpos, np.max(self.y), sector_str, horizontalalignment=ha, verticalalignment='top', fontsize=12)
+        text = ax.text(xpos, np.max(self.y), sector_str, horizontalalignment=ha, verticalalignment='top', fontsize=self.sector_marker_fontsize)
         text.set_bbox(dict(facecolor='white', alpha=0.5, edgecolor='none'))
 
     def __broken_three_panel_plot(self):
@@ -218,7 +241,7 @@ class ThreePanelPhotPlot:
         Make the three panel plot using a broken x-axis. Used for TOIs with widely time-separated sectors.
         '''
         break_inds = find_breaks(self.x, diff_threshold=self.data_gap_thresh, verbose=self.toi.verbose)
-        #import pdb; pdb.set_trace()
+
         # Create the figure object
         fig = plt.figure(figsize=self.figsize)
 
@@ -256,9 +279,6 @@ class ThreePanelPhotPlot:
         ax_left = bax1.axs[0]
         self.__annotate_sector_marker(ax_left, xstart, 0, xstop_ind)
 
-        # Add label for years to the upper axis for the left-most chunk
-        left_xlims = xlim_tuple[0]
-        add_ymd_label(self.toi.bjd_ref, fig, ax_left, left_xlims, 'left')
         # ------------- #
         # Middle chunks #
         # ------------- #
@@ -289,10 +309,6 @@ class ThreePanelPhotPlot:
         ax_right = bax1.axs[-1]
         # The -1 isn't technically the correct index (leaves our last element) but it shouldn't matter because there wouldn't be a single data point from a different sector at the end.
         self.__annotate_sector_marker(ax_right, xstart, xstart_ind, -1)
-
-        # Add label for years to the upper axis for the right-most chunk
-        right_xlims = xlim_tuple[-1]
-        add_ymd_label(self.toi.bjd_ref, fig, ax_right, right_xlims, 'right')
 
         # Top panel housekeeping
         bax1.set_xticklabels([])
@@ -365,37 +381,45 @@ class ThreePanelPhotPlot:
         fig.align_ylabels() # Align ylabels for each panel
         # TODO: Need to the X ticklabel spacing??
         # Make ticks go inward and set multiple locator for x-axis
-        for bax in [bax1, bax2, bax3]:
+        for ax_num, bax in enumerate([bax1, bax2, bax3]):
             # Left-most
             ax_left = bax.axs[0]
-            ax_left.xaxis.set_major_locator(MultipleLocator(10))
-            # If there are more than 3 chunks, make the x-axis ticklabels spacing larger so that the numbers don't overlap
-            if len(break_inds) > 2:
-                ax_left.xaxis.set_major_locator(MultipleLocator(20))
-            ax_left.xaxis.set_minor_locator(MultipleLocator(5))
+            
+            major, minor = self.__get_xtick_spacing()
+            ax_left.xaxis.set_major_locator(MultipleLocator(major))
+            ax_left.xaxis.set_minor_locator(MultipleLocator(minor))
+
             ax_left.tick_params(axis="y", direction="in", which="both", left=True, right=False)
             ax_left.tick_params(axis="x", direction="in", which="both", top=True, bottom=True)
+
+            if ax_num == 0:
+                # Add label for years to the upper axis for the left-most chunk
+                left_xlims = xlim_tuple[0]
+                add_ymd_label(self.toi.bjd_ref, fig, ax_left, left_xlims, 'left')
 
             # Middle
             for j in range(1, len(bax.axs) - 1):
                 ax_mid = bax.axs[j]
                 ax_mid.tick_params(axis="y", which="both", left=False, right=False)
-                ax_mid.xaxis.set_major_locator(MultipleLocator(10))
-                # If there are more than 3 chunks, make the x-axis ticklabels spacing larger so that the numbers don't overlap
-                if len(break_inds) > 2:
-                    ax_mid.xaxis.set_major_locator(MultipleLocator(20))
-                ax_mid.xaxis.set_minor_locator(MultipleLocator(5))
+                
+                ax_mid.xaxis.set_major_locator(MultipleLocator(major))
+                ax_mid.xaxis.set_minor_locator(MultipleLocator(minor))
+
                 ax_mid.tick_params(axis="x", direction="in", which="both", top=True, bottom=True)
             
             # Right-most
             ax_right = bax.axs[-1]
-            ax_right.xaxis.set_major_locator(MultipleLocator(10))
-            # If there are more than 3 chunks, make the x-axis ticklabels spacing larger so that the numbers don't overlap
-            if len(break_inds) > 2:
-                ax_right.xaxis.set_major_locator(MultipleLocator(20))
-            ax_right.xaxis.set_minor_locator(MultipleLocator(5))
+
+            ax_right.xaxis.set_major_locator(MultipleLocator(major))
+            ax_right.xaxis.set_minor_locator(MultipleLocator(minor))
+
             ax_right.tick_params(axis="x", direction="in", which="both", top=True, bottom=True)
             ax_right.tick_params(axis="y", direction="in", which="both", left=False, right=True)
+
+            if ax_num == 0:
+                # Add label for years to the upper axis for the right-most chunk
+                right_xlims = xlim_tuple[-1]
+                add_ymd_label(self.toi.bjd_ref, fig, ax_right, right_xlims, 'right')
 
         ################################################################################################
         ############################ PHASE-FOLDED TRANSIT AND RESIDUALS ################################
@@ -496,9 +520,10 @@ class ThreePanelPhotPlot:
         fig.align_ylabels()
 
         # Make ticks go inward and set multiple locator for x-axis
+        major, minor = self.__get_xtick_spacing()
         for ax in [ax1, ax2, ax3]:
-            ax.xaxis.set_major_locator(MultipleLocator(5))
-            ax.xaxis.set_minor_locator(MultipleLocator(2.5))
+            ax.xaxis.set_major_locator(MultipleLocator(major))
+            ax.xaxis.set_minor_locator(MultipleLocator(minor))
             ax.tick_params(axis='y', direction='in', which='both', left=True, right=True)
             ax.tick_params(axis='x', direction='in', which='both', top=True, bottom=True)
         

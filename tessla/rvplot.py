@@ -67,7 +67,7 @@ class RVPlot:
                 df_summary_fname=None,
                 tel_marker_mapper=None,
                 rms_yscale_phase_folded_panels=True,
-                param_fontsize=16 # Fontsize for annotating the phase folded plots
+                param_fontsize=14 # Fontsize for annotating the phase folded plots
                 ) -> None:
     
         self.toi = toi
