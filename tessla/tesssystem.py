@@ -68,7 +68,7 @@ class TessSystem:
                 errvel_cut=None, # If a float is provided, cut all mnvel and errvel absolute values above this limit. To get rid of bad data.
                 rv_bin_size=0.33, # Bin RVs collected in the same night (within 8 hours)
                 include_svalue_gp=False, # If true, add a GP simultaneously fit to the RVs and HIRES S-values
-                svalue_gp_kernel='exp_decay', # Which kernel to use for the GP
+                svalue_gp_kernel='rotation', # Which kernel to use for the GP
                 # General stuff
                 verbose=True, # Print out messages
                 plotting=True, # Create plots as you go
