@@ -146,8 +146,8 @@ class RVPlot:
         major = 10
         minor = 5
         if yspan >= 35:
-            major = 30
-            minor = 15
+            major = 20
+            minor = 10
         elif yspan >= 45:
             major = 50
             minor = 25

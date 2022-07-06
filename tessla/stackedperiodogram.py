@@ -138,9 +138,10 @@ class StackedPeriodogram:
             text.set_bbox(dict(facecolor='white', alpha=0.8, edgecolor='none'))
             i += 1
 
-        # Remove planets from RVs
-        # TODO: Instead of removing planets in order, remove largest signal first each time 
-        for planet_ind, planet in enumerate(self.toi.planets.values()):
+        # Remove planets from RVs in order of biggest K-amplitude (using K-amp as a proxy for power)
+        planet_values_list = list(self.toi.planets.values())
+        kamp_sorted_planet_inds = np.argsort([planet.kamp for planet in planet_values_list])[::-1]
+        for planet_ind in kamp_sorted_planet_inds:
             if len(self.toi.extras['planet_rv'].shape) > 1:
                 rv_residuals -= self.toi.extras['planet_rv'][:, planet_ind]
             else:
@@ -149,7 +150,7 @@ class StackedPeriodogram:
                                                         rv_residuals,
                                                         self.toi.rv_df.errvel)
             ax[i].plot(periods, power, color='k')
-            rv_str += f' - Planet {planet.pl_letter}'
+            rv_str += f' - Planet {planet_values_list[planet_ind].pl_letter}'
             text = ax[i].text(xtext, ytext, rv_str, transform=ax[i].transAxes, ha='right')
             text.set_bbox(dict(facecolor='white', alpha=0.8, edgecolor='none'))
             i += 1
@@ -164,6 +165,10 @@ class StackedPeriodogram:
         i += 1
 
         # RV Window function
+        # This is the last periodogram to plot. Since there is usually a strong peak in the window function at 1 day that messes up the y-axis scale, 
+        # make the minimum period slighly larger than 1 day for the RV window function, then set it back to whatever it was before.
+        true_min_period = self.min_period
+        self.min_period = 1.1
         periods, power, peak_per, ls = self.__get_ls(self.toi.rv_df.time, 
                                             1, 
                                             1e-6)
@@ -171,6 +176,7 @@ class StackedPeriodogram:
         # ax[i].set_ylim([0, 0.25])
         text = ax[i].text(xtext, ytext, 'RV Window Function', transform=ax[i].transAxes, ha='right')
         text.set_bbox(dict(facecolor='white', alpha=0.8, edgecolor='none'))
+        self.min_period = true_min_period
 
         # Plot vertical lines for planets
         for j in range(self.num_periodograms):
@@ -194,6 +200,7 @@ class StackedPeriodogram:
         ax0.set_xscale('log')
         ax0.xaxis.set_major_formatter(FormatStrFormatter('%d'))
         ax0.xaxis.set_minor_formatter(FormatStrFormatter('%d'))
+        ax0.tick_params(axis='x', which='minor', labelsize=12)
         for i,label in enumerate(ax0.xaxis.get_ticklabels(minor=True)):
             if i%2:
                 label.set_visible(False)
