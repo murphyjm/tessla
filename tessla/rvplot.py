@@ -66,8 +66,8 @@ class RVPlot:
                 save_dpi=400,
                 df_summary_fname=None,
                 tel_marker_mapper=None,
-                rms_yscale_phase_folded_panels=False,
-                param_fontsize=16 # Fontsize for annotating the phase folded plots
+                rms_yscale_phase_folded_panels=True,
+                param_fontsize=14 # Fontsize for annotating the phase folded plots
                 ) -> None:
     
         self.toi = toi
@@ -145,7 +145,10 @@ class RVPlot:
         yspan = np.max(residuals) - np.min(residuals)
         major = 10
         minor = 5
-        if yspan >= 35:
+        if yspan >= 25 and yspan < 35:
+            major = 15
+            minor = 7.5
+        elif yspan >= 35:
             major = 20
             minor = 10
         elif yspan >= 45:

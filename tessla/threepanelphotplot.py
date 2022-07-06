@@ -49,7 +49,9 @@ class ThreePanelPhotPlot:
                 df_summary_fname=None,
                 rms_yscale_phase_folded_panels=True,
                 rms_yscale_multiplier=5,
-                data_uncert_label_rms_yscale_multiplier=-3
+                data_uncert_label_rms_yscale_multiplier=-3,
+                sector_marker_fontsize=12,
+                param_fontsize=14
                 ) -> None:
         
         self.toi = toi
@@ -57,6 +59,7 @@ class ThreePanelPhotPlot:
         self.y = toi.cleaned_flux.values
         self.yerr = toi.cleaned_flux_err.values
         self.residuals = None
+        self.num_sectors = len(np.unique(self.toi.lc.sector))
         
         self.use_broken_x_axis = use_broken_x_axis
         self.data_gap_thresh = data_gap_thresh
@@ -78,7 +81,9 @@ class ThreePanelPhotPlot:
         self.rms_yscale_phase_folded_panels = rms_yscale_phase_folded_panels
         self.rms_yscale_multiplier = rms_yscale_multiplier
         self.data_uncert_label_rms_yscale_multiplier = data_uncert_label_rms_yscale_multiplier
-    
+        self.sector_marker_fontsize = sector_marker_fontsize
+        self.param_fontsize = param_fontsize 
+
     def plot(self, save_fname=None, overwrite=False):
         '''
         Make the plot!
@@ -110,6 +115,63 @@ class ThreePanelPhotPlot:
         fig.savefig(save_fname, facecolor='white', bbox_inches='tight', dpi=self.save_dpi)
         print(f"Photometry model plot saved to {save_fname}")
         plt.close()
+    
+    def __get_ytick_spacing(self, yspan):
+        '''
+        Hacky.
+        '''
+        major = None
+        minor = None
+        if yspan < 3:
+            major = 0.5
+            minor = 0.25
+        elif yspan >= 3 and yspan < 4:
+            major = 1
+            minor = 0.5
+        elif yspan >= 4 and yspan < 8:
+            major = 2
+            minor = 1
+        elif yspan >= 6:
+            major = 4
+            minor = 2
+        return major, minor
+
+    def __get_residuals_ytick_spacing(self, yspan):
+        '''
+        Hacky.
+        '''
+        major = None
+        minor = None
+        if yspan < 3:
+            major = 0.75
+            minor = 0.25
+        elif yspan >= 3 and yspan < 3.5:
+            major = 1
+            minor = 0.5
+        elif yspan >= 3.5:
+            major = 2
+            minor = 1
+        return major, minor
+
+    def __get_xtick_spacing(self):
+        '''
+        Hacky.
+        '''
+        major = None
+        minor = None
+        if self.num_sectors < 3:
+            major = 10
+            minor = 1
+        elif self.num_sectors >= 3 and self.num_sectors < 6:
+            major = 20
+            minor = 10
+        elif self.num_sectors >= 6 and self.num_sectors < 12:
+            major = 25
+            minor = 12.5
+        elif self.num_sectors >= 12:
+            major = 40
+            minor = 20
+        return major, minor
 
     def __get_xlim_tuple(self, break_inds):
         '''
@@ -173,7 +235,7 @@ class ThreePanelPhotPlot:
         
         xpos = (self.toi.cleaned_time.values[xstop_ind - 1] + xstart)/2
         ha = 'center'
-        text = ax.text(xpos, np.max(self.y), sector_str, horizontalalignment=ha, verticalalignment='top', fontsize=12)
+        text = ax.text(xpos, np.max(self.y), sector_str, horizontalalignment=ha, verticalalignment='top', fontsize=self.sector_marker_fontsize)
         text.set_bbox(dict(facecolor='white', alpha=0.5, edgecolor='none'))
 
     def __broken_three_panel_plot(self):
@@ -219,10 +281,6 @@ class ThreePanelPhotPlot:
         ax_left = bax1.axs[0]
         self.__annotate_sector_marker(ax_left, xstart, 0, xstop_ind)
 
-        # Add label for years to the upper axis for the left-most chunk
-        left_xlims = xlim_tuple[0]
-        add_ymd_label(self.toi.bjd_ref, fig, ax_left, left_xlims, 'left')
-        # ax_left.set_xlim([0, 10])
         # ------------- #
         # Middle chunks #
         # ------------- #
@@ -254,16 +312,13 @@ class ThreePanelPhotPlot:
         # The -1 isn't technically the correct index (leaves our last element) but it shouldn't matter because there wouldn't be a single data point from a different sector at the end.
         self.__annotate_sector_marker(ax_right, xstart, xstart_ind, -1)
 
-        # Add label for years to the upper axis for the right-most chunk
-        right_xlims = xlim_tuple[-1]
-        add_ymd_label(self.toi.bjd_ref, fig, ax_right, right_xlims, 'right')
-
         # Top panel housekeeping
         bax1.set_xticklabels([])
         bax1.set_ylabel("Relative flux [ppt]", fontsize=14, labelpad=self.ylabelpad)
+        major, minor = self.__get_ytick_spacing(np.max(self.y) - np.min(self.y))
         for ax in [ax_left, ax_right]:
-            ax.yaxis.set_major_locator(MultipleLocator(2))
-            ax.yaxis.set_minor_locator(MultipleLocator(1))
+            ax.yaxis.set_major_locator(MultipleLocator(major))
+            ax.yaxis.set_minor_locator(MultipleLocator(minor))
         ax_right.tick_params(axis='y', label1On=False)
 
         ################################################################################################
@@ -285,8 +340,9 @@ class ThreePanelPhotPlot:
         bax2.set_xticklabels([])
         bax2.set_ylabel("Relative flux [ppt]", fontsize=14, labelpad=self.ylabelpad)
         ax_left, ax_right = bax2.axs[0], bax2.axs[-1]
+        major, minor = self.__get_ytick_spacing(np.max(self.y - gp_mod) - np.min(self.y - gp_mod))
         for ax in [ax_left, ax_right]:
-            ax.yaxis.set_major_locator(MultipleLocator(1))
+            ax.yaxis.set_major_locator(MultipleLocator(major))
         ax_right.set_yticklabels([])
 
         ################################################################################################
@@ -304,20 +360,16 @@ class ThreePanelPhotPlot:
         bax3.axhline(0, color="#aaaaaa", lw=1)
         for ax in bax3.axs[1:]:
             ax.tick_params(axis='y', label1On=False) # Avoid y-axis labels popping up.
-        bax3.set_ylim([-3, 3]) # Can probably change this later.
         self.residuals = residuals.value # Save these
 
         # Plot housekeeping
         bax3.set_ylabel("Residuals", fontsize=14, labelpad=self.ylabelpad)
         bax3.set_xlabel(f"Time [BJD - {self.toi.bjd_ref:.1f}]", fontsize=14, labelpad=30)
-        
-        # If there are more than 3 chunks, make the x-axis ticklabel font smaller so that the numbers don't overlap
-        # if len(break_inds) > 2:
-        #     bax3.tick_params(axis='x', which='major', labelsize=12)
 
         ax_left, ax_right = bax3.axs[0], bax3.axs[-1]
+        major, minor = self.__get_residuals_ytick_spacing(np.max(self.residuals) - np.min(self.residuals))
         for ax in [ax_left, ax_right]:
-            ax.yaxis.set_major_locator(MultipleLocator(2))
+            ax.yaxis.set_major_locator(MultipleLocator(major))
             bottom = -1 * np.max(ax.get_ylim())
             ax.set_ylim(bottom=bottom)
 
@@ -329,39 +381,47 @@ class ThreePanelPhotPlot:
         ############################ HOUSEKEEPING FOR TOP THREE PANELS #################################
         ################################################################################################
         fig.align_ylabels() # Align ylabels for each panel
-        
+        # TODO: Need to the X ticklabel spacing??
         # Make ticks go inward and set multiple locator for x-axis
-        for bax in [bax1, bax2, bax3]:
+        for ax_num, bax in enumerate([bax1, bax2, bax3]):
             # Left-most
             ax_left = bax.axs[0]
-            ax_left.xaxis.set_major_locator(MultipleLocator(10))
-            # If there are more than 3 chunks, make the x-axis ticklabels spacing larger so that the numbers don't overlap
-            if len(break_inds) > 2:
-                ax_left.xaxis.set_major_locator(MultipleLocator(20))
-            ax_left.xaxis.set_minor_locator(MultipleLocator(5))
+            
+            major, minor = self.__get_xtick_spacing()
+            ax_left.xaxis.set_major_locator(MultipleLocator(major))
+            ax_left.xaxis.set_minor_locator(MultipleLocator(minor))
+
             ax_left.tick_params(axis="y", direction="in", which="both", left=True, right=False)
             ax_left.tick_params(axis="x", direction="in", which="both", top=True, bottom=True)
+
+            if ax_num == 0:
+                # Add label for years to the upper axis for the left-most chunk
+                left_xlims = xlim_tuple[0]
+                add_ymd_label(self.toi.bjd_ref, fig, ax_left, left_xlims, 'left')
 
             # Middle
             for j in range(1, len(bax.axs) - 1):
                 ax_mid = bax.axs[j]
                 ax_mid.tick_params(axis="y", which="both", left=False, right=False)
-                ax_mid.xaxis.set_major_locator(MultipleLocator(10))
-                # If there are more than 3 chunks, make the x-axis ticklabels spacing larger so that the numbers don't overlap
-                if len(break_inds) > 2:
-                    ax_mid.xaxis.set_major_locator(MultipleLocator(20))
-                ax_mid.xaxis.set_minor_locator(MultipleLocator(5))
+                
+                ax_mid.xaxis.set_major_locator(MultipleLocator(major))
+                ax_mid.xaxis.set_minor_locator(MultipleLocator(minor))
+
                 ax_mid.tick_params(axis="x", direction="in", which="both", top=True, bottom=True)
             
             # Right-most
             ax_right = bax.axs[-1]
-            ax_right.xaxis.set_major_locator(MultipleLocator(10))
-            # If there are more than 3 chunks, make the x-axis ticklabels spacing larger so that the numbers don't overlap
-            if len(break_inds) > 2:
-                ax_right.xaxis.set_major_locator(MultipleLocator(20))
-            ax_right.xaxis.set_minor_locator(MultipleLocator(5))
+
+            ax_right.xaxis.set_major_locator(MultipleLocator(major))
+            ax_right.xaxis.set_minor_locator(MultipleLocator(minor))
+
             ax_right.tick_params(axis="x", direction="in", which="both", top=True, bottom=True)
             ax_right.tick_params(axis="y", direction="in", which="both", left=False, right=True)
+
+            if ax_num == 0:
+                # Add label for years to the upper axis for the right-most chunk
+                right_xlims = xlim_tuple[-1]
+                add_ymd_label(self.toi.bjd_ref, fig, ax_right, right_xlims, 'right')
 
         ################################################################################################
         ############################ PHASE-FOLDED TRANSIT AND RESIDUALS ################################
@@ -407,8 +467,9 @@ class ThreePanelPhotPlot:
         # Top panel housekeeping
         ax1.set_xticklabels([])
         ax1.set_ylabel("Relative flux [ppt]", fontsize=14, labelpad=self.ylabelpad)
-        ax1.yaxis.set_major_locator(MultipleLocator(2))
-        ax1.yaxis.set_minor_locator(MultipleLocator(1))
+        major, minor = self.__get_ytick_spacing(np.max(self.y) - np.min(self.y))
+        ax1.yaxis.set_major_locator(MultipleLocator(major))
+        ax1.yaxis.set_minor_locator(MultipleLocator(minor))
 
         ################################################################################################
         ################################################################################################
@@ -425,7 +486,9 @@ class ThreePanelPhotPlot:
         # Plot housekeeping
         ax2.set_xticklabels([])
         ax2.set_ylabel("Relative flux [ppt]", fontsize=14, labelpad=self.ylabelpad)
-        ax2.yaxis.set_major_locator(MultipleLocator(1))
+        major, minor = self.__get_ytick_spacing(np.max(self.y - gp_mod) - np.min(self.y - gp_mod))
+        ax2.yaxis.set_major_locator(MultipleLocator(major))
+        ax2.yaxis.set_minor_locator(MultipleLocator(minor))
 
         ################################################################################################
         ################################################################################################
@@ -444,7 +507,8 @@ class ThreePanelPhotPlot:
         # Plot housekeeping
         ax3.set_ylabel("Residuals", fontsize=14, labelpad=self.ylabelpad)
         ax3.set_xlabel(f"Time [BJD - {self.toi.bjd_ref:.1f}]", fontsize=14)
-        ax3.yaxis.set_major_locator(MultipleLocator(2))
+        major, minor = self.__get_residuals_ytick_spacing(np.max(residuals) - np.min(residuals))
+        ax3.yaxis.set_major_locator(MultipleLocator(major))
         bottom = -1 * np.max(ax3.get_ylim())
         ax3.set_ylim(bottom=bottom)
 
@@ -458,9 +522,10 @@ class ThreePanelPhotPlot:
         fig.align_ylabels()
 
         # Make ticks go inward and set multiple locator for x-axis
+        major, minor = self.__get_xtick_spacing()
         for ax in [ax1, ax2, ax3]:
-            ax.xaxis.set_major_locator(MultipleLocator(5))
-            ax.xaxis.set_minor_locator(MultipleLocator(2.5))
+            ax.xaxis.set_major_locator(MultipleLocator(major))
+            ax.xaxis.set_minor_locator(MultipleLocator(minor))
             ax.tick_params(axis='y', direction='in', which='both', left=True, right=True)
             ax.tick_params(axis='x', direction='in', which='both', top=True, bottom=True)
         
@@ -568,21 +633,23 @@ class ThreePanelPhotPlot:
 
             ax0.set_xticklabels([])
             ax1.set_xlabel("Time since transit [hours]", fontsize=14)
-            ax0.yaxis.set_major_locator(MultipleLocator(1))
-            ax0.yaxis.set_minor_locator(MultipleLocator(0.5))
-            ax1.yaxis.set_major_locator(MultipleLocator(2))
+            major, minor = self.__get_ytick_spacing(np.max(self.y - gp_mod) - np.min(self.y - gp_mod))
+            ax0.yaxis.set_major_locator(MultipleLocator(major))
+            ax0.yaxis.set_minor_locator(MultipleLocator(minor))
+            # Residuals
+            major, minor = self.__get_residuals_ytick_spacing(np.max(self.y - gp_mod) - np.min(self.y - gp_mod))
+            ax1.yaxis.set_major_locator(MultipleLocator(major))
 
             if i == 0:
                 ax0.set_ylabel("Relative flux [ppt]", fontsize=14)
                 ax1.set_ylabel("Residuals", fontsize=14)
             
             ax0.set_xlim([-xlim, xlim])
-            ax0.set_ylim([-3, 3])
+            ax1.set_xlim([-xlim, xlim])
             data_uncert = np.sqrt(np.exp(2 * self.toi.map_soln['log_sigma_phot']) + np.median(self.yerr)**2)
             if self.rms_yscale_phase_folded_panels:
                 ax0.set_ylim([-self.rms_yscale_multiplier * data_uncert, self.rms_yscale_multiplier * data_uncert])
-            ax1.set_xlim([-xlim, xlim])
-            ax1.set_ylim([-3, 3])
+                ax1.set_ylim([-self.rms_yscale_multiplier * data_uncert, self.rms_yscale_multiplier * data_uncert])
 
             ax0.errorbar(-xlim + xlim*0.1, self.data_uncert_label_rms_yscale_multiplier * data_uncert, yerr=data_uncert, 
                             fmt='none', color='k', elinewidth=2, capsize=4)
@@ -597,39 +664,32 @@ class ThreePanelPhotPlot:
                     per_str = f"$P =$ {per_med:.2f} $\pm$ {per_err:.2e} d"
                 else:
                     per_str = f"$P =$ {per_med:.1f} $\pm$ {per_err:.1f} d"
-                text_per = ax0.text(0.05, 0.9, per_str, ha='left', va='top', transform=ax0.transAxes)
-                text_per.set_bbox(dict(facecolor='white', alpha=0.5, edgecolor='none'))
-                
-                ror_med = np.median(chains[f"ror_{planet.pl_letter}"].values) * 100 # Note: This will break if self.df_summary is not None but you didn't ask to plot with random draws so the chains aren't loaded
-                ror_err = np.std(chains[f"ror_{planet.pl_letter}"].values) * 100
+                ror_med = self.df_summary.loc[f'ror_{planet.pl_letter}', 'median'] * 100
+                ror_err = self.df_summary.loc[f'ror_{planet.pl_letter}', 'std'] * 100
                 ror_str = f"$R_\mathrm{{p}}/R_* = {ror_med:.2f} \pm {ror_err:.2f}$ $\%$"
+                text_per_and_ror = ax0.text(0.05, 0.95, per_str + '\n' + ror_str, ha='left', va='top', transform=ax0.transAxes, fontsize=self.param_fontsize)
+                text_per_and_ror.set_bbox(dict(facecolor='white', alpha=0.5, edgecolor='none'))
 
                 rp_med = self.df_summary.loc[f'rp_{planet.pl_letter}', 'median']
                 rp_err = self.df_summary.loc[f'rp_{planet.pl_letter}', 'std']
                 rp_str = f"$R_\mathrm{{p}} = {rp_med:.2f} \pm {rp_err:.2f}$ $R_\oplus$"
-                text_rp_and_ror = ax0.text(0.95, 0.9, ror_str + '\n' + rp_str, ha='right', va='top', transform=ax0.transAxes)
-                text_rp_and_ror.set_bbox(dict(facecolor='white', alpha=0.5, edgecolor='none'))
-                
                 b_med = self.df_summary.loc[f'b_{planet.pl_letter}', 'median']
                 b_err = self.df_summary.loc[f'b_{planet.pl_letter}', 'std']
                 b_str = f"$b = {b_med:.2f} \pm {b_err:.2f}$"
-                text_b = ax0.text(0.95, 0.1, b_str, ha='right', va='bottom', transform=ax0.transAxes)
-                text_b.set_bbox(dict(facecolor='white', alpha=0.5, edgecolor='none'))
+                text_b_and_rp = ax0.text(0.95, 0.05, b_str + '\n' + rp_str, ha='right', va='bottom', transform=ax0.transAxes, fontsize=self.param_fontsize)
+                text_b_and_rp.set_bbox(dict(facecolor='white', alpha=0.5, edgecolor='none'))
             else:
                 # Annotate with MAP solution values for Period and radius and rp/rstar and impact parameter.
                 per_str = f"$P =$ {planet.per:.2f} d"
-                text_per = ax0.text(0.05, 0.9, per_str, ha='left', va='top', transform=ax0.transAxes)
-                text_per.set_bbox(dict(facecolor='white', alpha=0.5, edgecolor='none'))
-                
                 ror_str = f"$R_\mathrm{{p}}/R_* = {np.sqrt(planet.depth * 1e-3) * 100:.2f}$ $\%$"
+                text_per_and_ror = ax0.text(0.05, 0.95, per_str + '\n' + ror_str, ha='left', va='top', transform=ax0.transAxes, fontsize=self.param_fontsize)
+                text_per_and_ror.set_bbox(dict(facecolor='white', alpha=0.5, edgecolor='none'))
+                
                 rp_map = (units.Rsun.to(units.Rearth, np.sqrt(planet.depth * 1e-3) * self.toi.star.rstar))
                 rp_str = f"$R_\mathrm{{p}} = {rp_map:.2f}$ $R_\oplus$"
-                text_rp_and_ror = ax0.text(0.95, 0.9, ror_str + '\n' + rp_str, ha='right', va='top', transform=ax0.transAxes)
-                text_rp_and_ror.set_bbox(dict(facecolor='white', alpha=0.5, edgecolor='none'))
-
                 b_str = f"$b =$ {planet.b:.2f}"
-                text_b = ax0.text(0.95, 0.1, b_str, ha='right', va='bottom', transform=ax0.transAxes)
-                text_b.set_bbox(dict(facecolor='white', alpha=0.5, edgecolor='none'))
+                text_b_and_rp = ax0.text(0.95, 0.05, b_str + '\n' + rp_str, ha='right', va='bottom', transform=ax0.transAxes, fontsize=self.param_fontsize)
+                text_b_and_rp.set_bbox(dict(facecolor='white', alpha=0.5, edgecolor='none'))
         
         # Make the y-axes range the same for all of the phase-folded transit plots
         for axes in [phase_folded_axes, phase_folded_resid_axes]:
