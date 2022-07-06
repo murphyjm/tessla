@@ -167,3 +167,17 @@ class Star:
         self.logg_err = logg_err
         self.logg_prov = logg_prov
     
+    def inflate_star_mass_and_rad_errs(self):
+        '''
+        Following the suggestion in Tayar 2022, add additional systematic errors (5% error in mass, 4% error in radius) in quadrature with the errors output from isoclassify.
+        '''
+        self.mstar_err = np.sqrt((0.05 * self.mstar)**2 + self.mstar_err**2)
+        self.rstar_err = np.sqrt((0.04 * self.rstar)**2 + self.rstar_err**2)
+        
+        # Translate this to an error on the stellar density
+        mstar_chain = np.random.normal(self.mstar, self.mstar_err, 1000)
+        rstar_chain = np.random.normal(self.rstar, self.rstar_err, 1000)
+        rhostar_chain = get_density(mstar_chain, rstar_chain, 'solMass', 'solRad', 'g', 'cm')
+        rhostar = np.median(rhostar_chain)
+        rhostar_err = np.median(np.abs(np.quantile(rhostar_chain, [0.16, 0.84]) - rhostar))
+        self.rhostar_err = rhostar_err

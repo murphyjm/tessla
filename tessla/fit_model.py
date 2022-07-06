@@ -1,23 +1,21 @@
 '''
-Fit the TESS photometry for a specific system.
+Fit the TESS photometry for a specific system. Optionally add in an RV data set and build a joint model.
 
 This script uses a lot of default and/or pre-filled optional arguments. 
 If something in the results looks funky, refer to the example notebooks for a more by-hand approach.
 '''
 # tessla imports
 from tessla.tesssystem import TessSystem
-from tessla.planet import Planet
-from tessla.star import Star
 from tessla.data_utils import find_breaks, quick_look_summary
-from tessla.plotting_utils import sg_smoothing_plot, quick_transit_plot, plot_corners
+from tessla.plotting_utils import sg_smoothing_plot, quick_transit_plot, plot_individual_transits, phase_plot, plot_phot_only_corners, plot_joint_corners
 from tessla.threepanelphotplot import ThreePanelPhotPlot
+from tessla.rvplot import RVPlot
 
 # Script imports
 import os
 import pickle
 import argparse
 
-import numpy as np
 import pandas as pd
 
 def parse_args():
@@ -32,10 +30,16 @@ def parse_args():
     parser.add_argument("toi", type=int, help="TOI number.")
     parser.add_argument("star_obj_fname", type=str, help="Path to the .pkl file containing the tessla.star.Star object.")
     parser.add_argument("--planet_objs_dir", type=str, default=None, help="If there are transiting planets that are not TOIs in the system or the TOIs in the catalog have incorrect properties, this is the path to the directory with the .pkl files that contain the tessla.planet.Planet objects.")
+    parser.add_argument("--output_dir_suffix", type=str, default='', help="Suffix for output directory. Default is empty string. E.g. '_test_01' for TOI-1824_test_01.")
     
+    # Joint photometry-RV model?
+    parser.add_argument("--rv_data_path", type=str, default=None, help="Path to RV data set to include in modeling.")
+    parser.add_argument("--rv_trend", action="store_true", help="Include a linear trend in the background RV model.")
+
     # Data
     parser.add_argument("--flux_origin", type=str, default="sap_flux", help="Either pdcsap_flux or sap_flux. Default is SAP.")
-
+    parser.add_argument("--use_long_cadence_data", action="store_true", help="WARNING: Don't use this feature quite yet save for testing. If included, it's okay to use 30-minute cadence data if no other data is available for that sector.")
+    
     # Model hyperparameters
     parser.add_argument("--phot_gp_kernel", type=str, default="exp_decay", help="Kernel to use for the photometry flattening.")
 
@@ -54,44 +58,28 @@ def parse_args():
     parser.add_argument("--quiet", action="store_true", help="Disable print statements.")
     return parser.parse_args()
 
-def fix_tois(toi, args):
-    '''
-    Fix incorrect entries in the TOI catalog or manually add planets that don't appear there.
-    '''
-    planet_dir = args.planet_objs_dir
-    assert os.path.isdir(planet_dir), f"{planet_dir} is not a valid path."
-    
-    if not args.quiet:
-        print(f"Loading {len(os.listdir(planet_dir))} non-TOI transiting planet(s) from {planet_dir}")
-    for fname in os.listdir(planet_dir):
-        f = os.path.join(planet_dir, fname)
-        with open(f, 'rb') as planet_fname:
-            # Load the planet from the pickled file.
-            planet = pickle.load(planet_fname)
-            # If we're replacing a planet remove that planet first.
-            if planet.pl_letter in toi.transiting_planets.keys():
-                toi.remove_transiting_planet(planet.pl_letter)
-            # Add the planet.
-            toi.add_transiting_planet(planet)
-    
-    # Reset the transit mask and create the new one with the correct transiting planets.
-    toi.reset_transit_mask()
-    toi.create_transit_mask()
-
 def main():
     args = parse_args()
 
     assert os.path.isfile(args.star_obj_fname), f"Invalid Star object file name: {args.star_obj_fname}"
 
     # Create the TessSystem object, download the photometry, and add TOIs that appear in the TOI catalog.
-    toi = TessSystem(args.name, tic=args.tic, toi=args.toi, phot_gp_kernel=args.phot_gp_kernel, plotting=(not args.no_plotting), flux_origin=args.flux_origin)
+    toi = TessSystem(args.name, 
+                    tic=args.tic, 
+                    toi=args.toi, 
+                    phot_gp_kernel=args.phot_gp_kernel,
+                    rv_data_path=args.rv_data_path,
+                    plotting=(not args.no_plotting), 
+                    flux_origin=args.flux_origin, 
+                    use_long_cadence_data=args.use_long_cadence_data,
+                    output_dir_suffix=args.output_dir_suffix)
     toi.get_tess_phot()
     toi.search_for_tois()
     toi.add_tois_from_catalog()
     
     # If there are TOIs that are not in the catalog or the TOIs in the catalog have incorrect properties, fix them manually.
     if args.planet_objs_dir is not None:
-        fix_tois(toi, args)
+        toi.fix_planets(args.planet_objs_dir)
 
     # Initial outlier removal with a SG filter
     toi.initial_outlier_removal(positive_outliers_only=False, max_iters=10, sigma_thresh=3, time_window=1)
@@ -106,12 +94,44 @@ def main():
     # Add the star properties
     with open(args.star_obj_fname, 'rb') as star_fname:
         star = pickle.load(star_fname)
+        star.inflate_star_mass_and_rad_errs() # Inflate the error bars on stellar mass and radius according to Tayar et al. 2022
         toi.add_star_props(star)
+
+    # Before MAP fitting, update t0s to near middle of phot data to reduce covariance between P and t0
+    toi.update_t0s_to_near_data_middle()
     
     # Run the MAP fitting loop
     model = toi.flatten_light_curve()
+
+    # If there's an RV dataset, make a joint model of the photometry and RVs.
+    if args.rv_data_path is not None:
+        model = toi.fit_phot_and_rvs(rv_trend=args.rv_trend)
     quick_transit_plot(toi)
     
+    # Make plots of the individual transits
+    plot_individual_transits(toi)
+
+    # Create a phase-folded plot of the light curve at the presumed stellar rotation period
+    phase_plot(os.path.join(toi.model_dir, 'plotting'), 
+                f"{toi.name} {toi.flux_origin.replace('_', ' ')}", 
+                'Relative flux [ppt]', 
+                toi.cleaned_time.values, toi.cleaned_flux.values, toi.rot_per, 0)
+
+    # Plot the MAP solutions for inspection
+    if toi.plotting:
+        use_broken_x_axis = len(find_breaks(toi.cleaned_time.values)) > 0 # If breaks in the x-axis, then use the broken x-axis plot
+        phot_plot = ThreePanelPhotPlot(toi,
+                                    use_broken_x_axis=use_broken_x_axis, 
+                                    plot_random_transit_draws=False)
+        phot_plot.plot(save_fname=f"{toi.name.replace(' ', '_')}_phot_model" + args.plot_fname_suffix, overwrite=args.overwrite_plot)
+        # Create a LS periodogram of the residuals about the full model. This should hopefully be white noise
+        phot_plot.residuals_periodogram(overwrite=args.overwrite_plot)
+
+        if toi.is_joint_model:
+            rv_plot = RVPlot(toi, 
+                             plot_random_orbit_draws=False)
+            rv_plot.plot(save_fname=f"{toi.name.replace(' ', '_')}_rv_model" + args.plot_fname_suffix, overwrite=args.overwrite_plot)
+        
     # Run the sampling
     flat_samps = None
     if not args.no_sampling:
@@ -120,29 +140,36 @@ def main():
                                     tune=args.ntune, 
                                     draws=args.draws, 
                                     chains=args.nchains)
-
-        # Add eccentricity and omega to the chains
-        toi.add_ecc_and_omega_to_chains(flat_samps)
+        
+        if not toi.is_joint_model:
+            # Add eccentricity and omega to the chains
+            toi.add_ecc_and_omega_to_chains(flat_samps)
         toi.add_derived_quantities_to_chains()
 
-    if toi.plotting:
         # Plot the results
         use_broken_x_axis = len(find_breaks(toi.cleaned_time.values)) > 0 # If breaks in the x-axis, then use the broken x-axis plot
         phot_plot = ThreePanelPhotPlot(toi,
                                     use_broken_x_axis=use_broken_x_axis, 
-                                    plot_random_transit_draws=(not args.no_sampling),
+                                    plot_random_transit_draws=True,
                                     num_random_transit_draws=args.num_transit_draws)
-        phot_plot.plot(save_fname=f"{toi.name.replace(' ', '_')}_phot_model" + args.plot_fname_suffix, overwrite=args.overwrite_plot)
+        phot_plot.plot(save_fname=f"{toi.name.replace(' ', '_')}_phot_model_w_draws" + args.plot_fname_suffix, overwrite=args.overwrite_plot)
 
-    # If the sampling was run...
-    if flat_samps is not None:
-
-        # Read this into data for derived corner plots and output summary table.
+        if toi.is_joint_model:
+            # Make RV plot
+            rv_plot = RVPlot(toi, 
+                             plot_random_orbit_draws=True, 
+                             num_random_orbit_draws=(args.num_transit_draws))
+            rv_plot.plot(save_fname=f"{toi.name.replace(' ', '_')}_rv_model_w_draws" + args.plot_fname_suffix, overwrite=args.overwrite_plot)
+        
+        # Read this data for derived corner plots and output summary table.
         df_derived_chains = pd.read_csv(toi.chains_derived_path)
 
         # Make the corner plots
         if toi.plotting:
-            plot_corners(toi, df_derived_chains, overwrite=args.overwrite_plot)
+            if not toi.is_joint_model:
+                plot_phot_only_corners(toi, df_derived_chains, overwrite=args.overwrite_plot)
+            else:
+                plot_joint_corners(toi, df_derived_chains, overwrite=args.overwrite_plot)
         
         # Save an output table with derived physical parameters in useful units for quickly checking on the sampling results.
         quick_look_summary(toi, df_derived_chains)
