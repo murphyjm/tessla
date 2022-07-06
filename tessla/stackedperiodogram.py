@@ -200,14 +200,16 @@ class StackedPeriodogram:
         ax0.set_xscale('log')
         ax0.xaxis.set_major_formatter(FormatStrFormatter('%d'))
         ax0.xaxis.set_minor_formatter(FormatStrFormatter('%d'))
-        ax0.tick_params(axis='x', which='minor', labelsize=12)
         for i,label in enumerate(ax0.xaxis.get_ticklabels(minor=True)):
             if i%2:
                 label.set_visible(False)
+        
+        ax0.tick_params(axis='x', which='major', labelsize=14)
+        ax0.tick_params(axis='x', which='minor', labelsize=12)
 
         fig.align_ylabels()
         plt.subplots_adjust(hspace=0)
-        
+
         # Save the figure!
         fig.savefig(save_fname, facecolor='white', bbox_inches='tight', dpi=self.save_dpi)
         print(f"{self.title} stacked periodogram plot saved to {save_fname}")
