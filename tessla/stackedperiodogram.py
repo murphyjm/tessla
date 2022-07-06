@@ -208,7 +208,7 @@ class StackedPeriodogram:
         ax0.tick_params(axis='x', which='minor', labelsize=12)
 
         fig.align_ylabels()
-        plt.subplots_adjust(hspace=0)
+        plt.subplots_adjust(hspace=0.2)
 
         # Save the figure!
         fig.savefig(save_fname, facecolor='white', bbox_inches='tight', dpi=self.save_dpi)
