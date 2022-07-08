@@ -236,18 +236,18 @@ def plot_individual_transits(toi, xlim=0.3):
     if toi.verbose:
         print(f"Individual transit plots saved to {out_dir}/individual_transits/")
 
-def star_noise_corner(toi, df_derived_chains, overwrite=False):
+def plot_star_noise_corner(toi, df_derived_chains, overwrite=False):
     if toi.phot_gp_kernel == "exp_decay":
     
         # Corner plot for star properties and noise parameters
         star_labels = ['$\mu$ [ppt]', '$u_1$', '$u_2$']
-        noise_labels = ['$\sigma_\mathrm{jitter}$ [ppt]', '$\sigma_\mathrm{GP,\:phot}$ [PPT]', r'$\rho_\mathrm{GP,\:phot}$ [d]', r'$\tau_\mathrm{GP,\:phot}$ [d]']
+        noise_labels = ['$\sigma_\mathrm{phot}$ [ppt]', '$\eta_\mathrm{GP,\:phot}$ [PPT]', r'$\rho_\mathrm{GP,\:phot}$ [d]', r'$\tau_\mathrm{GP,\:phot}$ [d]']
         star_noise_chains = np.vstack([
             df_derived_chains['mean_flux'], 
             df_derived_chains['u_0'],
             df_derived_chains['u_1'],
             np.exp(df_derived_chains['log_sigma_phot']),
-            np.exp(df_derived_chains['log_sigma_phot_gp']),
+            np.exp(df_derived_chains['log_sigma_phot_gp']), # Make this "eta" to differentiate the GP amplitudes from jitter terms.
             np.exp(df_derived_chains['log_rho_phot_gp']),
             np.exp(df_derived_chains['log_tau_phot_gp'])
         ]).T
@@ -257,43 +257,95 @@ def star_noise_corner(toi, df_derived_chains, overwrite=False):
         # TODO: Fix? Or just leave it like this and people can make corner plots on their own if they use a different kernel.
         print("NOTE: Right now automated corner plot generation only works if phot_gp_kernel == 'exp_decay'")
 
-def svalue_gp_corner(toi, df_derived_chains, overwrite=False):
+def plot_svalue_gp_corner(toi, df_derived_chains, overwrite=False):
     if toi.svalue_gp_kernel == "exp_decay":
     
         # Corner plot for Svalue GP hyperparameters
         # GP amplitudes for each RV instrument
-        noise_labels = [f'$\sigma_{{\mathrm{{GP,\:RV,\:}}{tel}}}$ [m s$^{{-1}}$]' for tel in toi.rv_inst_names]
+        noise_labels = [f'$\eta_{{\mathrm{{GP,\:RV,\:}}{tel}}}$ [m s$^{{-1}}$]' for tel in toi.rv_inst_names]
         chains = [np.exp(df_derived_chains[f'log_sigma_rv_gp_{tel}']) for tel in toi.rv_inst_names]
         
         # GP amplitudes and jitter for each Svalue instrument
-        noise_labels += [f'$\sigma_{{\mathrm{{GP,\:S_{{HK}},\:}}{tel}}}$ [dex]' for tel in toi.svalue_inst_names]
+        noise_labels += [f'$\eta_{{\mathrm{{GP,\:S_{{HK}},\:}}{tel}}}$ [dex]' for tel in toi.svalue_inst_names]
         chains += [np.exp(df_derived_chains[f'log_sigma_svalue_gp_{tel}']) for tel in toi.svalue_inst_names]
-        noise_labels += [f'Jitter$_{{S_\mathrm{{HK}},\:{tel}}}$ [dex]' for tel in toi.svalue_inst_names]
+        noise_labels += [f'$\sigma_{{S_\mathrm{{HK}},\:{tel}}}$ [dex]' for tel in toi.svalue_inst_names]
         chains += [np.exp(df_derived_chains[f'log_jitter_svalue_gp_{tel}']) for tel in toi.svalue_inst_names]
         
         # Global GP hyperparameters
         noise_labels += [
-            '$\mu_{S_\mathrm{HK}}$ [dex]',  
-            r'$\rho_{S_\mathrm{HK}}$ [d]', 
-            r'$\tau_{S_\mathrm{HK}}$ [d]'
+            '$\mu_{S_\mathrm{HK}}$ [dex]',
         ]
         chains += [
             df_derived_chains['gp_svalue_mean'],
+        ]
+        # Kernel-specific hyperparameters
+        noise_labels += [  
+            r'$\rho_{S_\mathrm{HK}}$ [d]',
+            r'$\tau_{S_\mathrm{HK}}$ [d]'  
+        ]
+        chains += [
             np.exp(df_derived_chains['log_rho_svalue_gp']),
             np.exp(df_derived_chains['log_tau_svalue_gp'])
         ]
+
         svalue_gp_chains = np.vstack(chains).T
-        star_noise_corner = TesslaCornerPlot(toi, noise_labels, svalue_gp_chains, toi.name + " RV-$S_\mathrm{HK}$ GP hyperparameters")
-        star_noise_corner.plot(overwrite=overwrite)
+        svalue_gp_corner = TesslaCornerPlot(toi, noise_labels, svalue_gp_chains, toi.name + " RV-$S_\mathrm{HK}$ GP hyperparameters")
+        svalue_gp_corner.plot(save_fname=f"{toi.name.replace(' ', '_')}_rv_svalue_gp_corner_plot", overwrite=overwrite)
+    
+    elif toi.svalue_gp_kernel == 'rotation':
+
+        # Corner plot for Svalue GP hyperparameters
+        # GP amplitudes for each RV instrument
+        noise_labels = [f'$\eta_{{\mathrm{{GP,\:RV,\:}}{tel}}}$ [m s$^{{-1}}$]' for tel in toi.rv_inst_names]
+        chains = [df_derived_chains[f'sigma_gp_rv_{tel}'] for tel in toi.rv_inst_names]
+        
+        # GP amplitudes and jitter for each Svalue instrument
+        # noise_labels += [f'$\eta_{{\mathrm{{GP,\:S_{{HK}},\:}}{tel}}}$ [dex]' for tel in toi.svalue_inst_names]
+        noise_labels += ['$\eta_{\mathrm{GP},\:S_\mathrm{HK}}$ [dex]']
+        chains += [df_derived_chains['sigma_gp_svalue']]
+        noise_labels += ['$\sigma_{S_\mathrm{HK}}$ [dex]']
+        chains += [df_derived_chains['log_jitter_svalue_gp_HIRES']]
+        
+        # Global GP hyperparameters
+        noise_labels += [
+            '$\mu_{S_\mathrm{HK}}$ [dex]',
+        ]
+        chains += [
+            df_derived_chains['gp_svalue_mean'],
+        ]
+        # Kernel-specific hyperparameters
+        noise_labels += [  
+            r'$P_\mathrm{rot}$ [d]',
+            r'$Q_{0,\:S_\mathrm{HK}}$',
+            r'$dQ_{S_\mathrm{HK}}$',
+            r'$f_{S_\mathrm{HK}}$',
+            r'$Q_{0,\:\mathrm{RV}}$',
+            r'$dQ_\mathrm{RV}$',
+            r'$f_\mathrm{RV}$',
+        ]
+        chains += [
+            df_derived_chains['prot_rv_gp'],
+            np.exp(df_derived_chains['log_Q0_gp_svalue']),
+            np.exp(df_derived_chains['log_dQ_gp_svalue']),
+            df_derived_chains['f_gp_svalue'],
+            np.exp(df_derived_chains['log_Q0_gp_rv']),
+            np.exp(df_derived_chains['log_dQ_gp_rv']),
+            df_derived_chains['f_gp_rv'],
+        ]
+        #import pdb; pdb.set_trace()
+        svalue_gp_chains = np.vstack(chains).T
+        svalue_gp_corner = TesslaCornerPlot(toi, noise_labels, svalue_gp_chains, toi.name + " RV-$S_\mathrm{HK}$ GP hyperparameters")
+        svalue_gp_corner.plot(save_fname=f"{toi.name.replace(' ', '_')}_rv_svalue_gp_corner_plot", overwrite=overwrite)
+
     else:
         # TODO: Fix? Or just leave it like this and people can make corner plots on their own if they use a different kernel.
-        print("NOTE: Right now automated corner plot generation only works if svalue_gp_kernel == 'exp_decay'")
+        print("NOTE: Right now automated corner plot generation only works if svalue_gp_kernel == 'exp_decay' or  svalue_gp_kernel == 'rotation'.")
 
 def plot_phot_only_corners(toi, df_derived_chains, overwrite=False):
     '''
     Make the corner plots!
     '''
-    star_noise_corner(toi, df_derived_chains, overwrite=overwrite)
+    plot_star_noise_corner(toi, df_derived_chains, overwrite=overwrite)
 
     # Corner plot for each planet's transit parameters
     for i,letter in enumerate(toi.transiting_planets.keys()):
@@ -332,10 +384,10 @@ def plot_joint_corners(toi, df_derived_chains, overwrite=False):
     '''
     Make the corner plots!
     '''
-    star_noise_corner(toi, df_derived_chains, overwrite=overwrite)
+    plot_star_noise_corner(toi, df_derived_chains, overwrite=overwrite)
     
     if toi.include_svalue_gp:
-        svalue_gp_corner(toi, df_derived_chains, overwrite=overwrite)
+        plot_svalue_gp_corner(toi, df_derived_chains, overwrite=overwrite)
 
     # Corner plot for instrument parameters
     rv_trend_labels_dict = {
