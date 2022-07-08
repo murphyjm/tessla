@@ -173,7 +173,6 @@ class StackedPeriodogram:
                                             1, 
                                             1e-6)
         ax[i].plot(periods, power, color='k')
-        # ax[i].set_ylim([0, 0.25])
         text = ax[i].text(xtext, ytext, 'RV Window Function', transform=ax[i].transAxes, ha='right')
         text.set_bbox(dict(facecolor='white', alpha=0.8, edgecolor='none'))
         self.min_period = true_min_period
