@@ -592,11 +592,11 @@ class ThreePanelPhotPlot:
                     # Orbit
                     period = chains[f"period_{planet.pl_letter}"].values[ind]
                     t0 = chains[f"t0_{planet.pl_letter}"].values[ind]
-                    ror = chains[f"ror_{planet.pl_letter}"].values[ind]
+                    r_pl = chains[f"r_pl_{planet.pl_letter}"].values[ind]
                     b = chains[f"b_{planet.pl_letter}"].values[ind]
                     if not self.toi.is_joint_model:
                         dur = chains[f"dur_{planet.pl_letter}"].values[ind]
-                        orbit = xo.orbits.KeplerianOrbit(period=period, t0=t0, b=b, ror=ror, duration=dur)
+                        orbit = xo.orbits.KeplerianOrbit(period=period, t0=t0, b=b, duration=dur, r_star=self.toi.star.rstar)
                     else:
                         # If a joint model, parameterized in terms of stellar density and ecc and omega directly
                         rstar = chains["rstar"].values[ind]
@@ -608,7 +608,7 @@ class ThreePanelPhotPlot:
                     # Light curves
                     N_EVAL_POINTS = 500
                     phase_lc = np.linspace(-xlim, xlim, N_EVAL_POINTS)
-                    lc_phase_pred = 1e3 * xo_star.get_light_curve(orbit=orbit, r=ror, t=t0 + phase_lc, texp=self.toi.cadence/60/60/24)
+                    lc_phase_pred = 1e3 * xo_star.get_light_curve(orbit=orbit, r=r_pl, t=t0 + phase_lc, texp=self.toi.cadence/60/60/24)
                     lc_phase_pred = lc_phase_pred.eval()
 
                     # Plot the random draw. Wasteful because it only uses one of the planet light curves and does this again for the next planet

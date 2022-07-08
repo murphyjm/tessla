@@ -69,6 +69,7 @@ class TessSystem:
                 rv_bin_size=0.33, # Bin RVs collected in the same night (within 8 hours)
                 include_svalue_gp=False, # If true, add a GP simultaneously fit to the RVs and HIRES S-values
                 svalue_gp_kernel='rotation', # Which kernel to use for the GP
+                force_circular_orbits_for_transiting_planets=False,
                 # General stuff
                 verbose=True, # Print out messages
                 plotting=True, # Create plots as you go
@@ -99,6 +100,7 @@ class TessSystem:
         # Transiting and non-transiting planets
         self.planets = {}
         self.n_planets = len(self.planets)
+        self.force_circular_orbits_for_transiting_planets = force_circular_orbits_for_transiting_planets
 
         self.bjd_ref = bjd_ref
         self.phot_gp_kernel = phot_gp_kernel
@@ -687,6 +689,7 @@ class TessSystem:
             period = pm.Deterministic("period", tt.exp(log_period))
             log_ror = pm.Normal("log_ror", mu=0.5 * np.log(1e-3 * np.array([planet.depth for planet in self.transiting_planets.values()])), sigma=np.log(10), shape=self.n_transiting)
             ror = pm.Deterministic("ror", tt.exp(log_ror))
+            r_pl = pm.Deterministic("r_pl", ror * self.star.rstar)
             b = pm.Uniform("b", 0, 1, shape=self.n_transiting)
             log_dur = pm.Normal("log_dur", mu=np.log([planet.dur for planet in self.transiting_planets.values()]), sigma=np.log(10), shape=self.n_transiting)
             dur = pm.Deterministic("dur", tt.exp(log_dur))
@@ -695,13 +698,13 @@ class TessSystem:
             log_sigma_phot = pm.Normal("log_sigma_phot", mu=np.log(np.std(y.values[mask])), sd=2)
 
             # Orbit model
-            orbit = xo.orbits.KeplerianOrbit(period=period, t0=t0, b=b, ror=ror, duration=dur)
+            orbit = xo.orbits.KeplerianOrbit(period=period, t0=t0, b=b, duration=dur)
 
             # Track the implied stellar density
             pm.Deterministic("rho_circ", orbit.rho_star)
 
             # Light curves
-            light_curves = xo_star.get_light_curve(orbit=orbit, r=ror, t=x.values[mask], texp=self.cadence/60/60/24) * 1e3 # Converts self.cadence from seconds to days.
+            light_curves = xo_star.get_light_curve(orbit=orbit, r=r_pl, t=x.values[mask], texp=self.cadence/60/60/24) * 1e3 # Converts self.cadence from seconds to days.
             light_curve = tt.sum(light_curves, axis=-1) + mean_flux
             resid = y.values[mask] - light_curve
 
@@ -735,7 +738,7 @@ class TessSystem:
             lc_phase_pred = 1e3 * tt.stack(
                                     [
                                         xo_star.get_light_curve(
-                                            orbit=orbit, r=ror, t=t0[n] + phase_lc, texp=self.cadence/60/60/24)[..., n]
+                                            orbit=orbit, r=r_pl, t=t0[n] + phase_lc, texp=self.cadence/60/60/24)[..., n]
                                             for n in range(self.n_transiting)
                                     ],
                                     axis=-1,
@@ -902,6 +905,7 @@ class TessSystem:
             period = pm.Deterministic("period", tt.exp(log_period))
             log_ror = pm.Normal("log_ror", mu=0.5 * np.log(1e-3 * np.array([planet.depth for planet in self.transiting_planets.values()])), sigma=np.log(10), shape=self.n_transiting)
             ror = pm.Deterministic("ror", tt.exp(log_ror))
+            r_pl = pm.Deterministic("r_pl", ror * rstar)
             b = pm.Uniform("b", 0, 1, shape=self.n_transiting)
             
             # Eccentricity and omega
@@ -921,7 +925,7 @@ class TessSystem:
             orbit = xo.orbits.KeplerianOrbit(r_star=rstar, m_star=mstar, period=period, t0=t0, b=b, ecc=ecc, omega=omega)
 
             # Light curves
-            light_curves = xo_star.get_light_curve(orbit=orbit, r=ror, t=x_phot.values, texp=self.cadence/60/60/24) * 1e3 # Converts self.cadence from seconds to days.
+            light_curves = xo_star.get_light_curve(orbit=orbit, r=r_pl, t=x_phot.values, texp=self.cadence/60/60/24) * 1e3 # Converts self.cadence from seconds to days.
             light_curve = tt.sum(light_curves, axis=-1) + mean_flux
             resid_phot = y_phot.values - light_curve
 
@@ -1081,7 +1085,7 @@ class TessSystem:
             lc_phase_pred = 1e3 * tt.stack(
                                     [
                                         xo_star.get_light_curve(
-                                            orbit=orbit, r=ror, t=t0[n] + phase_lc, texp=self.cadence/60/60/24)[..., n]
+                                            orbit=orbit, r=r_pl, t=t0[n] + phase_lc, texp=self.cadence/60/60/24)[..., n]
                                             for n in range(self.n_transiting)
                                     ],
                                     axis=-1,
@@ -1092,9 +1096,15 @@ class TessSystem:
                 start = model.test_point
             # Order of parameters to be optimized is a bit arbitrary
             map_soln = pmx.optimize(start=start, vars=[log_sigma_phot])
+            map_soln = pmx.optimize(start=map_soln, vars=[u])
+            map_soln = pmx.optimize(start=map_soln, vars=[log_ror])
             map_soln = pmx.optimize(start=map_soln, vars=[log_K])
+            map_soln = pmx.optimize(start=map_soln, vars=[b])
+            if not self.force_circular_orbits_for_transiting_planets:
+                map_soln = pmx.optimize(start=map_soln, vars=[ecs])
             if self.n_nontransiting > 0:
                 map_soln = pmx.optimize(start=map_soln, vars=[nontrans_params['log_K']])
+                map_soln = pmx.optimize(start=map_soln, vars=[nontrans_params['ecs']])
             if self.rv_trend:
                 map_soln = pmx.optimize(start=map_soln, vars=[trend_rv])
             map_soln = pmx.optimize(start=map_soln, vars=[gamma_rv])

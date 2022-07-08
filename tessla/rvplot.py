@@ -448,7 +448,7 @@ class RVPlot:
                     else:
                         per_str = f"$P =$ {per_med:.1f} $\pm$ {per_err:.1f} d"
                     if self.toi.force_circular_orbits_for_transiting_planets:
-                        ecc_str = "$e \equiv 0"
+                        ecc_str = "$e \equiv 0$"
                     else:
                         ecc_med = self.df_summary.loc[f'{prefix}ecc_{planet.pl_letter}', 'median']
                         ecc_err = self.df_summary.loc[f'{prefix}ecc_{planet.pl_letter}', 'std']
@@ -477,7 +477,7 @@ class RVPlot:
                 else:
                     per_str = f"$P =$ {planet.per:.2f} d"
                     if self.toi.force_circular_orbits_for_transiting_planets:
-                        ecc_str = "$e \equiv 0"
+                        ecc_str = "$e \equiv 0$"
                     else:
                         ecc_str = f"$e =$ {planet.ecc:.2f}"
                     kamp_str = f"$K =$ {planet.kamp:.2f} m s$^{{-1}}$"
