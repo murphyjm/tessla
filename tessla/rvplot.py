@@ -385,8 +385,12 @@ class RVPlot:
                         t0 = chains[f"{prefix}t0_{planet.pl_letter}"].values[ind]
                         rstar = chains["rstar"].values[ind]
                         mstar = chains["mstar"].values[ind]
-                        ecc = chains[f"{prefix}ecc_{planet.pl_letter}"].values[ind]
-                        omega = chains[f"{prefix}omega_{planet.pl_letter}"].values[ind]
+                        if self.toi.force_circular_orbits_for_transiting_planets:
+                            ecc = None
+                            omega = None
+                        else:
+                            ecc = chains[f"{prefix}ecc_{planet.pl_letter}"].values[ind]
+                            omega = chains[f"{prefix}omega_{planet.pl_letter}"].values[ind]
                         orbit = xo.orbits.KeplerianOrbit(r_star=rstar, m_star=mstar, period=period, t0=t0, ecc=ecc, omega=omega)
 
                         # Get RV for planet
@@ -443,10 +447,12 @@ class RVPlot:
                         per_str = f"$P =$ {per_med:.2f} $\pm$ {per_err:.2e} d"
                     else:
                         per_str = f"$P =$ {per_med:.1f} $\pm$ {per_err:.1f} d"
-
-                    ecc_med = self.df_summary.loc[f'{prefix}ecc_{planet.pl_letter}', 'median']
-                    ecc_err = self.df_summary.loc[f'{prefix}ecc_{planet.pl_letter}', 'std']
-                    ecc_str = f"$e = {ecc_med:.2f} \pm {ecc_err:.2f}$"
+                    if self.toi.force_circular_orbits_for_transiting_planets:
+                        ecc_str = "$e \equiv 0"
+                    else:
+                        ecc_med = self.df_summary.loc[f'{prefix}ecc_{planet.pl_letter}', 'median']
+                        ecc_err = self.df_summary.loc[f'{prefix}ecc_{planet.pl_letter}', 'std']
+                        ecc_str = f"$e = {ecc_med:.2f} \pm {ecc_err:.2f}$"
 
                     kamp_med = self.df_summary.loc[f'{prefix}K_{planet.pl_letter}', 'median']
                     kamp_err = self.df_summary.loc[f'{prefix}K_{planet.pl_letter}', 'std']
@@ -470,7 +476,10 @@ class RVPlot:
                             mp_str = '\n' + f"$M_\mathrm{{p}} \sin i = {mp_map_med:.1f} \pm {mp_map_err:.1f}$ $M_\mathrm{{Jup}}$"
                 else:
                     per_str = f"$P =$ {planet.per:.2f} d"
-                    ecc_str = f"$e =$ {planet.ecc:.2f}"
+                    if self.toi.force_circular_orbits_for_transiting_planets:
+                        ecc_str = "$e \equiv 0"
+                    else:
+                        ecc_str = f"$e =$ {planet.ecc:.2f}"
                     kamp_str = f"$K =$ {planet.kamp:.2f} m s$^{{-1}}$"
                     mp_str = ''
 

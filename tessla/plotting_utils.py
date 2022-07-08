@@ -418,24 +418,41 @@ def plot_joint_corners(toi, df_derived_chains, overwrite=False):
     # Corner plot for the measured parameters
     for letter, planet in toi.planets.items():
         if planet.is_transiting:
-            planet_labels = [
-                '$P$ [d]',
-                '$T_\mathrm{c}$ [BTJD]',
-                '$R_\mathrm{p}/R_*$ [$\%$]',
-                '$b$',
-                '$e$',
-                '$\omega$ [Rad]',
-                '$K$ [m s$^{-1}$]'
-            ]
-            planet_chains = np.vstack([
-                df_derived_chains[f'period_{letter}'],
-                df_derived_chains[f't0_BTJD_{letter}'],
-                df_derived_chains[f'ror_{letter}'] * 100, # Put in units of percent to make the decimals easier to see
-                df_derived_chains[f'b_{letter}'],
-                df_derived_chains[f'ecc_{letter}'],
-                df_derived_chains[f'omega_{letter}'],
-                df_derived_chains[f'K_{letter}']
-            ]).T
+            if toi.force_circular_orbits_for_transiting_planets:
+                planet_labels = [
+                    '$P$ [d]',
+                    '$T_\mathrm{c}$ [BTJD]',
+                    '$R_\mathrm{p}/R_*$ [$\%$]',
+                    '$b$',
+                    '$K$ [m s$^{-1}$]'
+                ]
+                planet_chains = np.vstack([
+                    df_derived_chains[f'period_{letter}'],
+                    df_derived_chains[f't0_BTJD_{letter}'],
+                    df_derived_chains[f'ror_{letter}'] * 100, # Put in units of percent to make the decimals easier to see
+                    df_derived_chains[f'b_{letter}'],
+                    df_derived_chains[f'K_{letter}']
+                ]).T
+            else:
+                planet_labels = [
+                    '$P$ [d]',
+                    '$T_\mathrm{c}$ [BTJD]',
+                    '$R_\mathrm{p}/R_*$ [$\%$]',
+                    '$b$',
+                    '$e$',
+                    '$\omega$ [Rad]',
+                    '$K$ [m s$^{-1}$]'
+                ]
+                planet_chains = np.vstack([
+                    df_derived_chains[f'period_{letter}'],
+                    df_derived_chains[f't0_BTJD_{letter}'],
+                    df_derived_chains[f'ror_{letter}'] * 100, # Put in units of percent to make the decimals easier to see
+                    df_derived_chains[f'b_{letter}'],
+                    df_derived_chains[f'ecc_{letter}'],
+                    df_derived_chains[f'omega_{letter}'],
+                    df_derived_chains[f'K_{letter}']
+                ]).T
+
             planet_corner = TesslaCornerPlot(toi, planet_labels, planet_chains, f"{toi.name} {letter} measured parameters", color=planet.color)
             planet_corner.plot(overwrite=overwrite)
 

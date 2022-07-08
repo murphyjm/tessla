@@ -242,8 +242,12 @@ class TessSystem:
             if self.is_joint_model:
                 try: # Maybe RVs haven't been included yet. i.e. when running flatten_light_curve()
                     planet.kamp = self.map_soln["K"][i]
-                    planet.ecc = self.map_soln["ecc"][i]
-                    planet.omega = self.map_soln["omega"][i]
+                    if self.force_circular_orbits_for_transiting_planets:
+                        planet.ecc = 0
+                        planet.omega = 0
+                    else:
+                        planet.ecc = self.map_soln["ecc"][i]
+                        planet.omega = self.map_soln["omega"][i]
                 except KeyError:
                     continue
             
@@ -901,10 +905,14 @@ class TessSystem:
             b = pm.Uniform("b", 0, 1, shape=self.n_transiting)
             
             # Eccentricity and omega
-            ecs = pmx.UnitDisk("ecs", shape=(2, self.n_transiting), testval=0.01 * np.ones((2, self.n_transiting)))
-            ecc = pm.Deterministic("ecc", tt.sum(ecs**2, axis=0))
-            omega = pm.Deterministic("omega", tt.arctan2(ecs[1], ecs[0]))
-            xo.eccentricity.vaneylen19("ecc_prior", multi=(self.n_planets > 1), shape=self.n_transiting, fixed=True, observed=ecc)
+            if self.force_circular_orbits_for_transiting_planets:
+                ecc = None
+                omega = None
+            else:
+                ecs = pmx.UnitDisk("ecs", shape=(2, self.n_transiting), testval=0.01 * np.ones((2, self.n_transiting)))
+                ecc = pm.Deterministic("ecc", tt.sum(ecs**2, axis=0))
+                omega = pm.Deterministic("omega", tt.arctan2(ecs[1], ecs[0]))
+                xo.eccentricity.vaneylen19("ecc_prior", multi=(self.n_planets > 1), shape=self.n_transiting, fixed=True, observed=ecc)
 
             # Light curve jitter
             log_sigma_phot = pm.Normal("log_sigma_phot", mu=np.log(np.std(y_phot.values)), sd=2)
@@ -1420,17 +1428,22 @@ class TessSystem:
             if not planet.is_transiting:
                 prefix = "nontrans_"
             df_chains[f"{prefix}t0_BTJD_{letter}"] = df_chains[f"{prefix}t0_{letter}"] + self.bjd_ref - T0_BTJD # T0 in BTJD
-            df_chains[f"{prefix}omega_folded_{letter}"] = df_chains[f"{prefix}omega_{letter}"].apply(convert_negative_angles)
-            df_chains[f"{prefix}omega_folded_deg_{letter}"] = df_chains[f"{prefix}omega_folded_{letter}"].values * 180 / np.pi # Convert omega from radians to degrees to have for convenience
+            if not self.force_circular_orbits_for_transiting_planets:
+                df_chains[f"{prefix}omega_folded_{letter}"] = df_chains[f"{prefix}omega_{letter}"].apply(convert_negative_angles)
+                df_chains[f"{prefix}omega_folded_deg_{letter}"] = df_chains[f"{prefix}omega_folded_{letter}"].values * 180 / np.pi # Convert omega from radians to degrees to have for convenience
             df_chains[f"{prefix}a_{letter}"] = get_semimajor_axis(df_chains[f"{prefix}period_{letter}"].values, mstar_samples)
             df_chains[f"{prefix}aor_{letter}"] = get_aor(df_chains[f"{prefix}a_{letter}"].values, rstar_samples)
             df_chains[f"{prefix}sinc_{letter}"] = get_sinc(df_chains[f"{prefix}a_{letter}"].values, teff_samples, rstar_samples)
             df_chains[f"{prefix}teq_{letter}"] = get_teq(df_chains[f"{prefix}a_{letter}"].values, teff_samples, rstar_samples) # Calculated assuming zero Bond albedo
             if self.is_joint_model:
+                if self.force_circular_orbits_for_transiting_planets:
+                    ecc_samples = 0
+                else:
+                    ecc_samples = df_chains[f"ecc_{letter}"].values
                 df_chains[f"{prefix}msini_{letter}"] = Msini(df_chains[f"{prefix}K_{letter}"], 
                                                              df_chains[f"{prefix}period_{letter}"], 
                                                              mstar_samples, 
-                                                             df_chains[f"{prefix}ecc_{letter}"], 
+                                                             ecc_samples, 
                                                              Msini_units='earth')
 
         # Transit-specific derived parameters
@@ -1444,12 +1457,18 @@ class TessSystem:
                 df_chains[f"rho_{letter}"] = get_density(df_chains[f"mp_{letter}"].values, df_chains[f"rp_{letter}"].values, 'earthMass', 'earthRad', 'g', 'cm')
                 
                 # Equation 14 from Winn 2010
+                if self.force_circular_orbits_for_transiting_planets:
+                    ecc_samples = 0
+                    omega_samples = 0
+                else:
+                    ecc_samples = df_chains[f"ecc_{letter}"].values
+                    omega_samples = df_chains[f"omega_folded_{letter}"].values
                 dur_day = get_dur(df_chains[f"period_{letter}"].values, 
                                 df_chains[f"aor_{letter}"].values,
                                 df_chains[f"b_{letter}"].values,
                                 df_chains[f"i_rad_{letter}"].values,
-                                df_chains[f"ecc_{letter}"].values,
-                                df_chains[f"omega_folded_{letter}"].values
+                                ecc_samples,
+                                omega_samples
                                 )
                 df_chains[f"dur_day_{letter}"] = dur_day
                 df_chains[f"dur_hr_{letter}"] = dur_day * 24
