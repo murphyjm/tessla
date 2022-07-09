@@ -698,7 +698,7 @@ class TessSystem:
             log_sigma_phot = pm.Normal("log_sigma_phot", mu=np.log(np.std(y.values[mask])), sd=2)
 
             # Orbit model
-            orbit = xo.orbits.KeplerianOrbit(period=period, t0=t0, b=b, duration=dur)
+            orbit = xo.orbits.KeplerianOrbit(period=period, t0=t0, b=b, duration=dur, r_star=self.star.rstar)
 
             # Track the implied stellar density
             pm.Deterministic("rho_circ", orbit.rho_star)
