@@ -664,32 +664,32 @@ class ThreePanelPhotPlot:
                     per_str = f"$P =$ {per_med:.2f} $\pm$ {per_err:.2e} d"
                 else:
                     per_str = f"$P =$ {per_med:.1f} $\pm$ {per_err:.1f} d"
+
                 ror_med = self.df_summary.loc[f'ror_{planet.pl_letter}', 'median'] * 100
                 ror_err = self.df_summary.loc[f'ror_{planet.pl_letter}', 'std'] * 100
                 ror_str = f"$R_\mathrm{{p}}/R_* = {ror_med:.2f} \pm {ror_err:.2f}$ $\%$"
-                text_per_and_ror = ax0.text(0.05, 0.95, per_str + '\n' + ror_str, ha='left', va='top', transform=ax0.transAxes, fontsize=self.param_fontsize)
-                text_per_and_ror.set_bbox(dict(facecolor='white', alpha=0.5, edgecolor='none'))
+
+                b_med = self.df_summary.loc[f'b_{planet.pl_letter}', 'median']
+                b_err = self.df_summary.loc[f'b_{planet.pl_letter}', 'std']
+                b_str = f"$b = {b_med:.2f} \pm {b_err:.2f}$"
 
                 rp_med = self.df_summary.loc[f'rp_{planet.pl_letter}', 'median']
                 rp_err = self.df_summary.loc[f'rp_{planet.pl_letter}', 'std']
                 rp_str = f"$R_\mathrm{{p}} = {rp_med:.2f} \pm {rp_err:.2f}$ $R_\oplus$"
-                b_med = self.df_summary.loc[f'b_{planet.pl_letter}', 'median']
-                b_err = self.df_summary.loc[f'b_{planet.pl_letter}', 'std']
-                b_str = f"$b = {b_med:.2f} \pm {b_err:.2f}$"
-                text_b_and_rp = ax0.text(0.95, 0.05, b_str + '\n' + rp_str, ha='right', va='bottom', transform=ax0.transAxes, fontsize=self.param_fontsize)
-                text_b_and_rp.set_bbox(dict(facecolor='white', alpha=0.5, edgecolor='none'))
+
+                text_obj = ax0.text(0.05, 0.975, per_str + '\n' + ror_str + '\n' + b_str + '\n' + rp_str, ha='left', va='top', transform=ax0.transAxes, fontsize=self.param_fontsize)
+                text_obj.set_bbox(dict(facecolor='white', alpha=0.5, edgecolor='none'))
+                
             else:
                 # Annotate with MAP solution values for Period and radius and rp/rstar and impact parameter.
                 per_str = f"$P =$ {planet.per:.2f} d"
                 ror_str = f"$R_\mathrm{{p}}/R_* = {np.sqrt(planet.depth * 1e-3) * 100:.2f}$ $\%$"
-                text_per_and_ror = ax0.text(0.05, 0.95, per_str + '\n' + ror_str, ha='left', va='top', transform=ax0.transAxes, fontsize=self.param_fontsize)
-                text_per_and_ror.set_bbox(dict(facecolor='white', alpha=0.5, edgecolor='none'))
-                
+                b_str = f"$b =$ {planet.b:.2f}"
                 rp_map = (units.Rsun.to(units.Rearth, np.sqrt(planet.depth * 1e-3) * self.toi.star.rstar))
                 rp_str = f"$R_\mathrm{{p}} = {rp_map:.2f}$ $R_\oplus$"
-                b_str = f"$b =$ {planet.b:.2f}"
-                text_b_and_rp = ax0.text(0.95, 0.05, b_str + '\n' + rp_str, ha='right', va='bottom', transform=ax0.transAxes, fontsize=self.param_fontsize)
-                text_b_and_rp.set_bbox(dict(facecolor='white', alpha=0.5, edgecolor='none'))
+                
+                text_obj = ax0.text(0.05, 0.975, per_str + '\n' + ror_str + '\n' + b_str + '\n' + rp_str, ha='left', va='top', transform=ax0.transAxes, fontsize=self.param_fontsize)
+                text_obj.set_bbox(dict(facecolor='white', alpha=0.5, edgecolor='none'))
         
         # Make the y-axes range the same for all of the phase-folded transit plots
         for axes in [phase_folded_axes, phase_folded_resid_axes]:
