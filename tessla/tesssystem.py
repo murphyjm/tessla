@@ -1234,10 +1234,7 @@ class TessSystem:
         '''
         Compute the AIC
         '''
-        try:
-            first_term = 2 * self.num_vars
-        except AttributeError:
-            first_term = 2 * self.count_num_vars(model)
+        first_term = 2 * self.count_num_vars(model)
         
         AIC = first_term - 2 * model.logp(self.map_soln)
         self.AIC = AIC
@@ -1249,10 +1246,7 @@ class TessSystem:
         '''
         AIC = self.compute_AIC(model)
         numerator = 2 * self.num_vars * (self.num_vars + 1)
-        try:
-            denominator = self.num_data - self.num_vars - 1
-        except AttributeError:
-            denominator = self.count_num_data() - self.num_vars - 1
+        denominator = self.count_num_data() - self.num_vars - 1
         AICc = AIC + numerator / denominator
         self.AICc = AICc
         return AICc
@@ -1261,10 +1255,7 @@ class TessSystem:
         '''
         Compute the BIC
         '''
-        try:
-            first_term = self.num_vars * np.log(self.num_data)
-        except AttributeError:
-            first_term = self.count_num_vars(model) * np.log(self.count_num_data())
+        first_term = self.count_num_vars(model) * np.log(self.count_num_data())
         BIC = first_term - 2 * model.logp(self.map_soln)
         self.BIC = BIC
         return BIC
