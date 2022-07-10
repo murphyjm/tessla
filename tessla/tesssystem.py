@@ -960,12 +960,21 @@ class TessSystem:
                 trend_rv = pm.Normal("trend_rv", mu=0, sd=10, shape=self.rv_trend_order + 1)
             else:
                 trend_rv = None
+            
+            # RV offsets and jitter terms
             gamma_rv_list = []
             for tel in self.rv_inst_names:
                 mask = self.rv_df['tel'] == tel
                 gamma_rv_list.append(np.median(self.rv_df.loc[mask, 'mnvel']))
-            gamma_rv = pm.Uniform("gamma_rv", lower=-20, upper=20, shape=self.num_rv_inst)
-            sigma_rv = pm.Uniform("sigma_rv", lower=0, upper=20, shape=self.num_rv_inst)
+            gamma_rv = pm.Uniform("gamma_rv", lower=-100, upper=100, shape=self.num_rv_inst)
+            
+            log_sigma_rv_mu = np.empty(len(self.rv_inst_names))
+            for i, tel in enumerate(self.rv_inst_names):
+                tel_mask = self.rv_df['tel'].values == tel
+                log_sigma_rv_mu[i] = np.log(np.std(self.rv_df.loc[tel_mask, 'mnvel']))
+            log_sigma_rv = pm.Normal("log_sigma_rv", mu=log_sigma_rv_mu, sd=3, shape=self.num_rv_inst)
+            sigma_rv = pm.Deterministic("sigma_rv", tt.exp(log_sigma_rv))
+
             mean_rv = tt.zeros(len(self.rv_df))
             diag_rv = tt.zeros(len(self.rv_df))
             for i, tel in enumerate(self.rv_inst_names):
