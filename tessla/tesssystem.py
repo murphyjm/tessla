@@ -1450,7 +1450,7 @@ class TessSystem:
                 if self.force_circular_orbits_for_transiting_planets:
                     ecc_samples = 0
                 else:
-                    ecc_samples = df_chains[f"ecc_{letter}"].values
+                    ecc_samples = df_chains[f"{prefix}ecc_{letter}"].values
                 df_chains[f"{prefix}msini_{letter}"] = Msini(df_chains[f"{prefix}K_{letter}"], 
                                                              df_chains[f"{prefix}period_{letter}"], 
                                                              mstar_samples, 
