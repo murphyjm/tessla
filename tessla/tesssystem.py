@@ -1041,13 +1041,13 @@ class TessSystem:
                 
                 # Jitter for svalues
                 gp_svalue_mean = pm.Uniform("gp_svalue_mean", lower=0, upper=1) # Mean for the GP rather than gamma values for each instrument since Svalue is not necessarily distributed around 0.
-                log_jitter_svalue_gp = pm.Normal("log_jitter_svalue_gp", mu=np.log(np.std(self.svalue_df.svalue.values)), sd=2, shape=self.num_svalue_inst) # Each Svalue GP gets a jitter term
+                log_jitter_svalue = pm.Normal("log_jitter_svalue", mu=np.log(np.std(self.svalue_df.svalue.values)), sd=2, shape=self.num_svalue_inst) # Each Svalue GP gets a jitter term
                 diag_svalue = tt.zeros(len(self.svalue_df))
                 
                 # GP for each Svalue instrument
                 for i, tel in enumerate(self.svalue_inst_names):
                     tel_mask = self.svalue_df['tel'].values == tel
-                    diag_svalue += ((self.svalue_df.svalue_err.values)**2 + tt.exp(2 * log_jitter_svalue_gp[i])) * np.array(self.svalue_df['tel'] == tel, dtype=int)
+                    diag_svalue += ((self.svalue_df.svalue_err.values)**2 + tt.exp(2 * log_jitter_svalue[i])) * np.array(self.svalue_df['tel'] == tel, dtype=int)
                     
                     # Kernels
                     if self.svalue_gp_kernel == 'rotation':
@@ -1059,7 +1059,7 @@ class TessSystem:
                         gp_rv_svalue_params += [log_sigma_svalue_gp]
                         kernel_svalue = terms.SHOTerm(sigma=tt.exp(log_sigma_svalue_gp), rho=tt.exp(log_rho_rv_svalue_gp), tau=tt.exp(log_tau_rv_svalue_gp))
 
-                    gp_svalue = GaussianProcess(kernel_svalue, mean=gp_svalue_mean, t=self.svalue_df.loc[tel_mask, 'time'].values, diag=(self.svalue_df.loc[tel_mask, 'svalue_err'].values)**2 + tt.exp(2 * log_jitter_svalue_gp[i]))
+                    gp_svalue = GaussianProcess(kernel_svalue, mean=gp_svalue_mean, t=self.svalue_df.loc[tel_mask, 'time'].values, diag=(self.svalue_df.loc[tel_mask, 'svalue_err'].values)**2 + tt.exp(2 * log_jitter_svalue[i]))
                     gp_svalue.marginal(f"gp_svalue_{tel}", observed=self.svalue_df.loc[tel_mask, 'svalue'].values)
                     gp_svalue_dict[tel] = gp_svalue
                 
@@ -1276,7 +1276,7 @@ class TessSystem:
                 num_dim = len(flat_samps[param].shape)
             except KeyError:
                 continue
-            if num_dim > 1 and param != 'u' and param != 'gamma_rv' and param != 'sigma_rv' and param != 'trend_rv' and param != 'log_jitter_svalue_gp':
+            if num_dim > 1 and param != 'u' and param != 'gamma_rv' and param != 'log_sigma_rv' and param != 'trend_rv' and param != 'log_jitter_svalue':
                 msg = "Chains and number of planets have shape mismatch."
                 ind = 0
                 if param == 'ecs':
@@ -1301,17 +1301,17 @@ class TessSystem:
                 assert flat_samps[param].shape[0] == len(self.rv_inst_names), msg
                 for i,tel in enumerate(self.rv_inst_names):
                     df_chains[f"gamma_rv_{tel}"] = flat_samps[param][i, :].data
-            elif param == 'sigma_rv':
+            elif param == 'log_sigma_rv':
                 msg = "Chains and number of RV instruments have shape mismatch."
                 assert flat_samps[param].shape[0] == len(self.rv_inst_names), msg
                 for i,tel in enumerate(self.rv_inst_names):
-                    df_chains[f"sigma_rv_{tel}"] = flat_samps[param][i, :].data
+                    df_chains[f"log_sigma_rv_{tel}"] = flat_samps[param][i, :].data
             elif param == 'trend_rv':
                 for i in range(self.rv_trend_order + 1):
                     df_chains[f"trend_rv_{i}"] = flat_samps[param][i, :].data
-            elif param == 'log_jitter_svalue_gp':
+            elif param == 'log_jitter_svalue':
                 for i,tel in enumerate(self.svalue_inst_names):
-                    df_chains[f"log_jitter_svalue_gp_{tel}"] = flat_samps[param][i, :].data
+                    df_chains[f"log_jitter_svalue_{tel}"] = flat_samps[param][i, :].data
             else:
                 try:
                     df_chains[param] = flat_samps[param].data
