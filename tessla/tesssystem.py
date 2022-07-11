@@ -1028,7 +1028,7 @@ class TessSystem:
                     prot_rv_svalue_gp = pm.Deterministic("prot_rv_svalue_gp", tt.exp(log_prot_rv_svalue_gp))
                     log_Q0_rv_svalue_gp = pm.Normal('log_Q0_rv_svalue_gp', mu=0, sd=2)
                     log_dQ_rv_svalue_gp = pm.Normal('log_dQ_rv_svalue_gp', mu=0, sd=2)
-                    f_rv_svalue_gp = pm.Uniform('f_gp_rv_svalue_gp', lower=0.01, upper=1)
+                    f_rv_svalue_gp = pm.Uniform('f_rv_svalue_gp', lower=0.01, upper=1)
                     gp_rv_svalue_params += [log_prot_rv_svalue_gp, log_Q0_rv_svalue_gp, log_dQ_rv_svalue_gp, f_rv_svalue_gp]
                 elif self.svalue_gp_kernel == 'exp_decay':
                     BoundedNormalRho = pm.Bound(pm.Normal, lower=np.log(1), upper=np.log(50))
