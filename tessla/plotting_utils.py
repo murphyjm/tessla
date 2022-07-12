@@ -284,8 +284,8 @@ def plot_svalue_gp_corner(toi, df_derived_chains, overwrite=False):
             r'$\tau_{S_\mathrm{HK}}$ [d]'  
         ]
         chains += [
-            np.exp(df_derived_chains['log_rho_svalue_gp']),
-            np.exp(df_derived_chains['log_tau_svalue_gp'])
+            np.exp(df_derived_chains['log_rho_rv_svalue_gp']),
+            np.exp(df_derived_chains['log_tau_rv_svalue_gp'])
         ]
 
         svalue_gp_chains = np.vstack(chains).T
@@ -296,15 +296,14 @@ def plot_svalue_gp_corner(toi, df_derived_chains, overwrite=False):
 
         # Corner plot for Svalue GP hyperparameters
         # GP amplitudes for each RV instrument
-        noise_labels = [f'$\eta_{{\mathrm{{GP,\:RV,\:}}{tel}}}$ [m s$^{{-1}}$]' for tel in toi.rv_inst_names]
-        chains = [df_derived_chains[f'sigma_gp_rv_{tel}'] for tel in toi.rv_inst_names]
+        noise_labels = [f'$\eta_{{\mathrm{{GP,\:RV,\:}}\mathrm{{{tel}}}}}$ [m s$^{{-1}}$]' for tel in toi.rv_inst_names]
+        chains = [df_derived_chains[f'sigma_rv_gp_{tel}'] for tel in toi.rv_inst_names]
         
         # GP amplitudes and jitter for each Svalue instrument
-        # noise_labels += [f'$\eta_{{\mathrm{{GP,\:S_{{HK}},\:}}{tel}}}$ [dex]' for tel in toi.svalue_inst_names]
-        noise_labels += ['$\eta_{\mathrm{GP},\:S_\mathrm{HK}}$ [dex]']
-        chains += [df_derived_chains['sigma_gp_svalue']]
+        noise_labels += [f'$\eta_{{\mathrm{{GP,\:S_{{HK}},\:}}\mathrm{{{tel}}}}}$ [dex]' for tel in toi.svalue_inst_names]
+        chains += [df_derived_chains[f'sigma_svalue_gp_{tel}'] for tel in toi.svalue_inst_names]
         noise_labels += ['$\sigma_{S_\mathrm{HK}}$ [dex]']
-        chains += [df_derived_chains['log_jitter_svalue_gp_HIRES']]
+        chains += [np.exp(df_derived_chains['log_jitter_svalue_HIRES'])]
         
         # Global GP hyperparameters
         noise_labels += [
@@ -319,20 +318,14 @@ def plot_svalue_gp_corner(toi, df_derived_chains, overwrite=False):
             r'$Q_{0,\:S_\mathrm{HK}}$',
             r'$dQ_{S_\mathrm{HK}}$',
             r'$f_{S_\mathrm{HK}}$',
-            r'$Q_{0,\:\mathrm{RV}}$',
-            r'$dQ_\mathrm{RV}$',
-            r'$f_\mathrm{RV}$',
         ]
         chains += [
-            df_derived_chains['prot_rv_gp'],
-            np.exp(df_derived_chains['log_Q0_gp_svalue']),
-            np.exp(df_derived_chains['log_dQ_gp_svalue']),
-            df_derived_chains['f_gp_svalue'],
-            np.exp(df_derived_chains['log_Q0_gp_rv']),
-            np.exp(df_derived_chains['log_dQ_gp_rv']),
-            df_derived_chains['f_gp_rv'],
+            df_derived_chains['prot_rv_svalue_gp'],
+            np.exp(df_derived_chains['log_Q0_rv_svalue_gp']),
+            np.exp(df_derived_chains['log_dQ_rv_svalue_gp']),
+            df_derived_chains['f_rv_svalue_gp']
         ]
-        #import pdb; pdb.set_trace()
+        
         svalue_gp_chains = np.vstack(chains).T
         svalue_gp_corner = TesslaCornerPlot(toi, noise_labels, svalue_gp_chains, toi.name + " RV-$S_\mathrm{HK}$ GP hyperparameters")
         svalue_gp_corner.plot(save_fname=f"{toi.name.replace(' ', '_')}_rv_svalue_gp_corner_plot", overwrite=overwrite)
@@ -402,7 +395,7 @@ def plot_joint_corners(toi, df_derived_chains, overwrite=False):
         rv_inst_labels.append(f'$\gamma_\mathrm{{{tel}}}$ [m s$^{{-1}}$]')
         rv_inst_chains_list.append(df_derived_chains[f'gamma_rv_{tel}'])
         rv_inst_labels.append(f'$\sigma_\mathrm{{{tel}}}$ [m s$^{{-1}}$]')
-        rv_inst_chains_list.append(df_derived_chains[f'sigma_rv_{tel}'])
+        rv_inst_chains_list.append(np.exp(df_derived_chains[f'log_sigma_rv_{tel}']))
     if toi.rv_trend:
         for i in range(0, toi.rv_trend_order + 1):
             try:
