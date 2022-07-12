@@ -303,7 +303,7 @@ def plot_svalue_gp_corner(toi, df_derived_chains, overwrite=False):
         noise_labels += [f'$\eta_{{\mathrm{{GP,\:S_{{HK}},\:}}\mathrm{{{tel}}}}}$ [dex]' for tel in toi.svalue_inst_names]
         chains += [df_derived_chains[f'sigma_svalue_gp_{tel}'] for tel in toi.svalue_inst_names]
         noise_labels += ['$\sigma_{S_\mathrm{HK}}$ [dex]']
-        chains += [np.exp(df_derived_chains['log_jitter_svalue_gp_HIRES'])]
+        chains += [np.exp(df_derived_chains['log_jitter_svalue_HIRES'])]
         
         # Global GP hyperparameters
         noise_labels += [
@@ -395,7 +395,7 @@ def plot_joint_corners(toi, df_derived_chains, overwrite=False):
         rv_inst_labels.append(f'$\gamma_\mathrm{{{tel}}}$ [m s$^{{-1}}$]')
         rv_inst_chains_list.append(df_derived_chains[f'gamma_rv_{tel}'])
         rv_inst_labels.append(f'$\sigma_\mathrm{{{tel}}}$ [m s$^{{-1}}$]')
-        rv_inst_chains_list.append(df_derived_chains[f'sigma_rv_{tel}'])
+        rv_inst_chains_list.append(np.exp(df_derived_chains[f'log_sigma_rv_{tel}']))
     if toi.rv_trend:
         for i in range(0, toi.rv_trend_order + 1):
             try:
