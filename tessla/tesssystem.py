@@ -853,12 +853,21 @@ class TessSystem:
         else:
             return planet_rv, bkg, planet_rv + bkg
 
-    def __get_nontrans_params_and_orbit(self, mstar, rstar, sd_t0=100, sd_log_period=10, prefix="nontrans_"):
-        t0 = pm.Normal(f"{prefix}t0", mu=np.array([planet.t0 for planet in self.nontransiting_planets.values()]), sd=sd_t0, shape=self.n_nontransiting) # width of t0 is just a placeholder for now
-        log_K = pm.Normal(f"{prefix}log_K", mu=np.log(np.std(self.rv_df.mnvel) * np.ones(self.n_nontransiting)), sigma=np.log(50), shape=self.n_nontransiting)
-        K = pm.Deterministic(f"{prefix}K", tt.exp(log_K))
+    def __get_nontrans_params_and_orbit(self, mstar, rstar, sd_t0_default=100, sd_log_period_default=10, prefix="nontrans_"):
+        if any([planet.t0_err is None for planet in self.nontransiting_planets.values()]):
+            sd_t0 = sd_t0_default
+        else:
+            sd_t0 = np.array([planet.t0_err for planet in self.nontransiting_planets.values()])
+        if any([planet.per_err is None for planet in self.nontransiting_planets.values()]):
+            sd_log_period = sd_log_period_default
+        else:
+            sd_log_period = np.log([planet.per_err for planet in self.nontransiting_planets.values()])
+        
+        t0 = pm.Normal(f"{prefix}t0", mu=np.array([planet.t0 for planet in self.nontransiting_planets.values()]), sd=sd_t0, shape=self.n_nontransiting)
         log_period = pm.Normal(f"{prefix}log_period", mu=np.log(np.array([planet.per for planet in self.nontransiting_planets.values()])), sd=sd_log_period, shape=self.n_nontransiting)
         period = pm.Deterministic(f"{prefix}period", tt.exp(log_period))
+        log_K = pm.Normal(f"{prefix}log_K", mu=np.log(np.std(self.rv_df.mnvel) * np.ones(self.n_nontransiting)), sigma=np.log(50), shape=self.n_nontransiting)
+        K = pm.Deterministic(f"{prefix}K", tt.exp(log_K))
 
         # Eccentricity and omega
         ecs = pmx.UnitDisk(f"{prefix}ecs", shape=(2, self.n_nontransiting), testval=0.01 * np.ones((2, self.n_nontransiting)))
