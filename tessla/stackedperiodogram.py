@@ -184,9 +184,19 @@ class StackedPeriodogram:
                 if not planet.is_transiting:
                     linestyle = '--' # Give non-transiting planets a different linestyle
                 ax[j].axvline(planet.per, color=planet.color, ls=linestyle, zorder=0)
-            # Rotation period peak from OoT photometry
-            ax[j].axvline(self.toi.prot, color='blue', lw=5, alpha=0.5)
-            ax[j].axvline(self.toi.prot/2, color='cornflowerblue', lw=5, alpha=0.5)
+            if self.toi.include_svalue_gp:
+                # Rotation period from GP used on RVs and Svalues
+                if self.toi.svalue_gp_kernel == 'exp_decay':
+                    prot_var_name_str = 'log_rho_rv_svalue_gp'
+                elif self.toi.svalue_gp_kernel == 'rotation':
+                    prot_var_name_str = 'log_prot_rv_svalue_gp'
+                prot = np.exp(self.toi.map_soln[prot_var_name_str])
+                ax[j].axvline(prot, color='blue', lw=5, alpha=0.5)
+                ax[j].axvline(prot/2, color='cornflowerblue', lw=5, alpha=0.5)
+            else:
+                # Rotation period peak from OoT photometry
+                ax[j].axvline(self.toi.prot, color='blue', lw=5, alpha=0.5)
+                ax[j].axvline(self.toi.prot/2, color='cornflowerblue', lw=5, alpha=0.5)
 
         # Y-axis label
         fig.supylabel('LS Power', fontsize=22)
