@@ -191,8 +191,8 @@ class StackedPeriodogram:
                 elif self.toi.svalue_gp_kernel == 'rotation' or self.toi.svalue_gp_kernel == 'activity':
                     prot_var_name_str = 'log_prot_rv_svalue_gp'
                 prot = np.exp(self.toi.map_soln[prot_var_name_str])
-                ax[j].axvline(prot, color='blue', lw=5, alpha=0.5)
-                ax[j].axvline(prot/2, color='cornflowerblue', lw=5, alpha=0.5)
+                ax[j].axvline(prot, color='red', lw=5, alpha=0.5)
+                ax[j].axvline(prot/2, color='tomato', lw=5, alpha=0.5)
             else:
                 # Rotation period peak from OoT photometry
                 ax[j].axvline(self.toi.prot, color='blue', lw=5, alpha=0.5)
