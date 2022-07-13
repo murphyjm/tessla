@@ -92,7 +92,7 @@ class RVPlot:
         self.rms_yscale_phase_folded_panels = rms_yscale_phase_folded_panels # If true, set the Y axis limits for the phase-folded panels based on the residuals rms.
         self.param_fontsize = param_fontsize
 
-    def plot(self, save_fname=None, overwrite=False):
+    def plot(self, save_fname=None, overwrite=False, save_and_close=True, return_fig_obj=False):
         '''
         Make the plot!
         '''
@@ -115,10 +115,14 @@ class RVPlot:
         
         fig = self.__rv_plot()
         
-        # Save the figure!
-        fig.savefig(save_fname, facecolor='white', bbox_inches='tight', dpi=self.save_dpi)
-        print(f"RV model plot saved to {save_fname}")
-        plt.close()
+        # Option to either save and close the figure right away or return it for further investigation.
+        if save_and_close:
+            # Save the figure!
+            fig.savefig(save_fname, facecolor='white', bbox_inches='tight', dpi=self.save_dpi)
+            print(f"RV model plot saved to {save_fname}")
+            plt.close()
+        elif return_fig_obj:
+            return fig
     
     def __get_ytick_spacing(self):
         '''
