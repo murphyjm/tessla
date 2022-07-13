@@ -188,7 +188,7 @@ class StackedPeriodogram:
                 # Rotation period from GP used on RVs and Svalues
                 if self.toi.svalue_gp_kernel == 'exp_decay':
                     prot_var_name_str = 'log_rho_rv_svalue_gp'
-                elif self.toi.svalue_gp_kernel == 'rotation':
+                elif self.toi.svalue_gp_kernel == 'rotation' or self.toi.svalue_gp_kernel == 'activity':
                     prot_var_name_str = 'log_prot_rv_svalue_gp'
                 prot = np.exp(self.toi.map_soln[prot_var_name_str])
                 ax[j].axvline(prot, color='blue', lw=5, alpha=0.5)

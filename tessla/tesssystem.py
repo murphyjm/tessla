@@ -159,7 +159,7 @@ class TessSystem:
             
             # Add svalue data set even if not including Svalue GP
             if self.include_svalue_gp:
-                assert svalue_gp_kernel.lower() in ['rotation', 'exp_decay'], "Svalue/RV GP must have kernel that is either 'rotation' or 'exp_decay'"
+                assert svalue_gp_kernel.lower() in ['rotation', 'exp_decay', 'activity'], "Svalue/RV GP must have kernel that is either 'rotation' or 'exp_decay' or 'activity'"
                 self.svalue_gp_kernel = svalue_gp_kernel.lower()
                 if self.verbose:
                     print(f"Including GP model using S-Values with a {self.svalue_gp_kernel} kernel.")
@@ -1029,8 +1029,10 @@ class TessSystem:
 
             # RV GP if specified
             if self.include_svalue_gp:
+
                 # These parameters shared by all GPs
                 gp_rv_svalue_params = []
+
                 if self.svalue_gp_kernel == 'rotation':
                     BoundedNormalProt = pm.Bound(pm.Normal, lower=np.log(1), upper=np.log(100))
                     log_prot_rv_svalue_gp = BoundedNormalProt("log_prot_rv_svalue_gp", mu=np.log(self.prot), sd=np.log(self.prot_err)) # self.prot from LS periodogram of OoT flux but can be superseded
@@ -1039,12 +1041,30 @@ class TessSystem:
                     log_dQ_rv_svalue_gp = pm.Normal('log_dQ_rv_svalue_gp', mu=0, sd=2)
                     f_rv_svalue_gp = pm.Uniform('f_rv_svalue_gp', lower=0.01, upper=1)
                     gp_rv_svalue_params += [log_prot_rv_svalue_gp, log_Q0_rv_svalue_gp, log_dQ_rv_svalue_gp, f_rv_svalue_gp]
+                
                 elif self.svalue_gp_kernel == 'exp_decay':
                     BoundedNormalRho = pm.Bound(pm.Normal, lower=np.log(1), upper=np.log(50))
                     log_rho_rv_svalue_gp = BoundedNormalRho("log_rho_rv_svalue_gp", mu=np.log(10), sd=np.log(50)) # Maybe change this to be informed from the periodogram of the photometry.
                     BoundedNormalTau = pm.Bound(pm.Normal, lower=log_rho_rv_svalue_gp, upper=np.log(200)) # Force to always be larger than undamped period to make GP smooth
                     log_tau_rv_svalue_gp = BoundedNormalTau("log_tau_rv_svalue_gp", mu=np.log(10), sd=np.log(50)) # Maybe change this to be seeded with longer period.
                     gp_rv_svalue_params += [log_rho_rv_svalue_gp, log_tau_rv_svalue_gp]
+                
+                elif self.svalue_gp_kernel == 'activity':
+                    # A combination of the exp_decay kernel and the rotation kernel
+
+                    # Rotation term
+                    BoundedNormalProt = pm.Bound(pm.Normal, lower=np.log(1), upper=np.log(100))
+                    log_prot_rv_svalue_gp = BoundedNormalProt("log_prot_rv_svalue_gp", mu=np.log(self.prot), sd=np.log(self.prot_err)) # self.prot from LS periodogram of OoT flux but can be superseded
+                    prot_rv_svalue_gp = pm.Deterministic("prot_rv_svalue_gp", tt.exp(log_prot_rv_svalue_gp))
+                    log_Q0_rv_svalue_gp = pm.Normal('log_Q0_rv_svalue_gp', mu=0, sd=2)
+                    log_dQ_rv_svalue_gp = pm.Normal('log_dQ_rv_svalue_gp', mu=0, sd=2)
+                    f_rv_svalue_gp = pm.Uniform('f_rv_svalue_gp', lower=0.01, upper=1)
+                    gp_rv_svalue_params += [log_prot_rv_svalue_gp, log_Q0_rv_svalue_gp, log_dQ_rv_svalue_gp, f_rv_svalue_gp]
+
+                    # But use Q = 1/np.sqrt(2) instead of log_tau
+                    BoundedNormalRho = pm.Bound(pm.Normal, lower=np.log(1), upper=np.log(50))
+                    log_rho_rv_svalue_gp = BoundedNormalRho("log_rho_rv_svalue_gp", mu=np.log(10), sd=np.log(50)) # Maybe change this to be informed from the periodogram of the photometry.
+                    gp_rv_svalue_params += [log_rho_rv_svalue_gp]
                 
                 gp_svalue_dict = {}
                 
@@ -1063,10 +1083,20 @@ class TessSystem:
                         sigma_svalue_gp = pm.InverseGamma(f"sigma_svalue_gp_{tel}", **pmx.estimate_inverse_gamma_parameters(0.001, 1))
                         gp_rv_svalue_params += [sigma_svalue_gp]
                         kernel_svalue = terms.RotationTerm(sigma=sigma_svalue_gp, period=prot_rv_svalue_gp, Q0=tt.exp(log_Q0_rv_svalue_gp), dQ=tt.exp(log_dQ_rv_svalue_gp), f=f_rv_svalue_gp)
+                    
                     elif self.svalue_gp_kernel == 'exp_decay':
                         log_sigma_svalue_gp = pm.Normal(f"log_sigma_svalue_gp_{tel}", mu=0., sigma=10)
                         gp_rv_svalue_params += [log_sigma_svalue_gp]
                         kernel_svalue = terms.SHOTerm(sigma=tt.exp(log_sigma_svalue_gp), rho=tt.exp(log_rho_rv_svalue_gp), tau=tt.exp(log_tau_rv_svalue_gp))
+                    
+                    elif self.svalue_gp_kernel == 'activity':
+                        sigma_svalue_gp_rot = pm.InverseGamma(f"sigma_svalue_gp_rot_{tel}", **pmx.estimate_inverse_gamma_parameters(0.001, 1))
+                        gp_rv_svalue_params += [sigma_svalue_gp_rot]
+                        kernel_svalue = terms.RotationTerm(sigma=sigma_svalue_gp_rot, period=prot_rv_svalue_gp, Q0=tt.exp(log_Q0_rv_svalue_gp), dQ=tt.exp(log_dQ_rv_svalue_gp), f=f_rv_svalue_gp)
+
+                        log_sigma_svalue_gp_dec = pm.Normal(f"log_sigma_svalue_gp_dec_{tel}", mu=0., sigma=10)
+                        gp_rv_svalue_params += [log_sigma_svalue_gp_dec]
+                        kernel_svalue += terms.SHOTerm(sigma=tt.exp(log_sigma_svalue_gp_dec), rho=tt.exp(log_rho_rv_svalue_gp), Q=1/np.sqrt(2))
 
                     gp_svalue = GaussianProcess(kernel_svalue, mean=gp_svalue_mean, t=self.svalue_df.loc[tel_mask, 'time'].values, diag=(self.svalue_df.loc[tel_mask, 'svalue_err'].values)**2 + tt.exp(2 * log_jitter_svalue[i]))
                     gp_svalue.marginal(f"gp_svalue_{tel}", observed=self.svalue_df.loc[tel_mask, 'svalue'].values)
@@ -1083,10 +1113,20 @@ class TessSystem:
                         sigma_rv_gp = pm.InverseGamma(f"sigma_rv_gp_{tel}", **pmx.estimate_inverse_gamma_parameters(1, 5))
                         gp_rv_svalue_params += [sigma_rv_gp]
                         kernel_rv = terms.RotationTerm(sigma=sigma_rv_gp, period=prot_rv_svalue_gp, Q0=tt.exp(log_Q0_rv_svalue_gp), dQ=tt.exp(log_dQ_rv_svalue_gp), f=f_rv_svalue_gp)
+                    
                     elif self.svalue_gp_kernel == 'exp_decay':
                         log_sigma_rv_gp = pm.Normal(f"log_sigma_rv_gp_{tel}", mu=0., sigma=10) # Different amplitude for each instrument.
                         gp_rv_svalue_params += [log_sigma_rv_gp]
                         kernel_rv = terms.SHOTerm(sigma=tt.exp(log_sigma_rv_gp), rho=tt.exp(log_rho_rv_svalue_gp), tau=tt.exp(log_tau_rv_svalue_gp))
+                    
+                    elif self.svalue_gp_kernel == 'activity':
+                        sigma_rv_gp_rot = pm.InverseGamma(f"sigma_rv_gp_rot_{tel}", **pmx.estimate_inverse_gamma_parameters(1, 5))
+                        gp_rv_svalue_params += [sigma_rv_gp_rot]
+                        kernel_rv = terms.RotationTerm(sigma=sigma_rv_gp_rot, period=prot_rv_svalue_gp, Q0=tt.exp(log_Q0_rv_svalue_gp), dQ=tt.exp(log_dQ_rv_svalue_gp), f=f_rv_svalue_gp)
+
+                        log_sigma_rv_gp_dec = pm.Normal(f"log_sigma_rv_gp_dec_{tel}", mu=0., sigma=10) # Different amplitude for each instrument.
+                        gp_rv_svalue_params += [log_sigma_rv_gp_dec]
+                        kernel_rv += terms.SHOTerm(sigma=tt.exp(log_sigma_rv_gp_dec), rho=tt.exp(log_rho_rv_svalue_gp), Q=1/np.sqrt(2))
                     
                     gp_rv = GaussianProcess(kernel_rv, t=self.rv_df.loc[tel_mask, 'time'].values, diag=diag_rv[tel_mask])
                     gp_rv.marginal(f"gp_rv_{tel}", observed=resid_rv[tel_mask])
