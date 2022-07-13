@@ -1061,8 +1061,8 @@ class TessSystem:
                     f_rv_svalue_gp = pm.Uniform('f_rv_svalue_gp', lower=0.01, upper=1)
                     gp_rv_svalue_params += [log_prot_rv_svalue_gp, log_Q0_rv_svalue_gp, log_dQ_rv_svalue_gp, f_rv_svalue_gp]
 
-                    # But use Q = 1/np.sqrt(2) instead of log_tau
-                    BoundedNormalRho = pm.Bound(pm.Normal, lower=np.log(1), upper=np.log(50))
+                    # Exponential decay term, but use Q = 1/np.sqrt(2) instead of log_tau
+                    BoundedNormalRho = pm.Bound(pm.Normal, lower=np.log(1), upper=np.log(100))
                     log_rho_rv_svalue_gp = BoundedNormalRho("log_rho_rv_svalue_gp", mu=np.log(10), sd=np.log(50)) # Maybe change this to be informed from the periodogram of the photometry.
                     gp_rv_svalue_params += [log_rho_rv_svalue_gp]
                 
