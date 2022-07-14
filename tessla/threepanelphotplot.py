@@ -38,7 +38,7 @@ class ThreePanelPhotPlot:
                 toi,
                 use_broken_x_axis=False, # Whether or not to break up the x-axis to avoid large gaps between sectors
                 data_gap_thresh=10, # Days. If gap in data is larger than this threshold, consider it another chunk in the broken axis (need to have use_broken_x_axis=True)
-                figsize=(12,14), 
+                figwidth=12,
                 margin=1, # Units of days
                 ylabelpad=10,
                 wspace=0.025, # space of gap in broken axis
@@ -72,7 +72,7 @@ class ThreePanelPhotPlot:
             self.df_summary = pd.read_csv(df_summary_fname, index_col=0)
 
         # Plot hyperparameters
-        self.figsize = figsize
+        self.figwidth = figwidth
         self.margin = margin
         self.ylabelpad = ylabelpad
         self.wspace = wspace
@@ -244,9 +244,14 @@ class ThreePanelPhotPlot:
         Make the three panel plot using a broken x-axis. Used for TOIs with widely time-separated sectors.
         '''
         break_inds = find_breaks(self.x, diff_threshold=self.data_gap_thresh, verbose=self.toi.verbose)
+        
+        figheight = 14 # Default fig height
+        num_planet_rows = ceil(self.toi.n_transiting / 2)
+        if num_planet_rows > 1:
+            figheight =  figheight + (num_planet_rows - 1) * (figheight/3)
 
         # Create the figure object
-        fig = plt.figure(figsize=self.figsize)
+        fig = plt.figure(figsize=(self.figwidth, figheight))
 
         # Create the GridSpec objects
         gs0, gs1 = GridSpec(2, 1, figure=fig, height_ratios=[1, 0.5])
@@ -435,8 +440,13 @@ class ThreePanelPhotPlot:
         '''
         Make a three panel plot but don't have to worry about breaks in the axis. E.g. if there's only one sector of photometry or all sectors are consecutive.
         '''
+        figheight = 14 # Default fig height
+        num_planet_rows = ceil(self.toi.n_transiting / 2)
+        if num_planet_rows > 1:
+            figheight =  figheight + (num_planet_rows - 1) * (figheight/3)
+
         # Create the figure object
-        fig = plt.figure(figsize=self.figsize)
+        fig = plt.figure(figsize=(self.figwidth, figheight))
 
         # Create the GridSpec objects
         gs0, gs1 = GridSpec(2, 1, figure=fig, height_ratios=[1, 0.5])
@@ -653,7 +663,7 @@ class ThreePanelPhotPlot:
                     planet_name = planet.alt_name
                 except AttributeError:
                     planet_name = planet.pl_letter
-                ax0.set_title(f"{self.toi.name} {planet.pl_letter}")
+                ax0.set_title(f"{self.toi.name} {planet_name}")
 
                 # Put the x-axis labels and ticks in units of hours instead of days
                 for ax in [ax0, ax1]:
