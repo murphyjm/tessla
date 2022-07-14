@@ -649,6 +649,10 @@ class ThreePanelPhotPlot:
                 ax1.axhline(0, color="#aaaaaa", lw=1)
 
                 # Plot housekeeping
+                try:
+                    planet_name = planet.alt_name
+                except AttributeError:
+                    planet_name = planet.pl_letter
                 ax0.set_title(f"{self.toi.name} {planet.pl_letter}")
 
                 # Put the x-axis labels and ticks in units of hours instead of days
@@ -658,9 +662,9 @@ class ThreePanelPhotPlot:
                     ax.xaxis.set_minor_locator(MultipleLocator(1/24))
                     ax.tick_params(axis='x', direction='in', which='both', top=True, bottom=True)
                     ax.tick_params(axis='y', direction='in', which='both', left=True, right=True)
-
-                ax0.set_xticklabels([])
-                ax1.set_xlabel("Time since transit [hours]", fontsize=14)
+                plt.setp(ax0.get_xticklabels(), visible=False)
+                if k == num_planet_rows - 1: # Only add the xlabel to the bottom row
+                    ax1.set_xlabel("Time since transit [hours]", fontsize=14)
                 major, minor = self.__get_ytick_spacing(np.max(self.y - gp_mod) - np.min(self.y - gp_mod))
                 ax0.yaxis.set_major_locator(MultipleLocator(major))
                 ax0.yaxis.set_minor_locator(MultipleLocator(minor))
