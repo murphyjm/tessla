@@ -258,14 +258,11 @@ class ThreePanelPhotPlot:
         fig = plt.figure(figsize=(self.figwidth, figheight))
 
         # Create the GridSpec objects
-        # gs0, gs1 = GridSpec(2, 1, figure=fig, height_ratios=[1, 0.5])
         heights = [1, 1, 0.33]
         gs0 = GridSpec(3, 1, figure=fig, height_ratios=heights, hspace=0.1)
         timeseries_bottom = 1 - timeseries_height / figheight
         gs0.update(bottom=timeseries_bottom + self.timeseries_phase_hspace*0.5)
         sps1, sps2, sps3 = gs0
-        # import pdb; pdb.set_trace()
-        # sps1, sps2, sps3 = gridspec.GridSpecFromSubplotSpec(3, 1, subplot_spec=gs0, height_ratios=heights, hspace=0.1)
 
         xlim_tuple = self.__get_xlim_tuple(break_inds)
         
@@ -460,12 +457,12 @@ class ThreePanelPhotPlot:
         fig = plt.figure(figsize=(self.figwidth, figheight))
 
         # Create the GridSpec objects
-        gs0, gs1 = GridSpec(2, 1, figure=fig, height_ratios=[1, 0.5])
-        timeseries_bottom = 1 - timeseries_height / figheight
-        gs0.update(bottom=timeseries_bottom)
         heights = [1, 1, 0.33]
-        sps1, sps2, sps3 = gridspec.GridSpecFromSubplotSpec(3, 1, subplot_spec=gs0, height_ratios=heights, hspace=0.1)
-        
+        gs0 = GridSpec(3, 1, figure=fig, height_ratios=heights, hspace=0.1)
+        timeseries_bottom = 1 - timeseries_height / figheight
+        gs0.update(bottom=timeseries_bottom + self.timeseries_phase_hspace*0.5)
+        sps1, sps2, sps3 = gs0
+
         ################################################################################################
         ################################# TOP PANEL: Data and GP model #################################
         ################################################################################################

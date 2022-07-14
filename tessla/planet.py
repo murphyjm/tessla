@@ -6,7 +6,9 @@ planet_color_dict = {
     'b':'cornflowerblue',
     'c':'orange',
     'd':'forestgreen',
-    'e':'purple'
+    'e':'purple',
+    'f':'cyan',
+    'g':'pink'
 }
 
 class Planet:
