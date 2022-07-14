@@ -1325,7 +1325,7 @@ class TessSystem:
                 num_dim = len(flat_samps[param].shape)
             except KeyError:
                 continue
-            if num_dim > 1 and param != 'u' and param != 'gamma_rv' and param != 'log_sigma_rv' and param != 'trend_rv' and param != 'log_jitter_svalue':
+            if num_dim > 1 and param != 'u' and param != 'gamma_rv' and param != 'log_sigma_rv' and param != 'sigma_rv' and param != 'trend_rv' and param != 'log_jitter_svalue':
                 if param == 'ecs':
                     for i, pl_letter in enumerate(self.transiting_planets.keys()):
                         prefix = ''
@@ -1361,6 +1361,11 @@ class TessSystem:
                 assert flat_samps[param].shape[0] == len(self.rv_inst_names), msg
                 for i,tel in enumerate(self.rv_inst_names):
                     df_chains[f"log_sigma_rv_{tel}"] = flat_samps[param][i, :].data
+            elif param == 'sigma_rv':
+                msg = "Chains and number of RV instruments have shape mismatch."
+                assert flat_samps[param].shape[0] == len(self.rv_inst_names), msg
+                for i,tel in enumerate(self.rv_inst_names):
+                    df_chains[f"sigma_rv_{tel}"] = flat_samps[param][i, :].data
             elif param == 'trend_rv':
                 for i in range(self.rv_trend_order + 1):
                     df_chains[f"trend_rv_{i}"] = flat_samps[param][i, :].data
