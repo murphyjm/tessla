@@ -52,7 +52,8 @@ class ThreePanelPhotPlot:
                 rms_yscale_multiplier=5,
                 data_uncert_label_rms_yscale_multiplier=-3,
                 sector_marker_fontsize=12,
-                param_fontsize=14
+                param_fontsize=14,
+                timeseries_phase_hspace=0.04,
                 ) -> None:
         
         self.toi = toi
@@ -83,7 +84,8 @@ class ThreePanelPhotPlot:
         self.rms_yscale_multiplier = rms_yscale_multiplier
         self.data_uncert_label_rms_yscale_multiplier = data_uncert_label_rms_yscale_multiplier
         self.sector_marker_fontsize = sector_marker_fontsize
-        self.param_fontsize = param_fontsize 
+        self.param_fontsize = param_fontsize
+        self.timeseries_phase_hspace = timeseries_phase_hspace
 
     def plot(self, save_fname=None, overwrite=False):
         '''
@@ -246,17 +248,24 @@ class ThreePanelPhotPlot:
         break_inds = find_breaks(self.x, diff_threshold=self.data_gap_thresh, verbose=self.toi.verbose)
         
         figheight = 14 # Default fig height
+        timeseries_height = 2 * figheight/3
         num_planet_rows = ceil(self.toi.n_transiting / 2)
+        planet_row_height = figheight / 3
         if num_planet_rows > 1:
-            figheight =  figheight + (num_planet_rows - 1) * (figheight/3)
+            figheight = figheight + (num_planet_rows - 1) * planet_row_height
 
         # Create the figure object
         fig = plt.figure(figsize=(self.figwidth, figheight))
 
         # Create the GridSpec objects
-        gs0, gs1 = GridSpec(2, 1, figure=fig, height_ratios=[1, 0.5])
+        # gs0, gs1 = GridSpec(2, 1, figure=fig, height_ratios=[1, 0.5])
         heights = [1, 1, 0.33]
-        sps1, sps2, sps3 = gridspec.GridSpecFromSubplotSpec(3, 1, subplot_spec=gs0, height_ratios=heights, hspace=0.1)
+        gs0 = GridSpec(3, 1, figure=fig, height_ratios=heights, hspace=0.1)
+        timeseries_bottom = 1 - timeseries_height / figheight
+        gs0.update(bottom=timeseries_bottom + self.timeseries_phase_hspace*0.5)
+        sps1, sps2, sps3 = gs0
+        # import pdb; pdb.set_trace()
+        # sps1, sps2, sps3 = gridspec.GridSpecFromSubplotSpec(3, 1, subplot_spec=gs0, height_ratios=heights, hspace=0.1)
 
         xlim_tuple = self.__get_xlim_tuple(break_inds)
         
@@ -432,7 +441,7 @@ class ThreePanelPhotPlot:
         ################################################################################################
         ############################ PHASE-FOLDED TRANSIT AND RESIDUALS ################################
         ################################################################################################
-        fig = self.__plot_phase_folded_transits(fig, gs1)
+        fig = self.__plot_phase_folded_transits(fig, timeseries_bottom)
         
         return fig
 
@@ -441,15 +450,19 @@ class ThreePanelPhotPlot:
         Make a three panel plot but don't have to worry about breaks in the axis. E.g. if there's only one sector of photometry or all sectors are consecutive.
         '''
         figheight = 14 # Default fig height
+        timeseries_height = 2 * figheight/3
         num_planet_rows = ceil(self.toi.n_transiting / 2)
+        planet_row_height = figheight / 3
         if num_planet_rows > 1:
-            figheight =  figheight + (num_planet_rows - 1) * (figheight/3)
+            figheight = figheight + (num_planet_rows - 1) * planet_row_height
 
         # Create the figure object
         fig = plt.figure(figsize=(self.figwidth, figheight))
 
         # Create the GridSpec objects
         gs0, gs1 = GridSpec(2, 1, figure=fig, height_ratios=[1, 0.5])
+        timeseries_bottom = 1 - timeseries_height / figheight
+        gs0.update(bottom=timeseries_bottom)
         heights = [1, 1, 0.33]
         sps1, sps2, sps3 = gridspec.GridSpecFromSubplotSpec(3, 1, subplot_spec=gs0, height_ratios=heights, hspace=0.1)
         
@@ -543,11 +556,11 @@ class ThreePanelPhotPlot:
         ################################################################################################
         ############################ PHASE-FOLDED TRANSIT AND RESIDUALS ################################
         ################################################################################################
-        fig = self.__plot_phase_folded_transits(fig, gs1)
+        fig = self.__plot_phase_folded_transits(fig, timeseries_bottom)
 
         return fig
     
-    def __plot_phase_folded_transits(self, fig, gs1):
+    def __plot_phase_folded_transits(self, fig, timeseries_bottom):
         '''
         Plot the folded transits for each planet.
         '''
@@ -563,13 +576,14 @@ class ThreePanelPhotPlot:
 
         # Set up the outer gridspec
         num_planet_rows = ceil(self.toi.n_transiting / 2)
-        outer_sps = gridspec.GridSpecFromSubplotSpec(num_planet_rows, 2, subplot_spec=gs1, hspace=0.3)
+        outer_gs = GridSpec(num_planet_rows, 2, figure=fig, hspace=0.2)
+        outer_gs.update(top=timeseries_bottom - self.timeseries_phase_hspace*0.5)
 
         for k in range(num_planet_rows):
             # Nested gridspec objects. One for each row of the phased plots. 
             # See https://stackoverflow.com/questions/31484273/spacing-between-some-subplots-but-not-all
             heights = [1, 0.33] # Heigh ratio between phase plot and residuals
-            sps = gridspec.GridSpecFromSubplotSpec(2, 2, subplot_spec=outer_sps[k, :], height_ratios=heights, hspace=0.05)
+            sps = gridspec.GridSpecFromSubplotSpec(2, 2, subplot_spec=outer_gs[k, :], height_ratios=heights, hspace=0.05)
 
             # Figure out how many columns in this row
             planets_left = self.toi.n_transiting - 2 * k
