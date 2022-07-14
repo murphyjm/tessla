@@ -330,9 +330,61 @@ def plot_svalue_gp_corner(toi, df_derived_chains, overwrite=False):
         svalue_gp_corner = TesslaCornerPlot(toi, noise_labels, svalue_gp_chains, toi.name + " RV-$S_\mathrm{HK}$ GP hyperparameters")
         svalue_gp_corner.plot(save_fname=f"{toi.name.replace(' ', '_')}_rv_svalue_gp_corner_plot", overwrite=overwrite)
 
+    elif toi.svalue_gp_kernel == 'activity':
+        
+        # GP amplitudes for each RV instrument
+        # Rotation term
+        noise_labels = [f'$\eta_{{\mathrm{{GP,\:rot,\:RV,\:}}\mathrm{{{tel}}}}}$ [m s$^{{-1}}$]' for tel in toi.rv_inst_names]
+        chains = [df_derived_chains[f'sigma_rv_gp_rot_{tel}'] for tel in toi.rv_inst_names]
+        # Exp decay term
+        noise_labels += [f'$\eta_{{\mathrm{{GP,\:dec,\:RV,\:}}\mathrm{{{tel}}}}}$ [m s$^{{-1}}$]' for tel in toi.rv_inst_names]
+        chains += [np.exp(df_derived_chains[f'log_sigma_rv_gp_dec_{tel}']) for tel in toi.rv_inst_names]
+        
+        # GP amplitudes and jitter for each Svalue instrument
+        # Rotation term
+        noise_labels += [f'$\eta_{{\mathrm{{GP,\:rot,\:S_{{HK}},\:}}\mathrm{{{tel}}}}}$ [dex]' for tel in toi.svalue_inst_names]
+        chains += [df_derived_chains[f'sigma_svalue_gp_rot_{tel}'] for tel in toi.svalue_inst_names]
+        # Exp decay term
+        noise_labels += [f'$\eta_{{\mathrm{{GP,\:dec,\:S_{{HK}},\:}}\mathrm{{{tel}}}}}$ [dex]' for tel in toi.svalue_inst_names]
+        chains += [df_derived_chains[f'log_sigma_svalue_gp_dec_{tel}'] for tel in toi.svalue_inst_names]
+
+        # Svalue jitter and mean
+        noise_labels += ['$\sigma_{S_\mathrm{HK}}$ [dex]']
+        chains += [np.exp(df_derived_chains['log_jitter_svalue_HIRES'])]
+        noise_labels += ['$\mu_{S_\mathrm{HK}}$ [dex]']
+        chains += [df_derived_chains['gp_svalue_mean']]
+
+        # Kernel-specific hyperparameters
+        # Rotation
+        noise_labels += [  
+            r'$P_\mathrm{rot}$ [d]',
+            r'$Q_{0,\:S_\mathrm{HK}}$',
+            r'$dQ_{S_\mathrm{HK}}$',
+            r'$f_{S_\mathrm{HK}}$',
+        ]
+        chains += [
+            df_derived_chains['prot_rv_svalue_gp'],
+            np.exp(df_derived_chains['log_Q0_rv_svalue_gp']),
+            np.exp(df_derived_chains['log_dQ_rv_svalue_gp']),
+            df_derived_chains['f_rv_svalue_gp']
+        ]
+
+        # Kernel-specific hyperparameters
+        # Exp decay
+        noise_labels += [  
+            r'$\rho_{S_\mathrm{HK}}$ [d]',
+        ]
+        chains += [
+            np.exp(df_derived_chains['log_rho_rv_svalue_gp']),
+        ]
+        
+        svalue_gp_chains = np.vstack(chains).T
+        svalue_gp_corner = TesslaCornerPlot(toi, noise_labels, svalue_gp_chains, toi.name + " RV-$S_\mathrm{HK}$ GP hyperparameters")
+        svalue_gp_corner.plot(save_fname=f"{toi.name.replace(' ', '_')}_rv_svalue_gp_corner_plot", overwrite=overwrite)
+
     else:
         # TODO: Fix? Or just leave it like this and people can make corner plots on their own if they use a different kernel.
-        print("NOTE: Right now automated corner plot generation only works if svalue_gp_kernel == 'exp_decay' or  svalue_gp_kernel == 'rotation'.")
+        print("NOTE: Right now automated corner plot generation only works if svalue_gp_kernel == 'exp_decay' or  svalue_gp_kernel == 'rotation' or svalue_gp_kernel == 'activity'.")
 
 def plot_phot_only_corners(toi, df_derived_chains, overwrite=False):
     '''
