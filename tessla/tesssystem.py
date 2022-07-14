@@ -1326,22 +1326,28 @@ class TessSystem:
             except KeyError:
                 continue
             if num_dim > 1 and param != 'u' and param != 'gamma_rv' and param != 'log_sigma_rv' and param != 'trend_rv' and param != 'log_jitter_svalue':
-                msg = "Chains and number of planets have shape mismatch."
-                ind = 0
                 if param == 'ecs':
-                    ind = 1
-                for i, pl_letter in enumerate(self.transiting_planets.keys()):
-                    prefix = ''
-                    try:
-                        df_chains[f"{prefix}{param}_{pl_letter}"] = flat_samps[f"{prefix}{param}"][i, :].data
-                    except ValueError:
-                        continue
-                for i, pl_letter in enumerate(self.nontransiting_planets.keys()):
-                    prefix = 'nontrans_'
-                    try:
-                        df_chains[f"{prefix}{param}_{pl_letter}"] = flat_samps[f"{prefix}{param}"][i, :].data
-                    except (KeyError, ValueError):
-                        continue
+                    for i, pl_letter in enumerate(self.transiting_planets.keys()):
+                        prefix = ''
+                        df_chains[f"{prefix}ecs_0_{pl_letter}"] = flat_samps[f"{prefix}{param}"][0, i, :].data
+                        df_chains[f"{prefix}ecs_1_{pl_letter}"] = flat_samps[f"{prefix}{param}"][1, i, :].data
+                    for i, pl_letter in enumerate(self.nontransiting_planets.keys()):
+                        prefix = 'nontrans_'
+                        df_chains[f"{prefix}ecs_0_{pl_letter}"] = flat_samps[f"{prefix}{param}"][0, i, :].data
+                        df_chains[f"{prefix}ecs_1_{pl_letter}"] = flat_samps[f"{prefix}{param}"][1, i, :].data
+                else:
+                    for i, pl_letter in enumerate(self.transiting_planets.keys()):
+                        prefix = ''
+                        try:
+                            df_chains[f"{prefix}{param}_{pl_letter}"] = flat_samps[f"{prefix}{param}"][i, :].data
+                        except ValueError:
+                            continue
+                    for i, pl_letter in enumerate(self.nontransiting_planets.keys()):
+                        prefix = 'nontrans_'
+                        try:
+                            df_chains[f"{prefix}{param}_{pl_letter}"] = flat_samps[f"{prefix}{param}"][i, :].data
+                        except ValueError:
+                            continue
             elif param == 'u':
                 for i in range(flat_samps[param].shape[0]):
                     df_chains[f"u_{i}"] = flat_samps[param][i, :].data
