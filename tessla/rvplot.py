@@ -67,6 +67,7 @@ class RVPlot:
                 df_summary_fname=None,
                 tel_marker_mapper=None,
                 rms_yscale_phase_folded_panels=True,
+                rms_yscale_phase_folded_panels_scale=3,
                 param_fontsize=14, # Fontsize for annotating the phase folded plots
                 timeseries_phase_hspace=0.04,
                 ) -> None:
@@ -91,6 +92,7 @@ class RVPlot:
             self.tel_marker_mapper = tel_marker_mapper
         
         self.rms_yscale_phase_folded_panels = rms_yscale_phase_folded_panels # If true, set the Y axis limits for the phase-folded panels based on the residuals rms.
+        self.rms_yscale_phase_folded_panels_scale = rms_yscale_phase_folded_panels_scale
         self.param_fontsize = param_fontsize
         self.timeseries_phase_hspace = timeseries_phase_hspace
 
@@ -515,14 +517,17 @@ class RVPlot:
                 y_phase_min = np.min([min(ax.get_ylim()) for ax in axes])
                 y_phase_lim = (y_phase_min, y_phase_max)
                 if k == 0 and self.rms_yscale_phase_folded_panels:
-                    y_phase_lim = (-3 * np.std(residuals), 3 * np.std(residuals))
+                    limit = self.rms_yscale_phase_folded_panels * np.std(residuals)
+                    if limit < kamp_planet_b: # HACK
+                        limit = kamp_planet_b * 1.5
+                    y_phase_lim = (-limit, limit)
                 for i in range(len(axes)):
                     axes[i].set_ylim(y_phase_lim)
         elif self.rms_yscale_phase_folded_panels: # HACK
             for k, ax in enumerate(phase_folded_axes):
                 kamp_current_planet = kamps_all_planets[k]
                 if kamp_current_planet < 10:
-                    y_phase_lim = (-5 * kamp_current_planet, 5 * kamp_current_planet)
+                    y_phase_lim = (-self.rms_yscale_phase_folded_panels * np.std(residuals), self.rms_yscale_phase_folded_panels * np.std(residuals))
                     ax.set_ylim(y_phase_lim)
         
         fig.align_ylabels()
