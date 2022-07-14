@@ -58,7 +58,7 @@ class RVPlot:
     '''
     def __init__(self, 
                 toi,
-                figsize=(12,14),
+                figwidth=12,
                 ylabelpad=10,
                 plot_random_orbit_draws=False, # If true, plot random realizations of the phase-folded RV curve using the posteriors of the model fit.
                 num_random_orbit_draws=25, # Number of random draws to plot.
@@ -67,11 +67,13 @@ class RVPlot:
                 df_summary_fname=None,
                 tel_marker_mapper=None,
                 rms_yscale_phase_folded_panels=True,
-                param_fontsize=14 # Fontsize for annotating the phase folded plots
+                rms_yscale_phase_folded_panels_scale=3,
+                param_fontsize=14, # Fontsize for annotating the phase folded plots
+                timeseries_phase_hspace=0.04,
                 ) -> None:
     
         self.toi = toi
-        self.figsize = figsize
+        self.figwidth = figwidth
         self.ylabelpad = ylabelpad
         self.plot_random_orbit_draws = plot_random_orbit_draws
         self.num_random_orbit_draws = num_random_orbit_draws
@@ -90,7 +92,9 @@ class RVPlot:
             self.tel_marker_mapper = tel_marker_mapper
         
         self.rms_yscale_phase_folded_panels = rms_yscale_phase_folded_panels # If true, set the Y axis limits for the phase-folded panels based on the residuals rms.
+        self.rms_yscale_phase_folded_panels_scale = rms_yscale_phase_folded_panels_scale
         self.param_fontsize = param_fontsize
+        self.timeseries_phase_hspace = timeseries_phase_hspace
 
     def plot(self, save_fname=None, overwrite=False, save_and_close=True, return_fig_obj=False):
         '''
@@ -177,17 +181,22 @@ class RVPlot:
     def __rv_plot(self):
         '''
         '''
+        figheight = 14 # Default fig height
+        timeseries_height = 3 * figheight / 5
+        num_planet_rows = ceil(self.toi.n_transiting / 2)
+        planet_row_height = 2 * figheight / 5
+        if num_planet_rows > 1:
+            figheight = figheight + (num_planet_rows - 1) * planet_row_height
 
         # Create the figure object
-        fig = plt.figure(figsize=self.figsize)
+        fig = plt.figure(figsize=(self.figwidth, figheight))
 
-        # Create the GridSpec objects
-        height_ratios = [1, 0.66]
-        if self.toi.n_planets > 2:
-            height_ratios = [1, 1]
-        gs0, gs1 = gridspec.GridSpec(2, 1, figure=fig, height_ratios=height_ratios)
+        # Create the GridSpec objects for the timeseries panel and its residuals
         heights = [1, 0.25]
-        sps1, sps2 = gridspec.GridSpecFromSubplotSpec(2, 1, subplot_spec=gs0, height_ratios=heights, hspace=0.05)
+        gs0 = gridspec.GridSpec(2, 1, figure=fig, height_ratios=heights, hspace=0.05)
+        timeseries_bottom = 1 - timeseries_height / figheight
+        gs0.update(bottom=timeseries_bottom + self.timeseries_phase_hspace*0.5)
+        sps1, sps2 = gs0
         
         ################################################################################################
         ############################### TOP PANEL: RVs and full RV model ###############################
@@ -279,12 +288,12 @@ class RVPlot:
         ################################################################################################
         ############################ PHASE-FOLDED TRANSIT AND RESIDUALS ################################
         ################################################################################################
-        fig = self.__plot_phase_folded_orbits(fig, gs1)
+        fig = self.__plot_phase_folded_orbits(fig, timeseries_bottom)
         
         fig.align_ylabels()
         return fig
 
-    def __plot_phase_folded_orbits(self, fig, gs1):
+    def __plot_phase_folded_orbits(self, fig, timeseries_bottom):
         '''
         Plot the folded transits for each planet.
         '''
@@ -302,13 +311,14 @@ class RVPlot:
         
         # Set up the outer gridspec
         num_planet_rows = ceil(self.toi.n_planets / 2)
-        outer_sps = gridspec.GridSpecFromSubplotSpec(num_planet_rows, 2, subplot_spec=gs1, hspace=0.3)
+        outer_gs = gridspec.GridSpec(num_planet_rows, 2, figure=fig, hspace=0.2)
+        outer_gs.update(top=timeseries_bottom - self.timeseries_phase_hspace*0.5)
 
         for k in range(num_planet_rows):
             # Nested gridspec objects. One for each row of the phased plots. 
             # See https://stackoverflow.com/questions/31484273/spacing-between-some-subplots-but-not-all
             heights = [1, 0.25] # Heigh ratio between phase plot and residuals
-            sps = gridspec.GridSpecFromSubplotSpec(2, 2, subplot_spec=outer_sps[k, :], height_ratios=heights, hspace=0.05)
+            sps = gridspec.GridSpecFromSubplotSpec(2, 2, subplot_spec=outer_gs[k, :], height_ratios=heights, hspace=0.05)
 
             # Figure out how many columns in this row
             planets_left = self.toi.n_planets - 2 * k
@@ -507,14 +517,17 @@ class RVPlot:
                 y_phase_min = np.min([min(ax.get_ylim()) for ax in axes])
                 y_phase_lim = (y_phase_min, y_phase_max)
                 if k == 0 and self.rms_yscale_phase_folded_panels:
-                    y_phase_lim = (-3 * np.std(residuals), 3 * np.std(residuals))
+                    limit = self.rms_yscale_phase_folded_panels * np.std(residuals)
+                    if limit < kamp_planet_b: # HACK
+                        limit = kamp_planet_b * 1.5
+                    y_phase_lim = (-limit, limit)
                 for i in range(len(axes)):
                     axes[i].set_ylim(y_phase_lim)
         elif self.rms_yscale_phase_folded_panels: # HACK
             for k, ax in enumerate(phase_folded_axes):
                 kamp_current_planet = kamps_all_planets[k]
                 if kamp_current_planet < 10:
-                    y_phase_lim = (-5 * kamp_current_planet, 5 * kamp_current_planet)
+                    y_phase_lim = (-self.rms_yscale_phase_folded_panels * np.std(residuals), self.rms_yscale_phase_folded_panels * np.std(residuals))
                     ax.set_ylim(y_phase_lim)
         
         fig.align_ylabels()
