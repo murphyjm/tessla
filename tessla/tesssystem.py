@@ -1380,7 +1380,7 @@ class TessSystem:
             
         df_chains.to_csv(chains_output_fname, index=False, compression="gzip")
 
-    def run_sampling(self, model, map_soln, tune=6000, draws=4000, chains=8, cores=None, init_method='adapt_full', output_fname_suffix='', overwrite=False):
+    def run_sampling(self, model, map_soln, tune=6000, draws=4000, chains=8, cores=None, init_method='adapt_full', target_accept=0.9, output_fname_suffix='', overwrite=False):
         '''
         Run the HMC sampling.
         '''
@@ -1418,7 +1418,8 @@ class TessSystem:
                             chains=chains,
                             cores=cores,
                             return_inferencedata=True,
-                            init=init_method
+                            init=init_method,
+                            target_accept=target_accept
             )
         
         # Save the trace summary which contains convergence information
