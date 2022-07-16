@@ -650,8 +650,12 @@ class ThreePanelPhotPlot:
                             # If a joint model, parameterized in terms of stellar density and ecc and omega directly
                             rstar = chains["rstar"].values[ind]
                             mstar = chains["mstar"].values[ind]
-                            ecc = chains[f"ecc_{planet.pl_letter}"].values[ind]
-                            omega = chains[f"omega_{planet.pl_letter}"].values[ind]
+                            if self.toi.force_circular_orbits_for_transiting_planets:
+                                ecc = None
+                                omega = None
+                            else:
+                                ecc = chains[f"ecc_{planet.pl_letter}"].values[ind]
+                                omega = chains[f"omega_{planet.pl_letter}"].values[ind]
                             orbit = xo.orbits.KeplerianOrbit(r_star=rstar, m_star=mstar, period=period, t0=t0, b=b, ecc=ecc, omega=omega)
 
                         # Light curves
