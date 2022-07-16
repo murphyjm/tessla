@@ -69,7 +69,7 @@ class RVPlot:
                 rms_yscale_phase_folded_panels=True,
                 rms_yscale_phase_folded_panels_scale=3,
                 param_fontsize=14, # Fontsize for annotating the phase folded plots
-                timeseries_phase_hspace=0.04,
+                timeseries_phase_hspace=0.05,
                 ) -> None:
     
         self.toi = toi

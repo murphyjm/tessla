@@ -53,7 +53,7 @@ class ThreePanelPhotPlot:
                 data_uncert_label_rms_yscale_multiplier=-3,
                 sector_marker_fontsize=12,
                 param_fontsize=14,
-                timeseries_phase_hspace=0.04,
+                timeseries_phase_hspace=0.05,
                 ) -> None:
         
         self.toi = toi
