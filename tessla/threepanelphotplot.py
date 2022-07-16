@@ -248,9 +248,13 @@ class ThreePanelPhotPlot:
         break_inds = find_breaks(self.x, diff_threshold=self.data_gap_thresh, verbose=self.toi.verbose)
         
         figheight = 14 # Default fig height
-        timeseries_height = 3 * figheight / 5
         num_planet_rows = ceil(self.toi.n_transiting / 2)
-        planet_row_height = 2 * figheight / 5
+        if num_planet_rows > 1:
+            timeseries_height = 2 * figheight / 3
+            planet_row_height = 1 * figheight / 3
+        else:
+            timeseries_height = 3 * figheight / 5
+            planet_row_height = 2 * figheight / 5
         if num_planet_rows > 1:
             figheight = figheight + (num_planet_rows - 1) * planet_row_height
 
@@ -447,9 +451,13 @@ class ThreePanelPhotPlot:
         Make a three panel plot but don't have to worry about breaks in the axis. E.g. if there's only one sector of photometry or all sectors are consecutive.
         '''
         figheight = 14 # Default fig height
-        timeseries_height = 3 * figheight / 5
         num_planet_rows = ceil(self.toi.n_transiting / 2)
-        planet_row_height = 2 * figheight / 5
+        if num_planet_rows > 1:
+            timeseries_height = 2 * figheight / 3
+            planet_row_height = 1 * figheight / 3
+        else:
+            timeseries_height = 3 * figheight / 5
+            planet_row_height = 2 * figheight / 5
         if num_planet_rows > 1:
             figheight = figheight + (num_planet_rows - 1) * planet_row_height
 
