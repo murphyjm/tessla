@@ -1382,7 +1382,7 @@ class TessSystem:
             
         df_chains.to_csv(chains_output_fname, index=False, compression="gzip")
 
-    def run_sampling(self, model, map_soln, start=None, tune=6000, draws=4000, chains=8, cores=None, init_method='adapt_full', target_accept=0.9, step_kwargs={}, output_fname_suffix='', overwrite=False):
+    def run_sampling(self, model, map_soln, start=None, tune=6000, draws=4000, chains=8, cores=None, init_method='adapt_full', target_accept=0.9, return_trace=False, step_kwargs={}, output_fname_suffix='', overwrite=False):
         '''
         Run the HMC sampling.
         '''
@@ -1444,7 +1444,10 @@ class TessSystem:
         self.__flat_samps_to_csv(model, flat_samps, chains_output_fname)     
         self.chains_path = chains_output_fname   
 
-        return flat_samps
+        if return_trace:
+            return flat_samps, trace
+        else:
+            return flat_samps
 
     def add_ecc_and_omega_to_chains(self, flat_samps, rho_circ_param_name='rho_circ'):
         '''
