@@ -183,7 +183,7 @@ class RVPlot:
         '''
         figheight = 14 # Default fig height
         timeseries_height = 3 * figheight / 5
-        num_planet_rows = ceil(self.toi.n_transiting / 2)
+        num_planet_rows = ceil(self.toi.n_planets / 2)
         planet_row_height = 2 * figheight / 5
         if num_planet_rows > 1:
             figheight = figheight + (num_planet_rows - 1) * planet_row_height
