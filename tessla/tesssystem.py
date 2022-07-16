@@ -977,7 +977,7 @@ class TessSystem:
                 gamma_rv_list.append(np.median(self.rv_df.loc[mask, 'mnvel']))
             gamma_rv = pm.Uniform("gamma_rv", lower=-50, upper=50, shape=self.num_rv_inst)
             
-            BoundedNormalSigmaRV = pm.Bound(pm.Normal, lower=np.log(0.1), upper=np.log(20))
+            BoundedNormalSigmaRV = pm.Bound(pm.Normal, lower=np.log(0.1), upper=np.log(10))
             log_sigma_rv_mu = np.empty(len(self.rv_inst_names))
             for i, tel in enumerate(self.rv_inst_names):
                 tel_mask = self.rv_df['tel'].values == tel
@@ -1120,8 +1120,10 @@ class TessSystem:
                         kernel_rv = terms.SHOTerm(sigma=tt.exp(log_sigma_rv_gp), rho=tt.exp(log_rho_rv_svalue_gp), tau=tt.exp(log_tau_rv_svalue_gp))
                     
                     elif self.svalue_gp_kernel == 'activity':
-                        sigma_rv_gp_rot = pm.InverseGamma(f"sigma_rv_gp_rot_{tel}", **pmx.estimate_inverse_gamma_parameters(1, 5))
-                        gp_rv_svalue_params += [sigma_rv_gp_rot]
+                        # sigma_rv_gp_rot = pm.InverseGamma(f"sigma_rv_gp_rot_{tel}", **pmx.estimate_inverse_gamma_parameters(1, 5))
+                        log_sigma_rv_gp_rot = pm.Normal(f"log_sigma_rv_gp_rot_{tel}", mu=0., sigma=10)
+                        sigma_rv_gp_rot = pm.Deterministic(f"sigma_rv_gp_rot_{tel}", tt.exp(log_sigma_rv_gp_rot))
+                        gp_rv_svalue_params += [log_sigma_rv_gp_rot]
                         kernel_rv = terms.RotationTerm(sigma=sigma_rv_gp_rot, period=prot_rv_svalue_gp, Q0=tt.exp(log_Q0_rv_svalue_gp), dQ=tt.exp(log_dQ_rv_svalue_gp), f=f_rv_svalue_gp)
 
                         log_sigma_rv_gp_dec = pm.Normal(f"log_sigma_rv_gp_dec_{tel}", mu=0., sigma=10) # Different amplitude for each instrument.
@@ -1380,7 +1382,7 @@ class TessSystem:
             
         df_chains.to_csv(chains_output_fname, index=False, compression="gzip")
 
-    def run_sampling(self, model, map_soln, tune=6000, draws=4000, chains=8, cores=None, init_method='adapt_full', target_accept=0.9, output_fname_suffix='', overwrite=False):
+    def run_sampling(self, model, map_soln, start=None, tune=6000, draws=4000, chains=8, cores=None, init_method='adapt_full', target_accept=0.9, step_kwargs={}, output_fname_suffix='', overwrite=False):
         '''
         Run the HMC sampling.
         '''
@@ -1409,22 +1411,31 @@ class TessSystem:
 
         if cores is None:
             cores = chains
+
+        # Optionally include a starting point that overrides using the map solution
+        if start is None:
+            start = map_soln
         
         with model:
             trace = pmx.sample(
                             tune=tune,
                             draws=draws,
-                            start=map_soln,
+                            start=start,
                             chains=chains,
                             cores=cores,
                             return_inferencedata=True,
                             init=init_method,
-                            target_accept=target_accept
+                            target_accept=target_accept,
+                            step_kwargs=step_kwargs
             )
         
         # Save the trace summary which contains convergence information
         summary_df = az.summary(trace, round_to=5)
         summary_df.to_csv(trace_summary_output_fname)
+
+        # Save the trace object.
+        with open(os.path.join(self.sampling_dir, f"{self.name.replace(' ', '_')}_trace_obj.pkl"), "wb") as trace_fname:
+            pickle.dump(trace, trace_fname, protocol=pickle.HIGHEST_PROTOCOL)
 
         # Save the concatenated samples.
         flat_samps =  trace.posterior.stack(sample=("chain", "draw"))

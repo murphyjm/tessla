@@ -748,13 +748,23 @@ class ThreePanelPhotPlot:
                 # Move on to the next planet!
                 planet_ind += 1
         
-        # Make the y-axes range the same for all of the phase-folded transit plots
-        for axes in [phase_folded_axes, phase_folded_resid_axes]:
-            y_phase_max = np.max([max(ax.get_ylim()) for ax in axes])
-            y_phase_min = np.min([min(ax.get_ylim()) for ax in axes])
-            y_phase_lim = (y_phase_min, y_phase_max)
-            for i in range(len(axes)):
-                axes[i].set_ylim(y_phase_lim)
+        # Make the y-axes range the same for all of the phase-folded transit plots *IF* the transit depths are similar.
+        depth_planet_b = self.toi.planets['b'].depth # ppt
+        depths_all_planets = np.array([planet.depth for planet in self.toi.planets.values()])
+        depths_all_planets_minus_b = np.abs(depths_all_planets - depth_planet_b)
+        if all(depths_all_planets_minus_b < 1.0):
+            for axes in [phase_folded_axes, phase_folded_resid_axes]:
+                y_phase_max = np.max([max(ax.get_ylim()) for ax in axes])
+                y_phase_min = np.min([min(ax.get_ylim()) for ax in axes])
+                y_phase_lim = (y_phase_min, y_phase_max)
+                for i in range(len(axes)):
+                    axes[i].set_ylim(y_phase_lim)
+        else:
+            for axes in [phase_folded_axes, phase_folded_resid_axes]:
+                for i in range(len(axes)):
+                    y_phase_lim = (-1.5 * depths_all_planets[i], 1.5 * depths_all_planets[i]) # HACK
+                    axes[i].set_ylim(y_phase_lim)
+
         
         fig.align_ylabels()
 
