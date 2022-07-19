@@ -376,7 +376,10 @@ class ThreePanelPhotPlot:
         bax3.axhline(0, color="#aaaaaa", lw=1)
         for ax in bax3.axs[1:]:
             ax.tick_params(axis='y', label1On=False) # Avoid y-axis labels popping up.
-        self.residuals = residuals.value # Save these
+        try:
+            self.residuals = residuals.value # Save these
+        except AttributeError:
+            self.residuals = residuals
 
         # Plot housekeeping
         bax3.set_ylabel("Residuals", fontsize=14, labelpad=self.ylabelpad)
