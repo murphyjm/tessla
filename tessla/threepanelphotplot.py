@@ -255,6 +255,7 @@ class ThreePanelPhotPlot:
         else:
             timeseries_height = 3 * figheight / 5
             planet_row_height = 2 * figheight / 5
+            self.timeseries_phase_hspace = 0.07
         if num_planet_rows > 1:
             figheight = figheight + (num_planet_rows - 1) * planet_row_height
 
@@ -461,6 +462,7 @@ class ThreePanelPhotPlot:
         else:
             timeseries_height = 3 * figheight / 5
             planet_row_height = 2 * figheight / 5
+            self.timeseries_phase_hspace = 0.07
         if num_planet_rows > 1:
             figheight = figheight + (num_planet_rows - 1) * planet_row_height
 

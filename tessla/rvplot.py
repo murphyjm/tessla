@@ -187,6 +187,8 @@ class RVPlot:
         planet_row_height = 2 * figheight / 5
         if num_planet_rows > 1:
             figheight = figheight + (num_planet_rows - 1) * planet_row_height
+        else:
+            self.timeseries_phase_hspace = 0.07
 
         # Create the figure object
         fig = plt.figure(figsize=(self.figwidth, figheight))
