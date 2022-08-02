@@ -132,7 +132,8 @@ class TessSystem:
 
             # Read in the RV data from file.
             rv_df = pd.read_csv(self.rv_data_path, comment='#')
-            rv_df = rv_df.rename(columns={'time':'date', 'bjd':'time'})
+            if 'bjd' in rv_df.columns.tolist():
+                rv_df = rv_df.rename(columns={'time':'date', 'bjd':'time'})
             cols = rv_df.columns.tolist()
             msg = 'RV .csv file must have the following columns: ["time", "mnvel", "errvel", "tel"], where "mnvel" and "errvel" are in m/s.'
             assert all([col in cols for col in ['time', 'mnvel', 'errvel', 'tel']]), msg
