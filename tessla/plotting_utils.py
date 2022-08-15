@@ -40,7 +40,7 @@ def sg_smoothing_plot(toi, legend_outside=True):
         if legend_outside:
             ax.legend(fontsize=10, bbox_to_anchor=[1,1])
         else:
-            ax.legend(fontsize=10, loc='upper left')
+            ax.legend(fontsize=8, loc='upper left')
         ax.set_xlabel(f'Time [BJD - {toi.bjd_ref:.1f}]')
         ax.set_ylabel(f'Relative flux [ppt]')
         
