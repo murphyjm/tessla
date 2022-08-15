@@ -10,7 +10,7 @@ from astropy.time import Time
 
 from tessla.tesslacornerplot import TesslaCornerPlot
 
-def sg_smoothing_plot(toi):
+def sg_smoothing_plot(toi, legend_outside=True):
     '''
     Make a sector-by-sector plot of the light curve and initial SG filter smoothing/outlier rejection.
     '''
@@ -37,7 +37,10 @@ def sg_smoothing_plot(toi):
         sg_outlier_mask_inv = ~toi.sg_outlier_mask & sector_mask
         ax.plot(toi.lc.time[sg_outlier_mask_inv].value, toi.lc.norm_flux[sg_outlier_mask_inv], 'xr', label="Discarded outliers")
 
-        ax.legend(fontsize=10, bbox_to_anchor=[1,1])
+        if legend_outside:
+            ax.legend(fontsize=10, bbox_to_anchor=[1,1])
+        else:
+            ax.legend(fontsize=10, loc='upper left')
         ax.set_xlabel(f'Time [BJD - {toi.bjd_ref:.1f}]')
         ax.set_ylabel(f'Relative flux [ppt]')
         
