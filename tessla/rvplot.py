@@ -49,6 +49,11 @@ DEFAULT_MARKER_MAPPER = {
         'color':'green',
         'marker':'d',
         'label':'APF'
+    },
+    'HARPS-N':{
+        'color':'red',
+        'marker':'^',
+        'label':'HARPS-N'
     }
 }
 

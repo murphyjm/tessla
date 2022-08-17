@@ -608,9 +608,9 @@ class ThreePanelPhotPlot:
             for planet in list(self.toi.transiting_planets.values())[planet_start_ind:planet_end_ind]:
                 
                 # Get the correct column.
-                if planet_ind % 2 == 0 and planet_ind < self.toi.n_planets - 1:
+                if planet_ind % 2 == 0 and planet_ind < self.toi.n_transiting - 1:
                     planet_col_ind = 0
-                elif planet_ind % 2 == 0 and planet_ind == self.toi.n_planets - 1:
+                elif planet_ind % 2 == 0 and planet_ind == self.toi.n_transiting - 1:
                     planet_col_ind = slice(None)
                 else:
                     planet_col_ind = 1
@@ -767,7 +767,7 @@ class ThreePanelPhotPlot:
         
         # Make the y-axes range the same for all of the phase-folded transit plots *IF* the transit depths are similar.
         depth_planet_b = self.toi.planets['b'].depth # ppt
-        depths_all_planets = np.array([planet.depth for planet in self.toi.planets.values()])
+        depths_all_planets = np.array([planet.depth for planet in self.toi.transiting_planets.values()])
         depths_all_planets_minus_b = np.abs(depths_all_planets - depth_planet_b)
         if all(depths_all_planets_minus_b < 1.0):
             for axes in [phase_folded_axes, phase_folded_resid_axes]:
