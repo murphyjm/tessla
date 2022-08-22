@@ -978,7 +978,7 @@ class TessSystem:
                 gamma_rv_list.append(np.median(self.rv_df.loc[mask, 'mnvel']))
             gamma_rv = pm.Uniform("gamma_rv", lower=-50, upper=50, shape=self.num_rv_inst)
             
-            BoundedNormalSigmaRV = pm.Bound(pm.Normal, lower=np.log(0.1), upper=np.log(10))
+            BoundedNormalSigmaRV = pm.Bound(pm.Normal, lower=np.log(0.1), upper=np.log(20))
             log_sigma_rv_mu = np.empty(len(self.rv_inst_names))
             for i, tel in enumerate(self.rv_inst_names):
                 tel_mask = self.rv_df['tel'].values == tel
