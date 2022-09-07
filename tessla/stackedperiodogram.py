@@ -51,7 +51,7 @@ class StackedPeriodogram:
         '''
         minimum_frequency = 1 / self.max_period # 1/day
         maximum_frequency = 1 / self.min_period # 1/day
-        ls = LombScargle(x, y, yerr)
+        ls = LombScargle(x, y, yerr) # By default, this is the generalized LS periodogram, since fit_mean=True by default.
         freq, power = ls.autopower(minimum_frequency=minimum_frequency, 
                                 maximum_frequency=maximum_frequency, 
                                 samples_per_peak=self.samples_per_peak) # Set max sampled frequency to 1 day
@@ -199,7 +199,7 @@ class StackedPeriodogram:
                 ax[j].axvline(self.toi.prot/2, color='cornflowerblue', lw=5, alpha=0.5)
 
         # Y-axis label
-        fig.supylabel('LS Power', fontsize=22)
+        fig.supylabel('GLS Power', fontsize=22)
         # X-axis label
         ax[i].set_xlabel('Period [days]', fontsize=22)
 
