@@ -22,7 +22,9 @@ class StackedPeriodogram:
                 faps=[0.01],
                 plot_faps=True,       # If true, plot the lines of FAP listed in the faps argument. Does not do this for the photometry periodogram by default, 
                 plot_phot_faps=False, # unless plot_phot_faps is True.
-                fap_ls=['-', '--', ':', '-.'],
+                fap_ls=[':', '-.', '--', '-'],
+                plot_phot_vert_line=True,
+                label_fontsize=None,
                 title='',
                 figsize=(14,6),
                 save_format='.png',
@@ -37,6 +39,13 @@ class StackedPeriodogram:
         self.plot_phot_faps = plot_phot_faps
         self.fap_ls = fap_ls # Can use at most 4 FAP values
         assert len(faps) <= 4, "Can only specify at most 4 FAP values for now."
+
+        self.plot_phot_vert_line = plot_phot_vert_line # If False, don't plot the vertical lines for the period with max power in the photometry and its first harmonic
+        
+        if label_fontsize is None and (self.toi.n_planets > 1 or self.toi.include_svalue_g):
+                self.label_fontsize = 12
+        else:
+            self.label_fontsize = 16
 
         # For a 1 planet system there should 5 periodograms:
         # 1. Photometry, 2. RVs with offsets applied, trend/curvature removed 3. RV residuals, 4. S-Values, 5. RV Window Function
@@ -114,7 +123,7 @@ class StackedPeriodogram:
             phot_str += "SAP Flux"
         elif self.toi.flux_origin == 'pdcsap_flux':
             phot_str += "PDCSAP Flux"
-        text = ax[i].text(xtext, ytext, phot_str, transform=ax[i].transAxes, ha='right')
+        text = ax[i].text(xtext, ytext, phot_str, transform=ax[i].transAxes, ha='right', fontsize=self.label_fontsize)
         text.set_bbox(dict(facecolor='white', alpha=0.8, edgecolor='none'))
         i += 1
 
@@ -135,7 +144,7 @@ class StackedPeriodogram:
         rv_str = 'RVs - offsets'
         if self.toi.rv_trend:
             rv_str += ' - trend'
-        text = ax[i].text(xtext, ytext, rv_str, transform=ax[i].transAxes, ha='right')
+        text = ax[i].text(xtext, ytext, rv_str, transform=ax[i].transAxes, ha='right', fontsize=self.label_fontsize)
         text.set_bbox(dict(facecolor='white', alpha=0.8, edgecolor='none'))
         i += 1
         
@@ -155,7 +164,7 @@ class StackedPeriodogram:
                 for k in range(len(faps)):
                     ax[i].axhline(faps[k], ls=self.fap_ls[k])
             rv_str += ' - GP'
-            text = ax[i].text(xtext, ytext, rv_str, transform=ax[i].transAxes, ha='right')
+            text = ax[i].text(xtext, ytext, rv_str, transform=ax[i].transAxes, ha='right', fontsize=self.label_fontsize)
             text.set_bbox(dict(facecolor='white', alpha=0.8, edgecolor='none'))
             i += 1
 
@@ -176,7 +185,7 @@ class StackedPeriodogram:
                 for k in range(len(faps)):
                     ax[i].axhline(faps[k], ls=self.fap_ls[k])
             rv_str += f' - Planet {planet_values_list[planet_ind].pl_letter}'
-            text = ax[i].text(xtext, ytext, rv_str, transform=ax[i].transAxes, ha='right')
+            text = ax[i].text(xtext, ytext, rv_str, transform=ax[i].transAxes, ha='right', fontsize=self.label_fontsize)
             text.set_bbox(dict(facecolor='white', alpha=0.8, edgecolor='none'))
             i += 1
         
@@ -189,7 +198,7 @@ class StackedPeriodogram:
             faps = ls.false_alarm_level(self.faps)
             for k in range(len(faps)):
                 ax[i].axhline(faps[k], ls=self.fap_ls[k])
-        text = ax[i].text(xtext,ytext, 'S-Values', transform=ax[i].transAxes, ha='right')
+        text = ax[i].text(xtext,ytext, 'S-Values', transform=ax[i].transAxes, ha='right', fontsize=self.label_fontsize)
         text.set_bbox(dict(facecolor='white', alpha=0.8, edgecolor='none'))
         i += 1
 
@@ -200,13 +209,13 @@ class StackedPeriodogram:
         self.min_period = 1.1
         periods, power, peak_per, ls = self.__get_ls(self.toi.rv_df.time, 
                                             1, 
-                                            1e-6)
+                                            1e-4)
         ax[i].plot(periods, power, color='k')
         if self.plot_faps:
             faps = ls.false_alarm_level(self.faps)
             for k in range(len(faps)):
                 ax[i].axhline(faps[k], ls=self.fap_ls[k])
-        text = ax[i].text(xtext, ytext, 'RV Window Function', transform=ax[i].transAxes, ha='right')
+        text = ax[i].text(xtext, ytext, 'RV Window Function', transform=ax[i].transAxes, ha='right', fontsize=self.label_fontsize)
         text.set_bbox(dict(facecolor='white', alpha=0.8, edgecolor='none'))
         self.min_period = true_min_period
 
@@ -226,7 +235,7 @@ class StackedPeriodogram:
                 prot = np.exp(self.toi.map_soln[prot_var_name_str])
                 ax[j].axvline(prot, color='red', lw=5, alpha=0.5)
                 ax[j].axvline(prot/2, color='tomato', lw=5, alpha=0.5)
-            else:
+            elif self.plot_phot_vert_line:
                 # Rotation period peak from OoT photometry
                 ax[j].axvline(self.toi.prot, color='blue', lw=5, alpha=0.5)
                 ax[j].axvline(self.toi.prot/2, color='cornflowerblue', lw=5, alpha=0.5)
