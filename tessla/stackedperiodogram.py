@@ -42,7 +42,7 @@ class StackedPeriodogram:
 
         self.plot_phot_vert_line = plot_phot_vert_line # If False, don't plot the vertical lines for the period with max power in the photometry and its first harmonic
         
-        if label_fontsize is None and (self.toi.n_planets > 1 or self.toi.include_svalue_g):
+        if label_fontsize is None and (self.toi.n_planets > 1 or self.toi.include_svalue_gp):
                 self.label_fontsize = 12
         else:
             self.label_fontsize = 16
