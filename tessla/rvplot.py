@@ -287,8 +287,12 @@ class RVPlot:
 
         # Make ticks go inward and set multiple locator for x-axis
         for ax in [ax1, ax2]:
-            ax.xaxis.set_major_locator(MultipleLocator(100))
-            ax.xaxis.set_minor_locator(MultipleLocator(50))
+            if (np.max(self.toi.t_rv) - np.min(self.toi.t_rv)) > 10 * 365:
+                ax.xaxis.set_major_locator(MultipleLocator(500))
+                ax.xaxis.set_minor_locator(MultipleLocator(250))
+            else:
+                ax.xaxis.set_major_locator(MultipleLocator(100))
+                ax.xaxis.set_minor_locator(MultipleLocator(50))
             ax.tick_params(axis='y', direction='in', which='both', left=True, right=True)
             ax.tick_params(axis='x', direction='in', which='both', top=True, bottom=True)
         plt.setp(ax1.get_xticklabels(), visible=False)
@@ -523,7 +527,7 @@ class RVPlot:
                 y_phase_max = np.max([max(ax.get_ylim()) for ax in axes])
                 y_phase_min = np.min([min(ax.get_ylim()) for ax in axes])
                 y_phase_lim = (y_phase_min, y_phase_max)
-                if k == 0 and self.rms_yscale_phase_folded_panels:
+                if self.rms_yscale_phase_folded_panels:
                     limit = self.rms_yscale_phase_folded_panels_scale * np.std(residuals)
                     if limit < kamp_planet_b: # HACK
                         limit = kamp_planet_b * 1.5
