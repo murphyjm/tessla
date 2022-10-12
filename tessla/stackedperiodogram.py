@@ -241,9 +241,11 @@ class StackedPeriodogram:
                 ax[j].axvline(self.toi.prot/2, color='cornflowerblue', lw=5, alpha=0.5)
 
         # Y-axis label
-        fig.supylabel('GLS Power', fontsize=22)
+        fig.supylabel('GLS Power', fontsize=22, x=0.05)
         # X-axis label
         ax[i].set_xlabel('Period [days]', fontsize=22)
+        # Plot title
+        ax[0].set_title(self.toi.name, fontsize=22)
 
         # Plot housekeeping
         ax0 = ax[-1]
