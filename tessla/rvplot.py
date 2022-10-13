@@ -55,6 +55,11 @@ DEFAULT_MARKER_MAPPER = {
         'color':'purple',
         'marker':'^',
         'label':'HARPS-N'
+    },
+    'HARPS':{
+        'color':'deepskyblue',
+        'marker':'^',
+        'label':'HARPS'
     }
 }
 
