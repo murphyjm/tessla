@@ -1,5 +1,6 @@
 import os
 from re import I
+from tkinter import Y
 import warnings
 from tqdm import tqdm
 
@@ -156,8 +157,11 @@ class RVPlot:
         Hacky.
         '''
         yspan = np.max(residuals) - np.min(residuals)
-        major = 10
-        minor = 5
+        major = 5
+        minor = 2.5
+        if yspan >= 15 and yspan < 25:
+            major = 10
+            minor = 5
         if yspan >= 25 and yspan < 35:
             major = 15
             minor = 7.5
