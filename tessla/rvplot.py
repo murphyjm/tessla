@@ -536,7 +536,7 @@ class RVPlot:
                 y_phase_max = np.max([max(ax.get_ylim()) for ax in axes])
                 y_phase_min = np.min([min(ax.get_ylim()) for ax in axes])
                 y_phase_lim = (y_phase_min, y_phase_max)
-                if self.rms_yscale_phase_folded_panels:
+                if self.rms_yscale_phase_folded_panels and k == 0:
                     limit = self.rms_yscale_phase_folded_panels_scale * np.std(residuals)
                     if limit < kamp_planet_b: # HACK
                         limit = kamp_planet_b * 1.5
