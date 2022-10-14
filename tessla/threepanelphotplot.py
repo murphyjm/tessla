@@ -148,10 +148,13 @@ class ThreePanelPhotPlot:
         if yspan < 3:
             major = 0.75
             minor = 0.25
-        elif yspan >= 3 and yspan < 3.5:
+        elif yspan >= 3 and yspan < 4:
             major = 1
             minor = 0.5
-        elif yspan >= 3.5:
+        elif yspan >= 4 and yspan < 5:
+            major = 2
+            minor = 1
+        elif yspan >= 5:
             major = 4
             minor = 2
         return major, minor
@@ -360,6 +363,7 @@ class ThreePanelPhotPlot:
         major, minor = self.__get_ytick_spacing(np.max(self.y - gp_mod) - np.min(self.y - gp_mod))
         for ax in [ax_left, ax_right]:
             ax.yaxis.set_major_locator(MultipleLocator(major))
+            ax.yaxis.set_minor_locator(MultipleLocator(minor))
         ax_right.set_yticklabels([])
 
         ################################################################################################
@@ -390,6 +394,7 @@ class ThreePanelPhotPlot:
         major, minor = self.__get_residuals_ytick_spacing(np.max(self.residuals) - np.min(self.residuals))
         for ax in [ax_left, ax_right]:
             ax.yaxis.set_major_locator(MultipleLocator(major))
+            ax.yaxis.set_minor_locator(MultipleLocator(minor))
             bottom = -1 * np.max(ax.get_ylim())
             ax.set_ylim(bottom=bottom)
 
@@ -543,6 +548,7 @@ class ThreePanelPhotPlot:
         ax3.set_xlabel(f"Time [BJD - {self.toi.bjd_ref:.1f}]", fontsize=14)
         major, minor = self.__get_residuals_ytick_spacing(np.max(residuals) - np.min(residuals))
         ax3.yaxis.set_major_locator(MultipleLocator(major))
+        ax3.yaxis.set_minor_locator(MultipleLocator(minor))
         bottom = -1 * np.max(ax3.get_ylim())
         ax3.set_ylim(bottom=bottom)
 
@@ -708,8 +714,9 @@ class ThreePanelPhotPlot:
                 ax0.yaxis.set_minor_locator(MultipleLocator(minor))
 
                 # Residuals
-                major, minor = self.__get_residuals_ytick_spacing(np.max(self.y - gp_mod) - np.min(self.y - gp_mod))
+                major, minor = self.__get_residuals_ytick_spacing(np.max(residuals) - np.min(residuals))
                 ax1.yaxis.set_major_locator(MultipleLocator(major))
+                ax1.yaxis.set_minor_locator(MultipleLocator(minor))
 
                 if planet_col_ind == 0 or isinstance(planet_col_ind, slice):
                     ax0.set_ylabel("Relative flux [ppt]", fontsize=14)
