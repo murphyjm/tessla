@@ -54,6 +54,7 @@ class ThreePanelPhotPlot:
                 sector_marker_fontsize=12,
                 param_fontsize=14,
                 timeseries_phase_hspace=0.05,
+                return_fig_and_phase_folded_axes=False
                 ) -> None:
         
         self.toi = toi
@@ -86,6 +87,7 @@ class ThreePanelPhotPlot:
         self.sector_marker_fontsize = sector_marker_fontsize
         self.param_fontsize = param_fontsize
         self.timeseries_phase_hspace = timeseries_phase_hspace
+        self.return_fig_and_phase_folded_axes = return_fig_and_phase_folded_axes
 
     def plot(self, save_fname=None, overwrite=False):
         '''
@@ -110,10 +112,13 @@ class ThreePanelPhotPlot:
         
         # Use broken axis plotting or regular plotting
         if self.use_broken_x_axis:
-            fig = self.__broken_three_panel_plot()
+            fig, phase_folded_axes, phase_folded_resid_axes = self.__broken_three_panel_plot()
         else:
-            fig = self.__three_panel_plot()
+            fig, phase_folded_axes, phase_folded_resid_axes = self.__three_panel_plot()
         
+        if self.return_fig_and_phase_folded_axes:
+            return fig, phase_folded_axes, phase_folded_resid_axes
+            
         # Save the figure!
         fig.savefig(save_fname, facecolor='white', bbox_inches='tight', dpi=self.save_dpi)
         print(f"Photometry model plot saved to {save_fname}")
@@ -451,9 +456,9 @@ class ThreePanelPhotPlot:
         ################################################################################################
         ############################ PHASE-FOLDED TRANSIT AND RESIDUALS ################################
         ################################################################################################
-        fig = self.__plot_phase_folded_transits(fig, timeseries_bottom)
+        fig, phase_folded_axes, phase_folded_resid_axes = self.__plot_phase_folded_transits(fig, timeseries_bottom)
         
-        return fig
+        return fig, phase_folded_axes, phase_folded_resid_axes
 
     def __three_panel_plot(self):
         '''
@@ -572,9 +577,9 @@ class ThreePanelPhotPlot:
         ################################################################################################
         ############################ PHASE-FOLDED TRANSIT AND RESIDUALS ################################
         ################################################################################################
-        fig = self.__plot_phase_folded_transits(fig, timeseries_bottom)
+        fig, phase_folded_axes, phase_folded_resid_axes = self.__plot_phase_folded_transits(fig, timeseries_bottom)
 
-        return fig
+        return fig, phase_folded_axes, phase_folded_resid_axes
     
     def __plot_phase_folded_transits(self, fig, timeseries_bottom):
         '''
@@ -776,7 +781,7 @@ class ThreePanelPhotPlot:
         depth_planet_b = self.toi.planets['b'].depth # ppt
         depths_all_planets = np.array([planet.depth for planet in self.toi.transiting_planets.values()])
         depths_all_planets_minus_b = np.abs(depths_all_planets - depth_planet_b)
-        if all(depths_all_planets_minus_b < 0.18):
+        if all(depths_all_planets_minus_b < 0.5):
             for axes in [phase_folded_axes, phase_folded_resid_axes]:
                 y_phase_max = np.max([max(ax.get_ylim()) for ax in axes])
                 y_phase_min = np.min([min(ax.get_ylim()) for ax in axes])
@@ -792,7 +797,7 @@ class ThreePanelPhotPlot:
         
         fig.align_ylabels()
 
-        return fig
+        return fig, phase_folded_axes, phase_folded_resid_axes
 
     def residuals_periodogram(self, save_fname=None, overwrite=False, min_per=1, max_per=50, samples_per_peak=1000, **kwargs):
         '''

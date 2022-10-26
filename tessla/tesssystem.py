@@ -1035,7 +1035,7 @@ class TessSystem:
                 gp_rv_svalue_params = []
 
                 if self.svalue_gp_kernel == 'rotation':
-                    BoundedNormalProt = pm.Bound(pm.Normal, lower=np.log(1), upper=np.log(100))
+                    BoundedNormalProt = pm.Bound(pm.Normal, lower=np.log(1), upper=np.log(60))
                     log_prot_rv_svalue_gp = BoundedNormalProt("log_prot_rv_svalue_gp", mu=np.log(self.prot), sd=np.log(self.prot_err)) # self.prot from LS periodogram of OoT flux but can be superseded
                     prot_rv_svalue_gp = pm.Deterministic("prot_rv_svalue_gp", tt.exp(log_prot_rv_svalue_gp))
                     log_Q0_rv_svalue_gp = pm.Normal('log_Q0_rv_svalue_gp', mu=0, sd=2)
@@ -1054,7 +1054,7 @@ class TessSystem:
                     # A combination of the exp_decay kernel and the rotation kernel
 
                     # Rotation term
-                    BoundedNormalProt = pm.Bound(pm.Normal, lower=np.log(1), upper=np.log(100))
+                    BoundedNormalProt = pm.Bound(pm.Normal, lower=np.log(1), upper=np.log(60))
                     log_prot_rv_svalue_gp = BoundedNormalProt("log_prot_rv_svalue_gp", mu=np.log(self.prot), sd=np.log(self.prot_err)) # self.prot from LS periodogram of OoT flux but can be superseded
                     prot_rv_svalue_gp = pm.Deterministic("prot_rv_svalue_gp", tt.exp(log_prot_rv_svalue_gp))
                     log_Q0_rv_svalue_gp = pm.Normal('log_Q0_rv_svalue_gp', mu=0, sd=2)
