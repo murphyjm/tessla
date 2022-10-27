@@ -198,7 +198,7 @@ class StackedPeriodogram:
             faps = ls.false_alarm_level(self.faps)
             for k in range(len(faps)):
                 ax[i].axhline(faps[k], ls=self.fap_ls[k])
-        text = ax[i].text(xtext,ytext, 'S-Values', transform=ax[i].transAxes, ha='right', fontsize=self.label_fontsize)
+        text = ax[i].text(xtext,ytext, 'HIRES $S_\mathrm{HK}$', transform=ax[i].transAxes, ha='right', fontsize=self.label_fontsize)
         text.set_bbox(dict(facecolor='white', alpha=0.8, edgecolor='none'))
         i += 1
 
