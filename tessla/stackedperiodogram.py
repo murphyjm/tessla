@@ -19,11 +19,11 @@ class StackedPeriodogram:
                 min_period=1,
                 max_period=100, 
                 samples_per_peak=1000,
-                faps=[0.01],
+                faps=[0.001], # 0.1%
                 plot_faps=True,       # If true, plot the lines of FAP listed in the faps argument. Does not do this for the photometry periodogram by default, 
                 plot_phot_faps=False, # unless plot_phot_faps is True.
                 fap_ls=[':', '-.', '--', '-'],
-                plot_phot_vert_line=True,
+                plot_phot_vert_line=False,
                 label_fontsize=None,
                 title='',
                 figsize=(14,6),
