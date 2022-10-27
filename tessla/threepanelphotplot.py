@@ -118,7 +118,7 @@ class ThreePanelPhotPlot:
         
         if self.return_fig_and_phase_folded_axes:
             return fig, phase_folded_axes, phase_folded_resid_axes
-            
+
         # Save the figure!
         fig.savefig(save_fname, facecolor='white', bbox_inches='tight', dpi=self.save_dpi)
         print(f"Photometry model plot saved to {save_fname}")
@@ -745,22 +745,30 @@ class ThreePanelPhotPlot:
                 # Annotate the phase folded panels with parameter values
                 if self.df_summary is not None:
                     per_med = self.df_summary.loc[f'period_{planet.pl_letter}', 'median']
-                    per_err = self.df_summary.loc[f'period_{planet.pl_letter}', 'std']
+                    per_err16 = np.abs(self.df_summary.loc[f'period_{planet.pl_letter}', 'err16'])
+                    per_err84 = self.df_summary.loc[f'period_{planet.pl_letter}', 'err84']
+                    per_err = np.median([per_err16, per_err84])
                     if per_err < 1:
                         per_str = f"$P =$ {per_med:.2f} $\pm$ {per_err:.2e} d"
                     else:
                         per_str = f"$P =$ {per_med:.1f} $\pm$ {per_err:.1f} d"
 
                     ror_med = self.df_summary.loc[f'ror_{planet.pl_letter}', 'median'] * 100
-                    ror_err = self.df_summary.loc[f'ror_{planet.pl_letter}', 'std'] * 100
+                    ror_err16 = np.abs(self.df_summary.loc[f'ror_{planet.pl_letter}', 'err16']) * 100
+                    ror_err84 = self.df_summary.loc[f'ror_{planet.pl_letter}', 'err84'] * 100
+                    ror_err = np.median([ror_err16, ror_err84])
                     ror_str = f"$R_\mathrm{{p}}/R_* = {ror_med:.2f} \pm {ror_err:.2f}$ $\%$"
 
                     b_med = self.df_summary.loc[f'b_{planet.pl_letter}', 'median']
-                    b_err = self.df_summary.loc[f'b_{planet.pl_letter}', 'std']
+                    b_err16 = np.abs(self.df_summary.loc[f'b_{planet.pl_letter}', 'err16'])
+                    b_err84 = self.df_summary.loc[f'b_{planet.pl_letter}', 'err84']
+                    b_err = np.median([b_err16, b_err84])
                     b_str = f"$b = {b_med:.2f} \pm {b_err:.2f}$"
 
                     rp_med = self.df_summary.loc[f'rp_{planet.pl_letter}', 'median']
-                    rp_err = self.df_summary.loc[f'rp_{planet.pl_letter}', 'std']
+                    rp_err16 = np.abs(self.df_summary.loc[f'rp_{planet.pl_letter}', 'err16'])
+                    rp_err84 = self.df_summary.loc[f'rp_{planet.pl_letter}', 'err84']
+                    rp_err = np.median([rp_err16, rp_err84])
                     rp_str = f"$R_\mathrm{{p}} = {rp_med:.2f} \pm {rp_err:.2f}$ $R_\oplus$"
                     
                 else:

@@ -476,7 +476,9 @@ class RVPlot:
                 # Include errors
                 if self.df_summary is not None:
                     per_med = self.df_summary.loc[f'{prefix}period_{planet.pl_letter}', 'median']
-                    per_err = self.df_summary.loc[f'{prefix}period_{planet.pl_letter}', 'std']
+                    per_err16 = np.abs(self.df_summary.loc[f'{prefix}period_{planet.pl_letter}', 'err16'])
+                    per_err84 = self.df_summary.loc[f'{prefix}period_{planet.pl_letter}', 'err84']
+                    per_err = np.median([per_err16, per_err84])
                     if per_err < 1:
                         per_str = f"$P =$ {per_med:.2f} $\pm$ {per_err:.2e} d"
                     else:
@@ -485,16 +487,22 @@ class RVPlot:
                         ecc_str = "$e \equiv 0$"
                     else:
                         ecc_med = self.df_summary.loc[f'{prefix}ecc_{planet.pl_letter}', 'median']
-                        ecc_err = self.df_summary.loc[f'{prefix}ecc_{planet.pl_letter}', 'std']
+                        ecc_err16 = np.abs(self.df_summary.loc[f'{prefix}ecc_{planet.pl_letter}', 'err16'])
+                        ecc_err84 = self.df_summary.loc[f'{prefix}ecc_{planet.pl_letter}', 'err84']
+                        ecc_err = np.median([ecc_err16, ecc_err84])
                         ecc_str = f"$e = {ecc_med:.2f} \pm {ecc_err:.2f}$"
 
                     kamp_med = self.df_summary.loc[f'{prefix}K_{planet.pl_letter}', 'median']
-                    kamp_err = self.df_summary.loc[f'{prefix}K_{planet.pl_letter}', 'std']
+                    kamp_err16 = np.abs(self.df_summary.loc[f'{prefix}K_{planet.pl_letter}', 'err16'])
+                    kamp_err84 = self.df_summary.loc[f'{prefix}K_{planet.pl_letter}', 'err84']
+                    kamp_err = np.median([kamp_err16, kamp_err84])
                     kamp_str = f"$K = {kamp_med:.2f} \pm {kamp_err:.2f}$ m s$^{{-1}}$"
 
                     if planet.is_transiting:
                         mp_med = self.df_summary.loc[f'mp_{planet.pl_letter}', 'median']
-                        mp_err = self.df_summary.loc[f'mp_{planet.pl_letter}', 'std']
+                        mp_err16 = np.abs(self.df_summary.loc[f'mp_{planet.pl_letter}', 'err16'])
+                        mp_err84 = self.df_summary.loc[f'mp_{planet.pl_letter}', 'err84']
+                        mp_err = np.median([mp_err16, mp_err84])
                         mp_str = '\n' + f"$M_\mathrm{{p}} = {mp_med:.1f} \pm {mp_err:.1f}$ $M_\oplus$"
                         if mp_med > 200: # If mp > 200 Earth masses, put in Jupiter masses
                             mp_map_med = units.Mearth.to(units.Mjup, mp_med)
@@ -502,7 +510,9 @@ class RVPlot:
                             mp_str = '\n' + f"$M_\mathrm{{p}} = {mp_map_med:.1f} \pm {mp_map_err:.1f}$ $M_\mathrm{{Jup}}$"
                     else:
                         mp_med = self.df_summary.loc[f'{prefix}msini_{planet.pl_letter}', 'median']
-                        mp_err = self.df_summary.loc[f'{prefix}msini_{planet.pl_letter}', 'std']
+                        mp_err16 = np.abs(self.df_summary.loc[f'{prefix}msini_{planet.pl_letter}', 'err16'])
+                        mp_err84 = self.df_summary.loc[f'{prefix}msini_{planet.pl_letter}', 'err84']
+                        mp_err = np.median([mp_err16, mp_err84])
                         mp_str = '\n' + f"$M_\mathrm{{p}} \sin i = {mp_med:.1f} \pm {mp_err:.1f}$ $M_\oplus$"
                         if mp_med > 200: # If mp sini > 200 Earth masses, put in Jupiter masses
                             mp_map_med = units.Mearth.to(units.Mjup, mp_med)
