@@ -46,7 +46,7 @@ class ThreePanelPhotPlot:
                 plot_random_transit_draws=False, # If true, plot random realizations of the phase-folded transit using the posteriors of the model fit.
                 num_random_transit_draws=25, # Number of random draws to plot.
                 save_format='.png',
-                save_dpi=400,
+                save_dpi=175, # Should make the whole figure about 1 MB in size
                 df_summary_fname=None,
                 rms_yscale_phase_folded_panels=True,
                 rms_yscale_multiplier=5,
