@@ -155,6 +155,6 @@ class SvaluePlot():
             ax.xaxis.set_major_locator(MultipleLocator(100))
             ax.xaxis.set_minor_locator(MultipleLocator(50))
             ax.tick_params(axis='y', direction='in', which='both', left=True, right=True)
-            ax.tick_params(axis='x', direction='in', which='both', top=True, bottom=True)
+            ax.tick_params(axis='x', direction='in', which='both', top=True, bottom=True, labelsize=12)
 
         return fig
