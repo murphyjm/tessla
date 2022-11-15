@@ -153,10 +153,10 @@ class ThreePanelPhotPlot:
         if yspan < 3:
             major = 0.75
             minor = 0.25
-        elif yspan >= 3 and yspan < 4:
+        elif yspan >= 3 and yspan < 3.5:
             major = 1
             minor = 0.5
-        elif yspan >= 4 and yspan < 5:
+        elif yspan >= 3.5 and yspan < 5:
             major = 2
             minor = 1
         elif yspan >= 5:
