@@ -81,6 +81,7 @@ class RVPlot:
                 rms_yscale_phase_folded_panels_scale=3,
                 param_fontsize=14, # Fontsize for annotating the phase folded plots
                 timeseries_phase_hspace=0.05,
+                facecolor='white',
                 ) -> None:
     
         self.toi = toi
@@ -106,6 +107,7 @@ class RVPlot:
         self.rms_yscale_phase_folded_panels_scale = rms_yscale_phase_folded_panels_scale
         self.param_fontsize = param_fontsize
         self.timeseries_phase_hspace = timeseries_phase_hspace
+        self.facecolor = facecolor
 
     def plot(self, save_fname=None, overwrite=False, save_and_close=True, return_fig_obj=False):
         '''
@@ -133,7 +135,7 @@ class RVPlot:
         # Option to either save and close the figure right away or return it for further investigation.
         if save_and_close:
             # Save the figure!
-            fig.savefig(save_fname, facecolor='white', bbox_inches='tight', dpi=self.save_dpi)
+            fig.savefig(save_fname, facecolor=self.facecolor, bbox_inches='tight', dpi=self.save_dpi)
             print(f"RV model plot saved to {save_fname}")
             plt.close()
         elif return_fig_obj:

@@ -54,7 +54,8 @@ class ThreePanelPhotPlot:
                 sector_marker_fontsize=12,
                 param_fontsize=14,
                 timeseries_phase_hspace=0.05,
-                return_fig_and_phase_folded_axes=False
+                return_fig_and_phase_folded_axes=False,
+                facecolor='white'
                 ) -> None:
         
         self.toi = toi
@@ -88,7 +89,8 @@ class ThreePanelPhotPlot:
         self.param_fontsize = param_fontsize
         self.timeseries_phase_hspace = timeseries_phase_hspace
         self.return_fig_and_phase_folded_axes = return_fig_and_phase_folded_axes
-
+        self.facecolor = facecolor
+        
     def plot(self, save_fname=None, overwrite=False):
         '''
         Make the plot!
@@ -120,7 +122,7 @@ class ThreePanelPhotPlot:
             return fig, phase_folded_axes, phase_folded_resid_axes
 
         # Save the figure!
-        fig.savefig(save_fname, facecolor='white', bbox_inches='tight', dpi=self.save_dpi)
+        fig.savefig(save_fname, facecolor=self.facecolor, bbox_inches='tight', dpi=self.save_dpi)
         print(f"Photometry model plot saved to {save_fname}")
         plt.close()
     
