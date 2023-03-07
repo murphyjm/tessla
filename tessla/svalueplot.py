@@ -109,7 +109,7 @@ class SvaluePlot():
         
         # Top panel housekeeping
         ax1.set_xticklabels([])
-        ax1.set_ylabel("$S_\mathrm{HK}$ [dex]", fontsize=14, labelpad=self.ylabelpad)
+        ax1.set_ylabel("$S_\mathrm{HK}$", fontsize=14, labelpad=self.ylabelpad)
         # major, minor = self.__get_ytick_spacing()
         # ax1.yaxis.set_major_locator(MultipleLocator(major))
         # ax1.yaxis.set_minor_locator(MultipleLocator(minor))
