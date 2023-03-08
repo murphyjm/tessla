@@ -208,7 +208,7 @@ class StackedPeriodogram:
         true_min_period = self.min_period
         self.min_period = 1.1
         periods, power, peak_per, ls = self.__get_ls(self.toi.rv_df.time, 
-                                            100, 
+                                            1, 
                                             1e-4)
         ax[i].plot(periods, power, color='k')
         if self.plot_faps:
