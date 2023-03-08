@@ -1160,9 +1160,9 @@ class TessSystem:
             if self.n_nontransiting > 0:
                 map_soln = pmx.optimize(start=map_soln, vars=[nontrans_params['log_K']])
                 map_soln = pmx.optimize(start=map_soln, vars=[nontrans_params['ecs']])
+            map_soln = pmx.optimize(start=map_soln, vars=[gamma_rv])
             if self.rv_trend:
                 map_soln = pmx.optimize(start=map_soln, vars=[trend_rv])
-            map_soln = pmx.optimize(start=map_soln, vars=[gamma_rv])
             if self.include_svalue_gp:
                 for k in range(len(gp_rv_svalue_params)):
                     map_soln = pmx.optimize(start=map_soln, vars=[gp_rv_svalue_params[k]])
