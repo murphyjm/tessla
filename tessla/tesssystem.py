@@ -846,7 +846,7 @@ class TessSystem:
         # Background model
         bkg = tt.zeros(len(t))
         if self.rv_trend and trend_rv is not None:
-            A = np.vander(t - self.rv_trend_time_ref, self.rv_trend_order + 1, increasing=True)
+            A = np.vander(t - self.rv_trend_time_ref, self.rv_trend_order + 1, increasing=True)[:, 1:]
             bkg = tt.dot(A, trend_rv)
         
         if n_planets > 1:
@@ -967,7 +967,7 @@ class TessSystem:
             # Build the RV model
             if self.rv_trend:
                 # Optionally add a polynomial trend as the RV background
-                trend_rv = pm.Normal("trend_rv", mu=0, sd=10, shape=self.rv_trend_order + 1)
+                trend_rv = pm.Normal("trend_rv", mu=0, sd=10, shape=self.rv_trend_order) # Fixing offset for trend to be zero.
             else:
                 trend_rv = None
             
