@@ -846,7 +846,7 @@ class TessSystem:
         # Background model
         bkg = tt.zeros(len(t))
         if self.rv_trend and trend_rv is not None:
-            A = np.vander(t - self.rv_trend_time_ref, self.rv_trend_order + 1, increasing=True)
+            A = np.vander(t - self.rv_trend_time_ref, self.rv_trend_order + 1, increasing=True)[:, 1:]
             bkg = tt.dot(A, trend_rv)
         
         if n_planets > 1:
@@ -967,7 +967,7 @@ class TessSystem:
             # Build the RV model
             if self.rv_trend:
                 # Optionally add a polynomial trend as the RV background
-                trend_rv = pm.Normal("trend_rv", mu=0, sd=10, shape=self.rv_trend_order + 1)
+                trend_rv = pm.Normal("trend_rv", mu=0, sd=10, shape=self.rv_trend_order) # Fixing offset for trend to be zero.
             else:
                 trend_rv = None
             
@@ -1160,9 +1160,9 @@ class TessSystem:
             if self.n_nontransiting > 0:
                 map_soln = pmx.optimize(start=map_soln, vars=[nontrans_params['log_K']])
                 map_soln = pmx.optimize(start=map_soln, vars=[nontrans_params['ecs']])
+            map_soln = pmx.optimize(start=map_soln, vars=[gamma_rv, sigma_rv])
             if self.rv_trend:
                 map_soln = pmx.optimize(start=map_soln, vars=[trend_rv])
-            map_soln = pmx.optimize(start=map_soln, vars=[gamma_rv])
             if self.include_svalue_gp:
                 for k in range(len(gp_rv_svalue_params)):
                     map_soln = pmx.optimize(start=map_soln, vars=[gp_rv_svalue_params[k]])
@@ -1240,7 +1240,7 @@ class TessSystem:
         '''
         self.rv_trend = rv_trend
         self.rv_trend_order = rv_trend_order
-        self.rv_trend_time_ref = 0.5 * (np.max(self.rv_df.time) - np.min(self.rv_df.time)) # Reference time for the background trend model, if needed.
+        self.rv_trend_time_ref = 0.5 * (np.max(self.rv_df.time) - np.min(self.rv_df.time)) # Reference time for the background trend model, if needed. # TODO: Is this correct? Or should it just be the midpoint of the time values?
         # You may want to call self.flatten_light_curve() first because it will remove photometric outliers.
         N_t_rv = int(2 * (np.max(self.rv_df.time) - np.min(self.rv_df.time)))
         model, map_soln, extras = self.__build_joint_model(self.cleaned_time, self.cleaned_flux, self.cleaned_flux_err, start=self.map_soln, N_t_rv=N_t_rv)
@@ -1370,7 +1370,7 @@ class TessSystem:
                 for i,tel in enumerate(self.rv_inst_names):
                     df_chains[f"sigma_rv_{tel}"] = flat_samps[param][i, :].data
             elif param == 'trend_rv':
-                for i in range(self.rv_trend_order + 1):
+                for i in range(self.rv_trend_order):
                     df_chains[f"trend_rv_{i}"] = flat_samps[param][i, :].data
             elif param == 'log_jitter_svalue':
                 for i,tel in enumerate(self.svalue_inst_names):
