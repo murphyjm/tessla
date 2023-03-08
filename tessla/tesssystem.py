@@ -1240,7 +1240,7 @@ class TessSystem:
         '''
         self.rv_trend = rv_trend
         self.rv_trend_order = rv_trend_order
-        self.rv_trend_time_ref = 0.5 * (np.max(self.rv_df.time) - np.min(self.rv_df.time)) # Reference time for the background trend model, if needed.
+        self.rv_trend_time_ref = 0.5 * (np.max(self.rv_df.time) - np.min(self.rv_df.time)) # Reference time for the background trend model, if needed. # TODO: Is this correct? Or should it just be the midpoint of the time values?
         # You may want to call self.flatten_light_curve() first because it will remove photometric outliers.
         N_t_rv = int(2 * (np.max(self.rv_df.time) - np.min(self.rv_df.time)))
         model, map_soln, extras = self.__build_joint_model(self.cleaned_time, self.cleaned_flux, self.cleaned_flux_err, start=self.map_soln, N_t_rv=N_t_rv)
