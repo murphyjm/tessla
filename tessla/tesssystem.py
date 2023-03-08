@@ -1370,7 +1370,7 @@ class TessSystem:
                 for i,tel in enumerate(self.rv_inst_names):
                     df_chains[f"sigma_rv_{tel}"] = flat_samps[param][i, :].data
             elif param == 'trend_rv':
-                for i in range(self.rv_trend_order + 1):
+                for i in range(self.rv_trend_order):
                     df_chains[f"trend_rv_{i}"] = flat_samps[param][i, :].data
             elif param == 'log_jitter_svalue':
                 for i,tel in enumerate(self.svalue_inst_names):

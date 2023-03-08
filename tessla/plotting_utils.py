@@ -441,9 +441,8 @@ def plot_joint_corners(toi, df_derived_chains, overwrite=False):
 
     # Corner plot for instrument parameters
     rv_trend_labels_dict = {
-        0:"$\gamma_\mathrm{trend}$ [m s$^{-1}$]",
-        1:"$\dot{\gamma}$ [m s$^{-1}$ d$^{-1}$]",
-        2:"$\ddot{\gamma}$ [m s$^{-1}$ d$^{-2}$]",
+        0:"$\dot{\gamma}$ [m s$^{-1}$ d$^{-1}$]",
+        1:"$\ddot{\gamma}$ [m s$^{-1}$ d$^{-2}$]",
     }
 
     rv_inst_labels = []
@@ -454,7 +453,7 @@ def plot_joint_corners(toi, df_derived_chains, overwrite=False):
         rv_inst_labels.append(f'$\sigma_\mathrm{{{tel}}}$ [m s$^{{-1}}$]')
         rv_inst_chains_list.append(np.exp(df_derived_chains[f'log_sigma_rv_{tel}']))
     if toi.rv_trend:
-        for i in range(0, toi.rv_trend_order + 1):
+        for i in range(0, toi.rv_trend_order):
             try:
                 rv_inst_labels.append(rv_trend_labels_dict[i])
                 rv_inst_chains_list.append(df_derived_chains[f'trend_rv_{i}'])
