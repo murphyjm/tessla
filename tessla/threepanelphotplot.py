@@ -238,10 +238,16 @@ class ThreePanelPhotPlot:
         sectors = self.toi.lc.sector[original_indices[xstart_ind:xstop_ind]]
         assert len(np.unique(sectors)) > 0, "No sector labels."
         if len(np.unique(sectors)) == 1:
-            sector_str = f"Sector {np.unique(sectors).value[0]}"
+            if len(np.unique(self.toi.lc.sector)) > 10:  # If a system has a lot of TESS photometry, don't write the word "Sector" to save space
+                sector_str = f"{np.unique(sectors).value[0]}"
+            else:
+                sector_str = f"Sector {np.unique(sectors).value[0]}"
         elif len(np.unique(sectors)) > 1:
             sectors = np.unique(sectors)
-            sector_str = "Sectors "
+            if len(np.unique(self.toi.lc.sector)) > 10:  # If a system has a lot of TESS photometry, don't write the word "Sector" to save space
+                sector_str = ""
+            else:
+                sector_str = "Sectors "
             for j in range(len(sectors) -1):
                 sector_str += f"{sectors.value[j]}, "
             sector_str += f"{sectors.value[-1]}"
