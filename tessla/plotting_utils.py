@@ -271,14 +271,14 @@ def plot_svalue_gp_corner(toi, df_derived_chains, overwrite=False):
         chains = [np.exp(df_derived_chains[f'log_sigma_rv_gp_{tel}']) for tel in toi.rv_inst_names]
         
         # GP amplitudes and jitter for each Svalue instrument
-        noise_labels += [f'$\eta_{{\mathrm{{GP,\:S_{{HK}},\:}}{tel}}}$ [dex]' for tel in toi.svalue_inst_names]
+        noise_labels += [f'$\eta_{{\mathrm{{GP,\:S_{{HK}},\:}}{tel}}}$ ' for tel in toi.svalue_inst_names]
         chains += [np.exp(df_derived_chains[f'log_sigma_svalue_gp_{tel}']) for tel in toi.svalue_inst_names]
-        noise_labels += [f'$\sigma_{{S_\mathrm{{HK}},\:{tel}}}$ [dex]' for tel in toi.svalue_inst_names]
+        noise_labels += [f'$\sigma_{{S_\mathrm{{HK}},\:{tel}}}$ ' for tel in toi.svalue_inst_names]
         chains += [np.exp(df_derived_chains[f'log_jitter_svalue_gp_{tel}']) for tel in toi.svalue_inst_names]
         
         # Global GP hyperparameters
         noise_labels += [
-            '$\mu_{S_\mathrm{HK}}$ [dex]',
+            '$\mu_{S_\mathrm{HK}}$ ',
         ]
         chains += [
             df_derived_chains['gp_svalue_mean'],
@@ -305,14 +305,14 @@ def plot_svalue_gp_corner(toi, df_derived_chains, overwrite=False):
         chains = [df_derived_chains[f'sigma_rv_gp_{tel}'] for tel in toi.rv_inst_names]
         
         # GP amplitudes and jitter for each Svalue instrument
-        noise_labels += [f'$\eta_{{\mathrm{{GP,\:S_{{HK}},\:}}\mathrm{{{tel}}}}}$ [dex]' for tel in toi.svalue_inst_names]
+        noise_labels += [f'$\eta_{{\mathrm{{GP,\:S_{{HK}},\:}}\mathrm{{{tel}}}}}$ ' for tel in toi.svalue_inst_names]
         chains += [df_derived_chains[f'sigma_svalue_gp_{tel}'] for tel in toi.svalue_inst_names]
-        noise_labels += ['$\sigma_{S_\mathrm{HK}}$ [dex]']
+        noise_labels += ['$\sigma_{S_\mathrm{HK}}$ ']
         chains += [np.exp(df_derived_chains['log_jitter_svalue_HIRES'])]
         
         # Global GP hyperparameters
         noise_labels += [
-            '$\mu_{S_\mathrm{HK}}$ [dex]',
+            '$\mu_{S_\mathrm{HK}}$ ',
         ]
         chains += [
             df_derived_chains['gp_svalue_mean'],
@@ -347,16 +347,16 @@ def plot_svalue_gp_corner(toi, df_derived_chains, overwrite=False):
         
         # GP amplitudes and jitter for each Svalue instrument
         # Rotation term
-        noise_labels += [f'$\eta_{{\mathrm{{GP,\:rot,\:S_{{HK}},\:}}\mathrm{{{tel}}}}}$ [dex]' for tel in toi.svalue_inst_names]
+        noise_labels += [f'$\eta_{{\mathrm{{GP,\:rot,\:S_{{HK}},\:}}\mathrm{{{tel}}}}}$ ' for tel in toi.svalue_inst_names]
         chains += [df_derived_chains[f'sigma_svalue_gp_rot_{tel}'] for tel in toi.svalue_inst_names]
         # Exp decay term
-        noise_labels += [f'$\eta_{{\mathrm{{GP,\:dec,\:S_{{HK}},\:}}\mathrm{{{tel}}}}}$ [dex]' for tel in toi.svalue_inst_names]
+        noise_labels += [f'$\eta_{{\mathrm{{GP,\:dec,\:S_{{HK}},\:}}\mathrm{{{tel}}}}}$ ' for tel in toi.svalue_inst_names]
         chains += [df_derived_chains[f'log_sigma_svalue_gp_dec_{tel}'] for tel in toi.svalue_inst_names]
 
         # Svalue jitter and mean
-        noise_labels += ['$\sigma_{S_\mathrm{HK}}$ [dex]']
+        noise_labels += ['$\sigma_{S_\mathrm{HK}}$ ']
         chains += [np.exp(df_derived_chains['log_jitter_svalue_HIRES'])]
-        noise_labels += ['$\mu_{S_\mathrm{HK}}$ [dex]']
+        noise_labels += ['$\mu_{S_\mathrm{HK}}$ ']
         chains += [df_derived_chains['gp_svalue_mean']]
 
         # Kernel-specific hyperparameters
