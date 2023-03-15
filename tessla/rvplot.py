@@ -82,6 +82,8 @@ class RVPlot:
                 param_fontsize=14, # Fontsize for annotating the phase folded plots
                 timeseries_phase_hspace=0.05,
                 facecolor='white',
+                ytick_spacing=None,
+                residuals_ytick_spacing=None
                 ) -> None:
     
         self.toi = toi
@@ -108,6 +110,8 @@ class RVPlot:
         self.param_fontsize = param_fontsize
         self.timeseries_phase_hspace = timeseries_phase_hspace
         self.facecolor = facecolor
+        self.ytick_spacing = ytick_spacing
+        self.residuals_ytick_spacing = residuals_ytick_spacing
 
     def plot(self, save_fname=None, overwrite=False, save_and_close=True, return_fig_obj=False):
         '''
@@ -251,7 +255,10 @@ class RVPlot:
         
         # Top panel housekeeping
         ax1.set_ylabel("RV [m s$^{-1}$]", fontsize=14, labelpad=self.ylabelpad)
-        major, minor = self.__get_ytick_spacing()
+        if self.ytick_spacing is None:
+            major, minor = self.__get_ytick_spacing()
+        else:
+            major, minor = self.ytick_spacing
         ax1.yaxis.set_major_locator(MultipleLocator(major))
         ax1.yaxis.set_minor_locator(MultipleLocator(minor))
         ax1.legend(fontsize=14, loc='upper right')
@@ -282,7 +289,10 @@ class RVPlot:
         # Plot housekeeping
         ax2.set_ylabel("Residuals", fontsize=14, labelpad=self.ylabelpad)
         ax2.set_xlabel(f"Time [BJD - {self.toi.bjd_ref:.1f}]", fontsize=14)
-        major, minor = self.__get_residuals_ytick_spacing(residuals)
+        if self.residuals_ytick_spacing is None:
+            major, minor = self.__get_residuals_ytick_spacing(residuals)
+        else:
+            major, minor = self.residuals_ytick_spacing
         ax2.yaxis.set_major_locator(MultipleLocator(major))
         ax2.yaxis.set_minor_locator(MultipleLocator(minor))
         bottom = -1 * np.max(ax2.get_ylim())
@@ -463,7 +473,10 @@ class RVPlot:
                 major, minor = self.__get_ytick_phase_spacing(planet.kamp)
                 ax0.yaxis.set_major_locator(MultipleLocator(major))
                 ax0.yaxis.set_minor_locator(MultipleLocator(minor))
-                major, minor = self.__get_residuals_ytick_spacing(residuals)
+                if self.residuals_ytick_spacing is None:
+                    major, minor = self.__get_residuals_ytick_spacing(residuals)
+                else:
+                    major, minor = self.residuals_ytick_spacing
                 ax1.yaxis.set_major_locator(MultipleLocator(major))
                 ax1.yaxis.set_minor_locator(MultipleLocator(minor))
 

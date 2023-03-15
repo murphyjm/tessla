@@ -55,7 +55,9 @@ class ThreePanelPhotPlot:
                 param_fontsize=14,
                 timeseries_phase_hspace=0.05,
                 return_fig_and_phase_folded_axes=False,
-                facecolor='white'
+                facecolor='white',
+                ytick_spacing=None,
+                residuals_ytick_spacing=None
                 ) -> None:
         
         self.toi = toi
@@ -90,6 +92,8 @@ class ThreePanelPhotPlot:
         self.timeseries_phase_hspace = timeseries_phase_hspace
         self.return_fig_and_phase_folded_axes = return_fig_and_phase_folded_axes
         self.facecolor = facecolor
+        self.ytick_spacing = ytick_spacing
+        self.residuals_ytick_spacing = residuals_ytick_spacing
         
     def plot(self, save_fname=None, overwrite=False):
         '''
@@ -348,7 +352,10 @@ class ThreePanelPhotPlot:
         # Top panel housekeeping
         bax1.set_xticklabels([])
         bax1.set_ylabel("Relative flux [ppt]", fontsize=14, labelpad=self.ylabelpad)
-        major, minor = self.__get_ytick_spacing(np.max(self.y) - np.min(self.y))
+        if self.ytick_spacing is None:
+            major, minor = self.__get_ytick_spacing(np.max(self.y) - np.min(self.y))
+        else:
+            major, minor = self.ytick_spacing
         for ax in [ax_left, ax_right]:
             ax.yaxis.set_major_locator(MultipleLocator(major))
             ax.yaxis.set_minor_locator(MultipleLocator(minor))
@@ -373,7 +380,10 @@ class ThreePanelPhotPlot:
         bax2.set_xticklabels([])
         bax2.set_ylabel("Relative flux [ppt]", fontsize=14, labelpad=self.ylabelpad)
         ax_left, ax_right = bax2.axs[0], bax2.axs[-1]
-        major, minor = self.__get_ytick_spacing(np.max(self.y - gp_mod) - np.min(self.y - gp_mod))
+        if self.ytick_spacing is None:
+            major, minor = self.__get_ytick_spacing(np.max(self.y - gp_mod) - np.min(self.y - gp_mod))
+        else:
+            major, minor = self.ytick_spacing
         for ax in [ax_left, ax_right]:
             ax.yaxis.set_major_locator(MultipleLocator(major))
             ax.yaxis.set_minor_locator(MultipleLocator(minor))
@@ -404,7 +414,10 @@ class ThreePanelPhotPlot:
         bax3.set_xlabel(f"Time [BJD - {self.toi.bjd_ref:.1f}]", fontsize=14, labelpad=30)
 
         ax_left, ax_right = bax3.axs[0], bax3.axs[-1]
-        major, minor = self.__get_residuals_ytick_spacing(np.max(self.residuals) - np.min(self.residuals))
+        if self.residuals_ytick_spacing is None:
+            major, minor = self.__get_residuals_ytick_spacing(np.max(self.residuals) - np.min(self.residuals))
+        else:
+            major, minor = self.residuals_ytick_spacing
         for ax in [ax_left, ax_right]:
             ax.yaxis.set_major_locator(MultipleLocator(major))
             ax.yaxis.set_minor_locator(MultipleLocator(minor))
@@ -519,7 +532,10 @@ class ThreePanelPhotPlot:
         # Top panel housekeeping
         ax1.set_xticklabels([])
         ax1.set_ylabel("Relative flux [ppt]", fontsize=14, labelpad=self.ylabelpad)
-        major, minor = self.__get_ytick_spacing(np.max(self.y) - np.min(self.y))
+        if self.ytick_spacing is None:
+            major, minor = self.__get_ytick_spacing(np.max(self.y) - np.min(self.y))
+        else:
+            major, minor = self.ytick_spacing
         ax1.yaxis.set_major_locator(MultipleLocator(major))
         ax1.yaxis.set_minor_locator(MultipleLocator(minor))
 
@@ -538,7 +554,10 @@ class ThreePanelPhotPlot:
         # Plot housekeeping
         ax2.set_xticklabels([])
         ax2.set_ylabel("Relative flux [ppt]", fontsize=14, labelpad=self.ylabelpad)
-        major, minor = self.__get_ytick_spacing(np.max(self.y - gp_mod) - np.min(self.y - gp_mod))
+        if self.ytick_spacing is None:
+            major, minor = self.__get_ytick_spacing(np.max(self.y - gp_mod) - np.min(self.y - gp_mod))
+        else:
+            major, minor = self.ytick_spacing
         ax2.yaxis.set_major_locator(MultipleLocator(major))
         ax2.yaxis.set_minor_locator(MultipleLocator(minor))
 
@@ -559,7 +578,10 @@ class ThreePanelPhotPlot:
         # Plot housekeeping
         ax3.set_ylabel("Residuals", fontsize=14, labelpad=self.ylabelpad)
         ax3.set_xlabel(f"Time [BJD - {self.toi.bjd_ref:.1f}]", fontsize=14)
-        major, minor = self.__get_residuals_ytick_spacing(np.max(residuals) - np.min(residuals))
+        if self.residuals_ytick_spacing is None:
+            major, minor = self.__get_residuals_ytick_spacing(np.max(residuals) - np.min(residuals))
+        else:
+            major, minor = self.residuals_ytick_spacing
         ax3.yaxis.set_major_locator(MultipleLocator(major))
         ax3.yaxis.set_minor_locator(MultipleLocator(minor))
         bottom = -1 * np.max(ax3.get_ylim())
@@ -722,12 +744,18 @@ class ThreePanelPhotPlot:
                 plt.setp(ax0.get_xticklabels(), visible=False)
                 if k == num_planet_rows - 1: # Only add the xlabel to the bottom row
                     ax1.set_xlabel("Time since transit [hours]", fontsize=14)
-                major, minor = self.__get_ytick_spacing(np.max(self.y - gp_mod) - np.min(self.y - gp_mod))
+                if self.ytick_spacing is None:
+                    major, minor = self.__get_ytick_spacing(np.max(self.y - gp_mod) - np.min(self.y - gp_mod))
+                else:
+                    major, minor = self.ytick_spacing
                 ax0.yaxis.set_major_locator(MultipleLocator(major))
                 ax0.yaxis.set_minor_locator(MultipleLocator(minor))
 
                 # Residuals
-                major, minor = self.__get_residuals_ytick_spacing(np.max(residuals) - np.min(residuals))
+                if self.residuals_ytick_spacing is None:
+                    major, minor = self.__get_residuals_ytick_spacing(np.max(residuals) - np.min(residuals))
+                else:
+                    major, minor = self.residuals_ytick_spacing
                 ax1.yaxis.set_major_locator(MultipleLocator(major))
                 ax1.yaxis.set_minor_locator(MultipleLocator(minor))
 
