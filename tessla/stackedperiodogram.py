@@ -6,6 +6,8 @@ from astropy.timeseries import LombScargle
 import numpy as np
 import pandas as pd
 
+from scipy.signal import find_peaks
+
 # Plotting stuff
 from matplotlib import rcParams
 rcParams["font.size"] = 16
@@ -25,6 +27,11 @@ class StackedPeriodogram:
                 fap_ls=[':', '-.', '--', '-'],
                 plot_phot_vert_line=False,
                 label_fontsize=None,
+                label_peaks=False,
+                label_which_peaks=[],
+                label_peak_thresh=1, # In units of percent. Label peaks above this FAP level if label_peaks = True.
+                peak_range_low=None,
+                peak_range_high=None,
                 title='',
                 figsize=(14,6),
                 save_format='.png',
@@ -47,6 +54,23 @@ class StackedPeriodogram:
         else:
             self.label_fontsize = 16
 
+        self.label_peaks = label_peaks
+        self.label_which_peaks = label_which_peaks
+        if self.label_peaks and len(self.label_which_peaks) == 0:
+            print("Warning: label_peaks is True, but did not specify which to label...")
+            print("Your options are: ['rvs', 'shk', 'window']")
+        self.label_peak_thresh = label_peak_thresh
+
+        if peak_range_low is None:
+            self.peak_range_low = self.min_period
+        else:
+            self.peak_range_low = peak_range_low
+        if peak_range_high is None:
+            self.peak_range_high = self.max_period
+        else:
+            self.peak_range_high = peak_range_high
+            
+        
         # For a 1 planet system there should 5 periodograms:
         # 1. Photometry, 2. RVs with offsets applied, trend/curvature removed 3. RV residuals, 4. S-Values, 5. RV Window Function
         num_periodograms = 5
@@ -77,6 +101,22 @@ class StackedPeriodogram:
         periods = 1/freq
         peak_per = periods[np.argmax(power)]
         return periods, power, peak_per, ls
+    
+    def __label_peaks(self, power, periods, ls, ax):
+        '''
+        Helper function for labeling periodogram peaks.
+        '''
+        mask = periods > self.peak_range_low
+        mask &= periods < self.peak_range_high
+        peak_inds, peak_props = find_peaks(power[mask], height=float(ls.false_alarm_level(self.label_peak_thresh * 1e-2)))
+        
+        # Sort the peak periods according to highest to lowest power.
+        peak_periods = periods[mask][peak_inds]
+        sorted_inds = np.argsort(peak_props['peak_heights'])
+        peak_heights = peak_props['peak_heights'][sorted_inds]
+        peak_periods = peak_periods[sorted_inds]
+        for l,per in enumerate(peak_periods):
+            ax.text(per, peak_heights[l], f"{per:.1f} d", fontsize=9)
 
     def plot(self, save_fname=None, overwrite=False):
         '''
@@ -141,6 +181,10 @@ class StackedPeriodogram:
             faps = ls.false_alarm_level(self.faps)
             for k in range(len(faps)):
                 ax[i].axhline(faps[k], ls=self.fap_ls[k])
+
+        if self.label_peaks and 'rvs' in self.label_which_peaks:
+            self.__label_peaks(power, periods, ls, ax[i])
+
         rv_str = 'RVs - offsets'
         if self.toi.rv_trend:
             rv_str += ' - trend'
@@ -163,6 +207,10 @@ class StackedPeriodogram:
                 faps = ls.false_alarm_level(self.faps)
                 for k in range(len(faps)):
                     ax[i].axhline(faps[k], ls=self.fap_ls[k])
+
+            if self.label_peaks and 'rvs' in self.label_which_peaks:
+                self.__label_peaks(power, periods, ls, ax[i])
+
             rv_str += ' - GP'
             text = ax[i].text(xtext, ytext, rv_str, transform=ax[i].transAxes, ha='right', fontsize=self.label_fontsize)
             text.set_bbox(dict(facecolor='white', alpha=0.8, edgecolor='none'))
@@ -184,6 +232,10 @@ class StackedPeriodogram:
                 faps = ls.false_alarm_level(self.faps)
                 for k in range(len(faps)):
                     ax[i].axhline(faps[k], ls=self.fap_ls[k])
+            
+            if self.label_peaks and 'rvs' in self.label_which_peaks:
+                self.__label_peaks(power, periods, ls, ax[i])
+                
             rv_str += f' - Planet {planet_values_list[planet_ind].pl_letter}'
             text = ax[i].text(xtext, ytext, rv_str, transform=ax[i].transAxes, ha='right', fontsize=self.label_fontsize)
             text.set_bbox(dict(facecolor='white', alpha=0.8, edgecolor='none'))
@@ -198,6 +250,10 @@ class StackedPeriodogram:
             faps = ls.false_alarm_level(self.faps)
             for k in range(len(faps)):
                 ax[i].axhline(faps[k], ls=self.fap_ls[k])
+
+        if self.label_peaks and 'shk' in self.label_which_peaks:
+            self.__label_peaks(power, periods, ls, ax[i])
+
         text = ax[i].text(xtext,ytext, 'HIRES $S_\mathrm{HK}$', transform=ax[i].transAxes, ha='right', fontsize=self.label_fontsize)
         text.set_bbox(dict(facecolor='white', alpha=0.8, edgecolor='none'))
         i += 1
@@ -215,6 +271,10 @@ class StackedPeriodogram:
             faps = ls.false_alarm_level(self.faps)
             for k in range(len(faps)):
                 ax[i].axhline(faps[k], ls=self.fap_ls[k])
+
+        if self.label_peaks and 'window' in self.label_which_peaks:
+            self.__label_peaks(power, periods, ls, ax[i])
+
         text = ax[i].text(xtext, ytext, 'RV Window Function', transform=ax[i].transAxes, ha='right', fontsize=self.label_fontsize)
         text.set_bbox(dict(facecolor='white', alpha=0.8, edgecolor='none'))
         self.min_period = true_min_period
