@@ -296,20 +296,30 @@ class StackedPeriodogram:
                 if self.toi.chains_path is not None:
                     try:
                         chains = pd.read_csv(self.toi.chains_path)
-                        print("Chains successfully loaded, GP rotation period line will be posterior median.")
                         prot = np.exp(np.median(chains[prot_var_name_str]))
+                        prot_posterior_med_used_flag = True
                     except FileNotFoundError:
-                        # If reading chains fails, use MAP value and let the user know
-                        print(f"Warning: Problem reading chains using this path: {self.toi.chains_path}. Plotting GP rotation period line using MAP value. This may differ from the posterior median, though.")
+                        # If reading chains fails, use MAP value
                         prot = np.exp(self.toi.map_soln[prot_var_name_str])
+                        prot_posterior_med_used_flag = False
+                        prot_posterior_med_failed_flag = True
                 else:
                     prot = np.exp(self.toi.map_soln[prot_var_name_str])
+                    prot_posterior_med_used_flag = False
                 ax[j].axvline(prot, color='red', lw=5, alpha=0.5)
                 ax[j].axvline(prot/2, color='tomato', lw=5, alpha=0.5)
             elif self.plot_phot_vert_line:
                 # Rotation period peak from OoT photometry
                 ax[j].axvline(self.toi.prot, color='blue', lw=5, alpha=0.5)
                 ax[j].axvline(self.toi.prot/2, color='cornflowerblue', lw=5, alpha=0.5)
+
+        if self.toi.include_svalue_gp:
+            if prot_posterior_med_used_flag:
+                print("Chains successfully loaded, GP rotation period line will be posterior median.")
+            elif prot_posterior_med_failed_flag:
+                print(f"Warning: Problem reading chains using this path: {self.toi.chains_path}. Plotting GP rotation period line using MAP value. This may differ from the posterior median, though.")
+            else:
+                print("GP rotation period line represents the MAP value.")
 
         # Y-axis label
         fig.supylabel('GLS Power', fontsize=22, x=0.05)
