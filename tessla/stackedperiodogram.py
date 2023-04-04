@@ -292,7 +292,18 @@ class StackedPeriodogram:
                     prot_var_name_str = 'log_rho_rv_svalue_gp'
                 elif self.toi.svalue_gp_kernel == 'rotation' or self.toi.svalue_gp_kernel == 'activity':
                     prot_var_name_str = 'log_prot_rv_svalue_gp'
-                prot = np.exp(self.toi.map_soln[prot_var_name_str])
+                # If sampling has been performed, then use the posterior median. Else, use the MAP value.
+                if self.toi.chains_path is not None:
+                    try:
+                        chains = pd.read_csv(self.toi.chains_path)
+                        print("Chains successfully loaded, GP rotation period line will be posterior median.")
+                        prot = np.exp(np.median(chains[prot_var_name_str]))
+                    except FileNotFoundError:
+                        # If reading chains fails, use MAP value and let the user know
+                        print(f"Warning: Problem reading chains using this path: {self.toi.chains_path}. Plotting GP rotation period line using MAP value. This may differ from the posterior median, though.")
+                        prot = np.exp(self.toi.map_soln[prot_var_name_str])
+                else:
+                    prot = np.exp(self.toi.map_soln[prot_var_name_str])
                 ax[j].axvline(prot, color='red', lw=5, alpha=0.5)
                 ax[j].axvline(prot/2, color='tomato', lw=5, alpha=0.5)
             elif self.plot_phot_vert_line:
