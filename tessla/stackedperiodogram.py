@@ -287,6 +287,9 @@ class StackedPeriodogram:
                     linestyle = '--' # Give non-transiting planets a different linestyle
                 ax[j].axvline(planet.per, color=planet.color, ls=linestyle, zorder=0)
             if self.toi.include_svalue_gp:
+                prot_posterior_med_used_flag = False
+                prot_posterior_med_failed_flag = False
+                
                 # Rotation period from GP used on RVs and Svalues
                 if self.toi.svalue_gp_kernel == 'exp_decay':
                     prot_var_name_str = 'log_rho_rv_svalue_gp'
