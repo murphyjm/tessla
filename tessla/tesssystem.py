@@ -68,7 +68,8 @@ class TessSystem:
                 errvel_cut=None, # If a float is provided, cut all mnvel and errvel absolute values above this limit. To get rid of bad data.
                 rv_bin_size=0.33, # Bin RVs collected in the same night (within 8 hours)
                 include_svalue_gp=False, # If true, add a GP simultaneously fit to the RVs and HIRES S-values
-                svalue_gp_kernel='exp_decay', # Which kernel to use for the GP
+                svalue_gp_kernel='rotation', # Which kernel to use for the GP
+                force_circular_orbits_for_transiting_planets=False,
                 # General stuff
                 verbose=True, # Print out messages
                 plotting=True, # Create plots as you go
@@ -99,6 +100,7 @@ class TessSystem:
         # Transiting and non-transiting planets
         self.planets = {}
         self.n_planets = len(self.planets)
+        self.force_circular_orbits_for_transiting_planets = force_circular_orbits_for_transiting_planets
 
         self.bjd_ref = bjd_ref
         self.phot_gp_kernel = phot_gp_kernel
@@ -130,7 +132,8 @@ class TessSystem:
 
             # Read in the RV data from file.
             rv_df = pd.read_csv(self.rv_data_path, comment='#')
-            rv_df = rv_df.rename(columns={'time':'date', 'bjd':'time'})
+            if 'bjd' in rv_df.columns.tolist():
+                rv_df = rv_df.rename(columns={'time':'date', 'bjd':'time'})
             cols = rv_df.columns.tolist()
             msg = 'RV .csv file must have the following columns: ["time", "mnvel", "errvel", "tel"], where "mnvel" and "errvel" are in m/s.'
             assert all([col in cols for col in ['time', 'mnvel', 'errvel', 'tel']]), msg
@@ -157,7 +160,7 @@ class TessSystem:
             
             # Add svalue data set even if not including Svalue GP
             if self.include_svalue_gp:
-                assert svalue_gp_kernel.lower() in ['rotation', 'exp_decay'], "Svalue/RV GP must have kernel that is either 'rotation' or 'exp_decay'"
+                assert svalue_gp_kernel.lower() in ['rotation', 'exp_decay', 'activity'], "Svalue/RV GP must have kernel that is either 'rotation' or 'exp_decay' or 'activity'"
                 self.svalue_gp_kernel = svalue_gp_kernel.lower()
                 if self.verbose:
                     print(f"Including GP model using S-Values with a {self.svalue_gp_kernel} kernel.")
@@ -242,8 +245,12 @@ class TessSystem:
             if self.is_joint_model:
                 try: # Maybe RVs haven't been included yet. i.e. when running flatten_light_curve()
                     planet.kamp = self.map_soln["K"][i]
-                    planet.ecc = self.map_soln["ecc"][i]
-                    planet.omega = self.map_soln["omega"][i]
+                    if self.force_circular_orbits_for_transiting_planets:
+                        planet.ecc = 0
+                        planet.omega = 0
+                    else:
+                        planet.ecc = self.map_soln["ecc"][i]
+                        planet.omega = self.map_soln["omega"][i]
                 except KeyError:
                     continue
             
@@ -683,6 +690,7 @@ class TessSystem:
             period = pm.Deterministic("period", tt.exp(log_period))
             log_ror = pm.Normal("log_ror", mu=0.5 * np.log(1e-3 * np.array([planet.depth for planet in self.transiting_planets.values()])), sigma=np.log(10), shape=self.n_transiting)
             ror = pm.Deterministic("ror", tt.exp(log_ror))
+            r_pl = pm.Deterministic("r_pl", ror * self.star.rstar)
             b = pm.Uniform("b", 0, 1, shape=self.n_transiting)
             log_dur = pm.Normal("log_dur", mu=np.log([planet.dur for planet in self.transiting_planets.values()]), sigma=np.log(10), shape=self.n_transiting)
             dur = pm.Deterministic("dur", tt.exp(log_dur))
@@ -691,13 +699,13 @@ class TessSystem:
             log_sigma_phot = pm.Normal("log_sigma_phot", mu=np.log(np.std(y.values[mask])), sd=2)
 
             # Orbit model
-            orbit = xo.orbits.KeplerianOrbit(period=period, t0=t0, b=b, ror=ror, duration=dur)
+            orbit = xo.orbits.KeplerianOrbit(period=period, t0=t0, b=b, duration=dur, r_star=self.star.rstar)
 
             # Track the implied stellar density
             pm.Deterministic("rho_circ", orbit.rho_star)
 
             # Light curves
-            light_curves = xo_star.get_light_curve(orbit=orbit, r=ror, t=x.values[mask], texp=self.cadence/60/60/24) * 1e3 # Converts self.cadence from seconds to days.
+            light_curves = xo_star.get_light_curve(orbit=orbit, r=r_pl, t=x.values[mask], texp=self.cadence/60/60/24) * 1e3 # Converts self.cadence from seconds to days.
             light_curve = tt.sum(light_curves, axis=-1) + mean_flux
             resid = y.values[mask] - light_curve
 
@@ -731,7 +739,7 @@ class TessSystem:
             lc_phase_pred = 1e3 * tt.stack(
                                     [
                                         xo_star.get_light_curve(
-                                            orbit=orbit, r=ror, t=t0[n] + phase_lc, texp=self.cadence/60/60/24)[..., n]
+                                            orbit=orbit, r=r_pl, t=t0[n] + phase_lc, texp=self.cadence/60/60/24)[..., n]
                                             for n in range(self.n_transiting)
                                     ],
                                     axis=-1,
@@ -838,7 +846,7 @@ class TessSystem:
         # Background model
         bkg = tt.zeros(len(t))
         if self.rv_trend and trend_rv is not None:
-            A = np.vander(t - self.rv_trend_time_ref, self.rv_trend_order + 1, increasing=True)
+            A = np.vander(t - self.rv_trend_time_ref, self.rv_trend_order + 1, increasing=True)[:, 1:]
             bkg = tt.dot(A, trend_rv)
         
         if n_planets > 1:
@@ -846,12 +854,21 @@ class TessSystem:
         else:
             return planet_rv, bkg, planet_rv + bkg
 
-    def __get_nontrans_params_and_orbit(self, mstar, rstar, sd_t0=100, sd_log_period=10, prefix="nontrans_"):
-        t0 = pm.Normal(f"{prefix}t0", mu=np.array([planet.t0 for planet in self.nontransiting_planets.values()]), sd=sd_t0, shape=self.n_nontransiting) # width of t0 is just a placeholder for now
-        log_K = pm.Normal(f"{prefix}log_K", mu=np.log(np.std(self.rv_df.mnvel) * np.ones(self.n_nontransiting)), sigma=np.log(50), shape=self.n_nontransiting)
-        K = pm.Deterministic(f"{prefix}K", tt.exp(log_K))
+    def __get_nontrans_params_and_orbit(self, mstar, rstar, sd_t0_default=100, sd_log_period_default=10, prefix="nontrans_"):
+        if any([planet.t0_err is None for planet in self.nontransiting_planets.values()]):
+            sd_t0 = sd_t0_default
+        else:
+            sd_t0 = np.array([planet.t0_err for planet in self.nontransiting_planets.values()])
+        if any([planet.per_err is None for planet in self.nontransiting_planets.values()]):
+            sd_log_period = sd_log_period_default
+        else:
+            sd_log_period = np.log([planet.per_err for planet in self.nontransiting_planets.values()])
+        
+        t0 = pm.Normal(f"{prefix}t0", mu=np.array([planet.t0 for planet in self.nontransiting_planets.values()]), sd=sd_t0, shape=self.n_nontransiting)
         log_period = pm.Normal(f"{prefix}log_period", mu=np.log(np.array([planet.per for planet in self.nontransiting_planets.values()])), sd=sd_log_period, shape=self.n_nontransiting)
         period = pm.Deterministic(f"{prefix}period", tt.exp(log_period))
+        log_K = pm.Normal(f"{prefix}log_K", mu=np.log(np.std(self.rv_df.mnvel) * np.ones(self.n_nontransiting)), sigma=np.log(50), shape=self.n_nontransiting)
+        K = pm.Deterministic(f"{prefix}K", tt.exp(log_K))
 
         # Eccentricity and omega
         ecs = pmx.UnitDisk(f"{prefix}ecs", shape=(2, self.n_nontransiting), testval=0.01 * np.ones((2, self.n_nontransiting)))
@@ -898,13 +915,18 @@ class TessSystem:
             period = pm.Deterministic("period", tt.exp(log_period))
             log_ror = pm.Normal("log_ror", mu=0.5 * np.log(1e-3 * np.array([planet.depth for planet in self.transiting_planets.values()])), sigma=np.log(10), shape=self.n_transiting)
             ror = pm.Deterministic("ror", tt.exp(log_ror))
+            r_pl = pm.Deterministic("r_pl", ror * rstar)
             b = pm.Uniform("b", 0, 1, shape=self.n_transiting)
             
             # Eccentricity and omega
-            ecs = pmx.UnitDisk("ecs", shape=(2, self.n_transiting), testval=0.01 * np.ones((2, self.n_transiting)))
-            ecc = pm.Deterministic("ecc", tt.sum(ecs**2, axis=0))
-            omega = pm.Deterministic("omega", tt.arctan2(ecs[1], ecs[0]))
-            xo.eccentricity.vaneylen19("ecc_prior", multi=(self.n_planets > 1), shape=self.n_transiting, fixed=True, observed=ecc)
+            if self.force_circular_orbits_for_transiting_planets:
+                ecc = None
+                omega = None
+            else:
+                ecs = pmx.UnitDisk("ecs", shape=(2, self.n_transiting), testval=0.01 * np.ones((2, self.n_transiting)))
+                ecc = pm.Deterministic("ecc", tt.sum(ecs**2, axis=0))
+                omega = pm.Deterministic("omega", tt.arctan2(ecs[1], ecs[0]))
+                xo.eccentricity.vaneylen19("ecc_prior", multi=(self.n_planets > 1), shape=self.n_transiting, fixed=True, observed=ecc)
 
             # Light curve jitter
             log_sigma_phot = pm.Normal("log_sigma_phot", mu=np.log(np.std(y_phot.values)), sd=2)
@@ -913,7 +935,7 @@ class TessSystem:
             orbit = xo.orbits.KeplerianOrbit(r_star=rstar, m_star=mstar, period=period, t0=t0, b=b, ecc=ecc, omega=omega)
 
             # Light curves
-            light_curves = xo_star.get_light_curve(orbit=orbit, r=ror, t=x_phot.values, texp=self.cadence/60/60/24) * 1e3 # Converts self.cadence from seconds to days.
+            light_curves = xo_star.get_light_curve(orbit=orbit, r=r_pl, t=x_phot.values, texp=self.cadence/60/60/24) * 1e3 # Converts self.cadence from seconds to days.
             light_curve = tt.sum(light_curves, axis=-1) + mean_flux
             resid_phot = y_phot.values - light_curve
 
@@ -945,15 +967,25 @@ class TessSystem:
             # Build the RV model
             if self.rv_trend:
                 # Optionally add a polynomial trend as the RV background
-                trend_rv = pm.Normal("trend_rv", mu=0, sd=10, shape=self.rv_trend_order + 1)
+                trend_rv = pm.Normal("trend_rv", mu=0, sd=10, shape=self.rv_trend_order) # Fixing offset for trend to be zero.
             else:
                 trend_rv = None
+            
+            # RV offsets and jitter terms
             gamma_rv_list = []
             for tel in self.rv_inst_names:
                 mask = self.rv_df['tel'] == tel
                 gamma_rv_list.append(np.median(self.rv_df.loc[mask, 'mnvel']))
-            gamma_rv = pm.Uniform("gamma_rv", lower=-20, upper=20, shape=self.num_rv_inst)
-            sigma_rv = pm.Uniform("sigma_rv", lower=0, upper=20, shape=self.num_rv_inst)
+            gamma_rv = pm.Uniform("gamma_rv", lower=-250, upper=250, shape=self.num_rv_inst)
+            
+            BoundedNormalSigmaRV = pm.Bound(pm.Normal, lower=np.log(0.1), upper=np.log(20))
+            log_sigma_rv_mu = np.empty(len(self.rv_inst_names))
+            for i, tel in enumerate(self.rv_inst_names):
+                tel_mask = self.rv_df['tel'].values == tel
+                log_sigma_rv_mu[i] = np.log(np.std(self.rv_df.loc[tel_mask, 'mnvel']))
+            log_sigma_rv = BoundedNormalSigmaRV("log_sigma_rv", mu=log_sigma_rv_mu, sd=2, shape=self.num_rv_inst)
+            sigma_rv = pm.Deterministic("sigma_rv", tt.exp(log_sigma_rv))
+
             mean_rv = tt.zeros(len(self.rv_df))
             diag_rv = tt.zeros(len(self.rv_df))
             for i, tel in enumerate(self.rv_inst_names):
@@ -998,71 +1030,106 @@ class TessSystem:
 
             # RV GP if specified
             if self.include_svalue_gp:
+
                 # These parameters shared by all GPs
-                gp_svalue_params = []
+                gp_rv_svalue_params = []
+
                 if self.svalue_gp_kernel == 'rotation':
-                    BoundedNormalProt = pm.Bound(pm.Normal, lower=np.log(1), upper=np.log(100))
-                    log_prot_rv_gp = BoundedNormalProt("log_prot_rv_gp", mu=np.log(self.prot), sd=np.log(self.prot_err)) # self.prot from LS periodogram of OoT flux but can be superseded
-                    prot_rv_gp = pm.Deterministic("prot_rv_gp", tt.exp(log_prot_rv_gp))
-                    gp_svalue_params += [log_prot_rv_gp]
+                    BoundedNormalProt = pm.Bound(pm.Normal, lower=np.log(1), upper=np.log(60))
+                    log_prot_rv_svalue_gp = BoundedNormalProt("log_prot_rv_svalue_gp", mu=np.log(self.prot), sd=np.log(self.prot_err)) # self.prot from LS periodogram of OoT flux but can be superseded
+                    prot_rv_svalue_gp = pm.Deterministic("prot_rv_svalue_gp", tt.exp(log_prot_rv_svalue_gp))
+                    log_Q0_rv_svalue_gp = pm.Normal('log_Q0_rv_svalue_gp', mu=0, sd=2)
+                    log_dQ_rv_svalue_gp = pm.Normal('log_dQ_rv_svalue_gp', mu=0, sd=2)
+                    f_rv_svalue_gp = pm.Uniform('f_rv_svalue_gp', lower=0.01, upper=1)
+                    gp_rv_svalue_params += [log_prot_rv_svalue_gp, log_Q0_rv_svalue_gp, log_dQ_rv_svalue_gp, f_rv_svalue_gp]
+                
                 elif self.svalue_gp_kernel == 'exp_decay':
                     BoundedNormalRho = pm.Bound(pm.Normal, lower=np.log(1), upper=np.log(50))
-                    log_rho_svalue_gp = BoundedNormalRho("log_rho_svalue_gp", mu=np.log(10), sd=np.log(50)) # Maybe change this to be informed from the periodogram of the photometry.
-                    BoundedNormalTau = pm.Bound(pm.Normal, lower=log_rho_svalue_gp, upper=np.log(200)) # Force to always be larger than undamped period to make GP smooth
-                    log_tau_svalue_gp = BoundedNormalTau("log_tau_svalue_gp", mu=np.log(10), sd=np.log(50)) # Maybe change this to be seeded with longer period.
-                    gp_svalue_params += [log_rho_svalue_gp, log_tau_svalue_gp]
+                    log_rho_rv_svalue_gp = BoundedNormalRho("log_rho_rv_svalue_gp", mu=np.log(10), sd=np.log(50)) # Maybe change this to be informed from the periodogram of the photometry.
+                    BoundedNormalTau = pm.Bound(pm.Normal, lower=log_rho_rv_svalue_gp, upper=np.log(200)) # Force to always be larger than undamped period to make GP smooth
+                    log_tau_rv_svalue_gp = BoundedNormalTau("log_tau_rv_svalue_gp", mu=np.log(10), sd=np.log(50)) # Maybe change this to be seeded with longer period.
+                    gp_rv_svalue_params += [log_rho_rv_svalue_gp, log_tau_rv_svalue_gp]
+                
+                elif self.svalue_gp_kernel == 'activity':
+                    # A combination of the exp_decay kernel and the rotation kernel
+
+                    # Rotation term
+                    BoundedNormalProt = pm.Bound(pm.Normal, lower=np.log(1), upper=np.log(60))
+                    log_prot_rv_svalue_gp = BoundedNormalProt("log_prot_rv_svalue_gp", mu=np.log(self.prot), sd=np.log(self.prot_err)) # self.prot from LS periodogram of OoT flux but can be superseded
+                    prot_rv_svalue_gp = pm.Deterministic("prot_rv_svalue_gp", tt.exp(log_prot_rv_svalue_gp))
+                    log_Q0_rv_svalue_gp = pm.Normal('log_Q0_rv_svalue_gp', mu=0, sd=2)
+                    log_dQ_rv_svalue_gp = pm.Normal('log_dQ_rv_svalue_gp', mu=0, sd=2)
+                    f_rv_svalue_gp = pm.Uniform('f_rv_svalue_gp', lower=0.01, upper=1)
+                    gp_rv_svalue_params += [log_prot_rv_svalue_gp, log_Q0_rv_svalue_gp, log_dQ_rv_svalue_gp, f_rv_svalue_gp]
+
+                    # Exponential decay term, but use Q = 1/np.sqrt(2) instead of log_tau
+                    BoundedNormalRho = pm.Bound(pm.Normal, lower=np.log(1), upper=np.log(100))
+                    log_rho_rv_svalue_gp = BoundedNormalRho("log_rho_rv_svalue_gp", mu=np.log(10), sd=np.log(50)) # Maybe change this to be informed from the periodogram of the photometry.
+                    gp_rv_svalue_params += [log_rho_rv_svalue_gp]
                 
                 gp_svalue_dict = {}
                 
                 # Jitter for svalues
                 gp_svalue_mean = pm.Uniform("gp_svalue_mean", lower=0, upper=1) # Mean for the GP rather than gamma values for each instrument since Svalue is not necessarily distributed around 0.
-                log_jitter_svalue_gp = pm.Normal("log_jitter_svalue_gp", mu=np.log(np.std(self.svalue_df.svalue.values)), sd=2, shape=self.num_svalue_inst) # Each Svalue GP gets a jitter term
+                log_jitter_svalue = pm.Normal("log_jitter_svalue", mu=np.log(np.std(self.svalue_df.svalue.values)), sd=2, shape=self.num_svalue_inst) # Each Svalue GP gets a jitter term
                 diag_svalue = tt.zeros(len(self.svalue_df))
                 
                 # GP for each Svalue instrument
                 for i, tel in enumerate(self.svalue_inst_names):
                     tel_mask = self.svalue_df['tel'].values == tel
-                    diag_svalue += ((self.svalue_df.svalue_err.values)**2 + tt.exp(2 * log_jitter_svalue_gp[i])) * np.array(self.svalue_df['tel'] == tel, dtype=int)
+                    diag_svalue += ((self.svalue_df.svalue_err.values)**2 + tt.exp(2 * log_jitter_svalue[i])) * np.array(self.svalue_df['tel'] == tel, dtype=int)
                     
                     # Kernels
                     if self.svalue_gp_kernel == 'rotation':
-                        sigma_gp_svalue = pm.InverseGamma("sigma_gp_svalue", **pmx.estimate_inverse_gamma_parameters(0.001, 1))
-                        log_Q0_gp_svalue = pm.Normal('log_Q0_gp_svalue', mu=0, sd=2)
-                        log_dQ_gp_svalue = pm.Normal('log_dQ_gp_svalue', mu=0, sd=2)
-                        f_gp_svalue = pm.Uniform('f_gp_svalue', lower=0.01, upper=1)
-                        gp_svalue_params += [sigma_gp_svalue, log_Q0_gp_svalue, log_dQ_gp_svalue, f_gp_svalue]
-                        kernel_svalue = terms.RotationTerm(sigma=sigma_gp_svalue, period=prot_rv_gp, Q0=tt.exp(log_Q0_gp_svalue), dQ=tt.exp(log_dQ_gp_svalue), f=f_gp_svalue)
+                        sigma_svalue_gp = pm.InverseGamma(f"sigma_svalue_gp_{tel}", **pmx.estimate_inverse_gamma_parameters(0.001, 1))
+                        gp_rv_svalue_params += [sigma_svalue_gp]
+                        kernel_svalue = terms.RotationTerm(sigma=sigma_svalue_gp, period=prot_rv_svalue_gp, Q0=tt.exp(log_Q0_rv_svalue_gp), dQ=tt.exp(log_dQ_rv_svalue_gp), f=f_rv_svalue_gp)
+                    
                     elif self.svalue_gp_kernel == 'exp_decay':
                         log_sigma_svalue_gp = pm.Normal(f"log_sigma_svalue_gp_{tel}", mu=0., sigma=10)
-                        gp_svalue_params += [log_sigma_svalue_gp]
-                        kernel_svalue = terms.SHOTerm(sigma=tt.exp(log_sigma_svalue_gp), rho=tt.exp(log_rho_svalue_gp), tau=tt.exp(log_tau_svalue_gp))
+                        gp_rv_svalue_params += [log_sigma_svalue_gp]
+                        kernel_svalue = terms.SHOTerm(sigma=tt.exp(log_sigma_svalue_gp), rho=tt.exp(log_rho_rv_svalue_gp), tau=tt.exp(log_tau_rv_svalue_gp))
+                    
+                    elif self.svalue_gp_kernel == 'activity':
+                        sigma_svalue_gp_rot = pm.InverseGamma(f"sigma_svalue_gp_rot_{tel}", **pmx.estimate_inverse_gamma_parameters(0.001, 1))
+                        gp_rv_svalue_params += [sigma_svalue_gp_rot]
+                        kernel_svalue = terms.RotationTerm(sigma=sigma_svalue_gp_rot, period=prot_rv_svalue_gp, Q0=tt.exp(log_Q0_rv_svalue_gp), dQ=tt.exp(log_dQ_rv_svalue_gp), f=f_rv_svalue_gp)
 
-                    gp_svalue = GaussianProcess(kernel_svalue, mean=gp_svalue_mean, t=self.svalue_df.loc[tel_mask, 'time'].values, diag=(self.svalue_df.loc[tel_mask, 'svalue_err'].values)**2 + tt.exp(2 * log_jitter_svalue_gp[i]))
+                        log_sigma_svalue_gp_dec = pm.Normal(f"log_sigma_svalue_gp_dec_{tel}", mu=0., sigma=10)
+                        gp_rv_svalue_params += [log_sigma_svalue_gp_dec]
+                        kernel_svalue += terms.SHOTerm(sigma=tt.exp(log_sigma_svalue_gp_dec), rho=tt.exp(log_rho_rv_svalue_gp), Q=1/np.sqrt(2))
+
+                    gp_svalue = GaussianProcess(kernel_svalue, mean=gp_svalue_mean, t=self.svalue_df.loc[tel_mask, 'time'].values, diag=(self.svalue_df.loc[tel_mask, 'svalue_err'].values)**2 + tt.exp(2 * log_jitter_svalue[i]))
                     gp_svalue.marginal(f"gp_svalue_{tel}", observed=self.svalue_df.loc[tel_mask, 'svalue'].values)
                     gp_svalue_dict[tel] = gp_svalue
-
-                gp_rv_params = []
-                gp_rv_dict = {}
+                
                 # GP for each RV instrument
-                # These params shared by RV instruments
-                if self.svalue_gp_kernel == 'rotation':
-                    log_Q0_gp_rv = pm.Normal('log_Q0_gp_rv', mu=0, sd=2)
-                    log_dQ_gp_rv = pm.Normal('log_dQ_gp_rv', mu=0, sd=2)
-                    f_gp_rv = pm.Uniform('f_gp_rv', lower=0.01, upper=1)
-                    gp_svalue_params += [log_Q0_gp_rv, log_dQ_gp_rv, f_gp_rv]
+                gp_rv_dict = {}
 
                 for tel in self.rv_inst_names:
                     tel_mask = self.rv_df['tel'].values == tel
                     
                     # Kernels
                     if self.svalue_gp_kernel == 'rotation':
-                        sigma_gp_rv = pm.InverseGamma(f"sigma_gp_rv_{tel}", **pmx.estimate_inverse_gamma_parameters(1, 5))
-                        gp_svalue_params += [sigma_gp_rv]
-                        kernel_rv = terms.RotationTerm(sigma=sigma_gp_rv, period=prot_rv_gp, Q0=tt.exp(log_Q0_gp_rv), dQ=tt.exp(log_dQ_gp_rv), f=f_gp_rv)
+                        sigma_rv_gp = pm.InverseGamma(f"sigma_rv_gp_{tel}", **pmx.estimate_inverse_gamma_parameters(1, 5))
+                        gp_rv_svalue_params += [sigma_rv_gp]
+                        kernel_rv = terms.RotationTerm(sigma=sigma_rv_gp, period=prot_rv_svalue_gp, Q0=tt.exp(log_Q0_rv_svalue_gp), dQ=tt.exp(log_dQ_rv_svalue_gp), f=f_rv_svalue_gp)
+                    
                     elif self.svalue_gp_kernel == 'exp_decay':
                         log_sigma_rv_gp = pm.Normal(f"log_sigma_rv_gp_{tel}", mu=0., sigma=10) # Different amplitude for each instrument.
-                        gp_rv_params += [log_sigma_rv_gp]
-                        kernel_rv = terms.SHOTerm(sigma=tt.exp(log_sigma_rv_gp), rho=tt.exp(log_rho_svalue_gp), tau=tt.exp(log_tau_svalue_gp))
+                        gp_rv_svalue_params += [log_sigma_rv_gp]
+                        kernel_rv = terms.SHOTerm(sigma=tt.exp(log_sigma_rv_gp), rho=tt.exp(log_rho_rv_svalue_gp), tau=tt.exp(log_tau_rv_svalue_gp))
+                    
+                    elif self.svalue_gp_kernel == 'activity':
+                        # sigma_rv_gp_rot = pm.InverseGamma(f"sigma_rv_gp_rot_{tel}", **pmx.estimate_inverse_gamma_parameters(1, 5))
+                        log_sigma_rv_gp_rot = pm.Normal(f"log_sigma_rv_gp_rot_{tel}", mu=0., sigma=10)
+                        sigma_rv_gp_rot = pm.Deterministic(f"sigma_rv_gp_rot_{tel}", tt.exp(log_sigma_rv_gp_rot))
+                        gp_rv_svalue_params += [log_sigma_rv_gp_rot]
+                        kernel_rv = terms.RotationTerm(sigma=sigma_rv_gp_rot, period=prot_rv_svalue_gp, Q0=tt.exp(log_Q0_rv_svalue_gp), dQ=tt.exp(log_dQ_rv_svalue_gp), f=f_rv_svalue_gp)
+
+                        log_sigma_rv_gp_dec = pm.Normal(f"log_sigma_rv_gp_dec_{tel}", mu=0., sigma=10) # Different amplitude for each instrument.
+                        gp_rv_svalue_params += [log_sigma_rv_gp_dec]
+                        kernel_rv += terms.SHOTerm(sigma=tt.exp(log_sigma_rv_gp_dec), rho=tt.exp(log_rho_rv_svalue_gp), Q=1/np.sqrt(2))
                     
                     gp_rv = GaussianProcess(kernel_rv, t=self.rv_df.loc[tel_mask, 'time'].values, diag=diag_rv[tel_mask])
                     gp_rv.marginal(f"gp_rv_{tel}", observed=resid_rv[tel_mask])
@@ -1073,7 +1140,7 @@ class TessSystem:
             lc_phase_pred = 1e3 * tt.stack(
                                     [
                                         xo_star.get_light_curve(
-                                            orbit=orbit, r=ror, t=t0[n] + phase_lc, texp=self.cadence/60/60/24)[..., n]
+                                            orbit=orbit, r=r_pl, t=t0[n] + phase_lc, texp=self.cadence/60/60/24)[..., n]
                                             for n in range(self.n_transiting)
                                     ],
                                     axis=-1,
@@ -1084,17 +1151,21 @@ class TessSystem:
                 start = model.test_point
             # Order of parameters to be optimized is a bit arbitrary
             map_soln = pmx.optimize(start=start, vars=[log_sigma_phot])
+            map_soln = pmx.optimize(start=map_soln, vars=[u])
+            map_soln = pmx.optimize(start=map_soln, vars=[log_ror])
             map_soln = pmx.optimize(start=map_soln, vars=[log_K])
+            map_soln = pmx.optimize(start=map_soln, vars=[b])
+            if not self.force_circular_orbits_for_transiting_planets:
+                map_soln = pmx.optimize(start=map_soln, vars=[ecs])
             if self.n_nontransiting > 0:
                 map_soln = pmx.optimize(start=map_soln, vars=[nontrans_params['log_K']])
+                map_soln = pmx.optimize(start=map_soln, vars=[nontrans_params['ecs']])
+            map_soln = pmx.optimize(start=map_soln, vars=[gamma_rv, sigma_rv])
             if self.rv_trend:
                 map_soln = pmx.optimize(start=map_soln, vars=[trend_rv])
-            map_soln = pmx.optimize(start=map_soln, vars=[gamma_rv])
             if self.include_svalue_gp:
-                for k in range(len(gp_svalue_params)):
-                    map_soln = pmx.optimize(start=map_soln, vars=[gp_svalue_params[k]])
-                for k in range(len(gp_rv_params)):
-                    map_soln = pmx.optimize(start=map_soln, vars=[gp_rv_params[k]])
+                for k in range(len(gp_rv_svalue_params)):
+                    map_soln = pmx.optimize(start=map_soln, vars=[gp_rv_svalue_params[k]])
             map_soln = pmx.optimize(start=map_soln, vars=[sigma_rv])
             map_soln = pmx.optimize(start=map_soln, vars=[log_ror])
             map_soln = pmx.optimize(start=map_soln, vars=[b])
@@ -1169,7 +1240,7 @@ class TessSystem:
         '''
         self.rv_trend = rv_trend
         self.rv_trend_order = rv_trend_order
-        self.rv_trend_time_ref = 0.5 * (np.max(self.rv_df.time) - np.min(self.rv_df.time)) # Reference time for the background trend model, if needed.
+        self.rv_trend_time_ref = 0.5 * (np.max(self.rv_df.time) - np.min(self.rv_df.time)) # Reference time for the background trend model, if needed. # TODO: Is this correct? Or should it just be the midpoint of the time values?
         # You may want to call self.flatten_light_curve() first because it will remove photometric outliers.
         N_t_rv = int(2 * (np.max(self.rv_df.time) - np.min(self.rv_df.time)))
         model, map_soln, extras = self.__build_joint_model(self.cleaned_time, self.cleaned_flux, self.cleaned_flux_err, start=self.map_soln, N_t_rv=N_t_rv)
@@ -1216,10 +1287,7 @@ class TessSystem:
         '''
         Compute the AIC
         '''
-        try:
-            first_term = 2 * self.num_vars
-        except AttributeError:
-            first_term = 2 * self.count_num_vars(model)
+        first_term = 2 * self.count_num_vars(model)
         
         AIC = first_term - 2 * model.logp(self.map_soln)
         self.AIC = AIC
@@ -1231,10 +1299,7 @@ class TessSystem:
         '''
         AIC = self.compute_AIC(model)
         numerator = 2 * self.num_vars * (self.num_vars + 1)
-        try:
-            denominator = self.num_data - self.num_vars - 1
-        except AttributeError:
-            denominator = self.count_num_data() - self.num_vars - 1
+        denominator = self.count_num_data() - self.num_vars - 1
         AICc = AIC + numerator / denominator
         self.AICc = AICc
         return AICc
@@ -1243,10 +1308,7 @@ class TessSystem:
         '''
         Compute the BIC
         '''
-        try:
-            first_term = self.num_vars * np.log(self.num_data)
-        except AttributeError:
-            first_term = self.count_num_vars(model) * np.log(self.count_num_data())
+        first_term = self.count_num_vars(model) * np.log(self.count_num_data())
         BIC = first_term - 2 * model.logp(self.map_soln)
         self.BIC = BIC
         return BIC
@@ -1266,23 +1328,29 @@ class TessSystem:
                 num_dim = len(flat_samps[param].shape)
             except KeyError:
                 continue
-            if num_dim > 1 and param != 'u' and param != 'gamma_rv' and param != 'sigma_rv' and param != 'trend_rv' and param != 'log_jitter_svalue_gp':
-                msg = "Chains and number of planets have shape mismatch."
-                ind = 0
+            if num_dim > 1 and param != 'u' and param != 'gamma_rv' and param != 'log_sigma_rv' and param != 'sigma_rv' and param != 'trend_rv' and param != 'log_jitter_svalue':
                 if param == 'ecs':
-                    ind = 1
-                for i, pl_letter in enumerate(self.transiting_planets.keys()):
-                    prefix = ''
-                    try:
-                        df_chains[f"{prefix}{param}_{pl_letter}"] = flat_samps[f"{prefix}{param}"][i, :].data
-                    except ValueError:
-                        continue
-                for i, pl_letter in enumerate(self.nontransiting_planets.keys()):
-                    prefix = 'nontrans_'
-                    try:
-                        df_chains[f"{prefix}{param}_{pl_letter}"] = flat_samps[f"{prefix}{param}"][i, :].data
-                    except (KeyError, ValueError):
-                        continue
+                    for i, pl_letter in enumerate(self.transiting_planets.keys()):
+                        prefix = ''
+                        df_chains[f"{prefix}ecs_0_{pl_letter}"] = flat_samps[f"{prefix}{param}"][0, i, :].data
+                        df_chains[f"{prefix}ecs_1_{pl_letter}"] = flat_samps[f"{prefix}{param}"][1, i, :].data
+                    for i, pl_letter in enumerate(self.nontransiting_planets.keys()):
+                        prefix = 'nontrans_'
+                        df_chains[f"{prefix}ecs_0_{pl_letter}"] = flat_samps[f"{prefix}{param}"][0, i, :].data
+                        df_chains[f"{prefix}ecs_1_{pl_letter}"] = flat_samps[f"{prefix}{param}"][1, i, :].data
+                else:
+                    for i, pl_letter in enumerate(self.transiting_planets.keys()):
+                        prefix = ''
+                        try:
+                            df_chains[f"{prefix}{param}_{pl_letter}"] = flat_samps[f"{prefix}{param}"][i, :].data
+                        except ValueError:
+                            continue
+                    for i, pl_letter in enumerate(self.nontransiting_planets.keys()):
+                        prefix = 'nontrans_'
+                        try:
+                            df_chains[f"{prefix}{param}_{pl_letter}"] = flat_samps[f"{prefix}{param}"][i, :].data
+                        except (ValueError, KeyError) as e:
+                            continue
             elif param == 'u':
                 for i in range(flat_samps[param].shape[0]):
                     df_chains[f"u_{i}"] = flat_samps[param][i, :].data
@@ -1291,17 +1359,22 @@ class TessSystem:
                 assert flat_samps[param].shape[0] == len(self.rv_inst_names), msg
                 for i,tel in enumerate(self.rv_inst_names):
                     df_chains[f"gamma_rv_{tel}"] = flat_samps[param][i, :].data
+            elif param == 'log_sigma_rv':
+                msg = "Chains and number of RV instruments have shape mismatch."
+                assert flat_samps[param].shape[0] == len(self.rv_inst_names), msg
+                for i,tel in enumerate(self.rv_inst_names):
+                    df_chains[f"log_sigma_rv_{tel}"] = flat_samps[param][i, :].data
             elif param == 'sigma_rv':
                 msg = "Chains and number of RV instruments have shape mismatch."
                 assert flat_samps[param].shape[0] == len(self.rv_inst_names), msg
                 for i,tel in enumerate(self.rv_inst_names):
                     df_chains[f"sigma_rv_{tel}"] = flat_samps[param][i, :].data
             elif param == 'trend_rv':
-                for i in range(self.rv_trend_order + 1):
+                for i in range(self.rv_trend_order):
                     df_chains[f"trend_rv_{i}"] = flat_samps[param][i, :].data
-            elif param == 'log_jitter_svalue_gp':
+            elif param == 'log_jitter_svalue':
                 for i,tel in enumerate(self.svalue_inst_names):
-                    df_chains[f"log_jitter_svalue_gp_{tel}"] = flat_samps[param][i, :].data
+                    df_chains[f"log_jitter_svalue_{tel}"] = flat_samps[param][i, :].data
             else:
                 try:
                     df_chains[param] = flat_samps[param].data
@@ -1310,7 +1383,7 @@ class TessSystem:
             
         df_chains.to_csv(chains_output_fname, index=False, compression="gzip")
 
-    def run_sampling(self, model, map_soln, tune=6000, draws=4000, chains=8, cores=None, init_method='adapt_full', output_fname_suffix='', overwrite=False):
+    def run_sampling(self, model, map_soln, start=None, tune=6000, draws=4000, chains=8, cores=None, init_method='adapt_full', target_accept=0.9, return_trace=False, step_kwargs={}, output_fname_suffix='', overwrite=False):
         '''
         Run the HMC sampling.
         '''
@@ -1339,21 +1412,31 @@ class TessSystem:
 
         if cores is None:
             cores = chains
+
+        # Optionally include a starting point that overrides using the map solution
+        if start is None:
+            start = map_soln
         
         with model:
             trace = pmx.sample(
                             tune=tune,
                             draws=draws,
-                            start=map_soln,
+                            start=start,
                             chains=chains,
                             cores=cores,
                             return_inferencedata=True,
-                            init=init_method
+                            init=init_method,
+                            target_accept=target_accept,
+                            step_kwargs=step_kwargs
             )
         
         # Save the trace summary which contains convergence information
         summary_df = az.summary(trace, round_to=5)
         summary_df.to_csv(trace_summary_output_fname)
+
+        # Save the trace object.
+        with open(os.path.join(self.sampling_dir, f"{self.name.replace(' ', '_')}_trace_obj.pkl"), "wb") as trace_fname:
+            pickle.dump(trace, trace_fname, protocol=pickle.HIGHEST_PROTOCOL)
 
         # Save the concatenated samples.
         flat_samps =  trace.posterior.stack(sample=("chain", "draw"))
@@ -1362,7 +1445,10 @@ class TessSystem:
         self.__flat_samps_to_csv(model, flat_samps, chains_output_fname)     
         self.chains_path = chains_output_fname   
 
-        return flat_samps
+        if return_trace:
+            return flat_samps, trace
+        else:
+            return flat_samps
 
     def add_ecc_and_omega_to_chains(self, flat_samps, rho_circ_param_name='rho_circ'):
         '''
@@ -1420,17 +1506,22 @@ class TessSystem:
             if not planet.is_transiting:
                 prefix = "nontrans_"
             df_chains[f"{prefix}t0_BTJD_{letter}"] = df_chains[f"{prefix}t0_{letter}"] + self.bjd_ref - T0_BTJD # T0 in BTJD
-            df_chains[f"{prefix}omega_folded_{letter}"] = df_chains[f"{prefix}omega_{letter}"].apply(convert_negative_angles)
-            df_chains[f"{prefix}omega_folded_deg_{letter}"] = df_chains[f"{prefix}omega_folded_{letter}"].values * 180 / np.pi # Convert omega from radians to degrees to have for convenience
+            if not self.force_circular_orbits_for_transiting_planets:
+                df_chains[f"{prefix}omega_folded_{letter}"] = df_chains[f"{prefix}omega_{letter}"].apply(convert_negative_angles)
+                df_chains[f"{prefix}omega_folded_deg_{letter}"] = df_chains[f"{prefix}omega_folded_{letter}"].values * 180 / np.pi # Convert omega from radians to degrees to have for convenience
             df_chains[f"{prefix}a_{letter}"] = get_semimajor_axis(df_chains[f"{prefix}period_{letter}"].values, mstar_samples)
             df_chains[f"{prefix}aor_{letter}"] = get_aor(df_chains[f"{prefix}a_{letter}"].values, rstar_samples)
             df_chains[f"{prefix}sinc_{letter}"] = get_sinc(df_chains[f"{prefix}a_{letter}"].values, teff_samples, rstar_samples)
             df_chains[f"{prefix}teq_{letter}"] = get_teq(df_chains[f"{prefix}a_{letter}"].values, teff_samples, rstar_samples) # Calculated assuming zero Bond albedo
             if self.is_joint_model:
+                if self.force_circular_orbits_for_transiting_planets:
+                    ecc_samples = 0
+                else:
+                    ecc_samples = df_chains[f"{prefix}ecc_{letter}"].values
                 df_chains[f"{prefix}msini_{letter}"] = Msini(df_chains[f"{prefix}K_{letter}"], 
                                                              df_chains[f"{prefix}period_{letter}"], 
                                                              mstar_samples, 
-                                                             df_chains[f"{prefix}ecc_{letter}"], 
+                                                             ecc_samples, 
                                                              Msini_units='earth')
 
         # Transit-specific derived parameters
@@ -1444,12 +1535,18 @@ class TessSystem:
                 df_chains[f"rho_{letter}"] = get_density(df_chains[f"mp_{letter}"].values, df_chains[f"rp_{letter}"].values, 'earthMass', 'earthRad', 'g', 'cm')
                 
                 # Equation 14 from Winn 2010
+                if self.force_circular_orbits_for_transiting_planets:
+                    ecc_samples = 0
+                    omega_samples = 0
+                else:
+                    ecc_samples = df_chains[f"ecc_{letter}"].values
+                    omega_samples = df_chains[f"omega_folded_{letter}"].values
                 dur_day = get_dur(df_chains[f"period_{letter}"].values, 
                                 df_chains[f"aor_{letter}"].values,
                                 df_chains[f"b_{letter}"].values,
                                 df_chains[f"i_rad_{letter}"].values,
-                                df_chains[f"ecc_{letter}"].values,
-                                df_chains[f"omega_folded_{letter}"].values
+                                ecc_samples,
+                                omega_samples
                                 )
                 df_chains[f"dur_day_{letter}"] = dur_day
                 df_chains[f"dur_hr_{letter}"] = dur_day * 24

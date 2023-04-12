@@ -1,5 +1,6 @@
 import os
 from re import I
+from tkinter import Y
 import warnings
 from tqdm import tqdm
 
@@ -49,6 +50,16 @@ DEFAULT_MARKER_MAPPER = {
         'color':'green',
         'marker':'d',
         'label':'APF'
+    },
+    'HARPS-N':{
+        'color':'purple',
+        'marker':'^',
+        'label':'HARPS-N'
+    },
+    'HARPS':{
+        'color':'deepskyblue',
+        'marker':'^',
+        'label':'HARPS'
     }
 }
 
@@ -58,7 +69,7 @@ class RVPlot:
     '''
     def __init__(self, 
                 toi,
-                figsize=(12,14),
+                figwidth=12,
                 ylabelpad=10,
                 plot_random_orbit_draws=False, # If true, plot random realizations of the phase-folded RV curve using the posteriors of the model fit.
                 num_random_orbit_draws=25, # Number of random draws to plot.
@@ -67,11 +78,16 @@ class RVPlot:
                 df_summary_fname=None,
                 tel_marker_mapper=None,
                 rms_yscale_phase_folded_panels=True,
-                param_fontsize=14 # Fontsize for annotating the phase folded plots
+                rms_yscale_phase_folded_panels_scale=3,
+                param_fontsize=14, # Fontsize for annotating the phase folded plots
+                timeseries_phase_hspace=0.05,
+                facecolor='white',
+                ytick_spacing=None,
+                residuals_ytick_spacing=None
                 ) -> None:
     
         self.toi = toi
-        self.figsize = figsize
+        self.figwidth = figwidth
         self.ylabelpad = ylabelpad
         self.plot_random_orbit_draws = plot_random_orbit_draws
         self.num_random_orbit_draws = num_random_orbit_draws
@@ -90,9 +106,14 @@ class RVPlot:
             self.tel_marker_mapper = tel_marker_mapper
         
         self.rms_yscale_phase_folded_panels = rms_yscale_phase_folded_panels # If true, set the Y axis limits for the phase-folded panels based on the residuals rms.
+        self.rms_yscale_phase_folded_panels_scale = rms_yscale_phase_folded_panels_scale
         self.param_fontsize = param_fontsize
+        self.timeseries_phase_hspace = timeseries_phase_hspace
+        self.facecolor = facecolor
+        self.ytick_spacing = ytick_spacing
+        self.residuals_ytick_spacing = residuals_ytick_spacing
 
-    def plot(self, save_fname=None, overwrite=False):
+    def plot(self, save_fname=None, overwrite=False, save_and_close=True, return_fig_obj=False):
         '''
         Make the plot!
         '''
@@ -115,10 +136,14 @@ class RVPlot:
         
         fig = self.__rv_plot()
         
-        # Save the figure!
-        fig.savefig(save_fname, facecolor='white', bbox_inches='tight', dpi=self.save_dpi)
-        print(f"RV model plot saved to {save_fname}")
-        plt.close()
+        # Option to either save and close the figure right away or return it for further investigation.
+        if save_and_close:
+            # Save the figure!
+            fig.savefig(save_fname, facecolor=self.facecolor, bbox_inches='tight', dpi=self.save_dpi)
+            print(f"RV model plot saved to {save_fname}")
+            plt.close()
+        elif return_fig_obj:
+            return fig
     
     def __get_ytick_spacing(self):
         '''
@@ -143,8 +168,11 @@ class RVPlot:
         Hacky.
         '''
         yspan = np.max(residuals) - np.min(residuals)
-        major = 10
-        minor = 5
+        major = 5
+        minor = 2.5
+        if yspan >= 15 and yspan < 25:
+            major = 10
+            minor = 5
         if yspan >= 25 and yspan < 35:
             major = 15
             minor = 7.5
@@ -173,17 +201,24 @@ class RVPlot:
     def __rv_plot(self):
         '''
         '''
+        figheight = 14 # Default fig height
+        timeseries_height = 3 * figheight / 5
+        num_planet_rows = ceil(self.toi.n_planets / 2)
+        planet_row_height = 2 * figheight / 5
+        if num_planet_rows > 1:
+            figheight = figheight + (num_planet_rows - 1) * planet_row_height
+        else:
+            self.timeseries_phase_hspace = 0.07
 
         # Create the figure object
-        fig = plt.figure(figsize=self.figsize)
+        fig = plt.figure(figsize=(self.figwidth, figheight))
 
-        # Create the GridSpec objects
-        height_ratios = [1, 0.66]
-        if self.toi.n_planets > 2:
-            height_ratios = [1, 1]
-        gs0, gs1 = gridspec.GridSpec(2, 1, figure=fig, height_ratios=height_ratios)
+        # Create the GridSpec objects for the timeseries panel and its residuals
         heights = [1, 0.25]
-        sps1, sps2 = gridspec.GridSpecFromSubplotSpec(2, 1, subplot_spec=gs0, height_ratios=heights, hspace=0.05)
+        gs0 = gridspec.GridSpec(2, 1, figure=fig, height_ratios=heights, hspace=0.05)
+        timeseries_bottom = 1 - timeseries_height / figheight
+        gs0.update(bottom=timeseries_bottom + self.timeseries_phase_hspace*0.5)
+        sps1, sps2 = gs0
         
         ################################################################################################
         ############################### TOP PANEL: RVs and full RV model ###############################
@@ -220,7 +255,10 @@ class RVPlot:
         
         # Top panel housekeeping
         ax1.set_ylabel("RV [m s$^{-1}$]", fontsize=14, labelpad=self.ylabelpad)
-        major, minor = self.__get_ytick_spacing()
+        if self.ytick_spacing is None:
+            major, minor = self.__get_ytick_spacing()
+        else:
+            major, minor = self.ytick_spacing
         ax1.yaxis.set_major_locator(MultipleLocator(major))
         ax1.yaxis.set_minor_locator(MultipleLocator(minor))
         ax1.legend(fontsize=14, loc='upper right')
@@ -251,7 +289,10 @@ class RVPlot:
         # Plot housekeeping
         ax2.set_ylabel("Residuals", fontsize=14, labelpad=self.ylabelpad)
         ax2.set_xlabel(f"Time [BJD - {self.toi.bjd_ref:.1f}]", fontsize=14)
-        major, minor = self.__get_residuals_ytick_spacing(residuals)
+        if self.residuals_ytick_spacing is None:
+            major, minor = self.__get_residuals_ytick_spacing(residuals)
+        else:
+            major, minor = self.residuals_ytick_spacing
         ax2.yaxis.set_major_locator(MultipleLocator(major))
         ax2.yaxis.set_minor_locator(MultipleLocator(minor))
         bottom = -1 * np.max(ax2.get_ylim())
@@ -267,20 +308,24 @@ class RVPlot:
 
         # Make ticks go inward and set multiple locator for x-axis
         for ax in [ax1, ax2]:
-            ax.xaxis.set_major_locator(MultipleLocator(100))
-            ax.xaxis.set_minor_locator(MultipleLocator(50))
+            if (np.max(self.toi.t_rv) - np.min(self.toi.t_rv)) > 10 * 365:
+                ax.xaxis.set_major_locator(MultipleLocator(500))
+                ax.xaxis.set_minor_locator(MultipleLocator(250))
+            else:
+                ax.xaxis.set_major_locator(MultipleLocator(100))
+                ax.xaxis.set_minor_locator(MultipleLocator(50))
             ax.tick_params(axis='y', direction='in', which='both', left=True, right=True)
             ax.tick_params(axis='x', direction='in', which='both', top=True, bottom=True)
         plt.setp(ax1.get_xticklabels(), visible=False)
         ################################################################################################
         ############################ PHASE-FOLDED TRANSIT AND RESIDUALS ################################
         ################################################################################################
-        fig = self.__plot_phase_folded_orbits(fig, gs1)
+        fig = self.__plot_phase_folded_orbits(fig, timeseries_bottom)
         
         fig.align_ylabels()
         return fig
 
-    def __plot_phase_folded_orbits(self, fig, gs1):
+    def __plot_phase_folded_orbits(self, fig, timeseries_bottom):
         '''
         Plot the folded transits for each planet.
         '''
@@ -298,13 +343,14 @@ class RVPlot:
         
         # Set up the outer gridspec
         num_planet_rows = ceil(self.toi.n_planets / 2)
-        outer_sps = gridspec.GridSpecFromSubplotSpec(num_planet_rows, 2, subplot_spec=gs1, hspace=0.3)
+        outer_gs = gridspec.GridSpec(num_planet_rows, 2, figure=fig, hspace=0.2)
+        outer_gs.update(top=timeseries_bottom - self.timeseries_phase_hspace*0.5)
 
         for k in range(num_planet_rows):
             # Nested gridspec objects. One for each row of the phased plots. 
             # See https://stackoverflow.com/questions/31484273/spacing-between-some-subplots-but-not-all
             heights = [1, 0.25] # Heigh ratio between phase plot and residuals
-            sps = gridspec.GridSpecFromSubplotSpec(2, 2, subplot_spec=outer_sps[k, :], height_ratios=heights, hspace=0.05)
+            sps = gridspec.GridSpecFromSubplotSpec(2, 2, subplot_spec=outer_gs[k, :], height_ratios=heights, hspace=0.05)
 
             # Figure out how many columns in this row
             planets_left = self.toi.n_planets - 2 * k
@@ -385,8 +431,12 @@ class RVPlot:
                         t0 = chains[f"{prefix}t0_{planet.pl_letter}"].values[ind]
                         rstar = chains["rstar"].values[ind]
                         mstar = chains["mstar"].values[ind]
-                        ecc = chains[f"{prefix}ecc_{planet.pl_letter}"].values[ind]
-                        omega = chains[f"{prefix}omega_{planet.pl_letter}"].values[ind]
+                        if self.toi.force_circular_orbits_for_transiting_planets:
+                            ecc = None
+                            omega = None
+                        else:
+                            ecc = chains[f"{prefix}ecc_{planet.pl_letter}"].values[ind]
+                            omega = chains[f"{prefix}omega_{planet.pl_letter}"].values[ind]
                         orbit = xo.orbits.KeplerianOrbit(r_star=rstar, m_star=mstar, period=period, t0=t0, ecc=ecc, omega=omega)
 
                         # Get RV for planet
@@ -423,7 +473,10 @@ class RVPlot:
                 major, minor = self.__get_ytick_phase_spacing(planet.kamp)
                 ax0.yaxis.set_major_locator(MultipleLocator(major))
                 ax0.yaxis.set_minor_locator(MultipleLocator(minor))
-                major, minor = self.__get_residuals_ytick_spacing(residuals)
+                if self.residuals_ytick_spacing is None:
+                    major, minor = self.__get_residuals_ytick_spacing(residuals)
+                else:
+                    major, minor = self.residuals_ytick_spacing
                 ax1.yaxis.set_major_locator(MultipleLocator(major))
                 ax1.yaxis.set_minor_locator(MultipleLocator(minor))
 
@@ -438,23 +491,33 @@ class RVPlot:
                 # Include errors
                 if self.df_summary is not None:
                     per_med = self.df_summary.loc[f'{prefix}period_{planet.pl_letter}', 'median']
-                    per_err = self.df_summary.loc[f'{prefix}period_{planet.pl_letter}', 'std']
+                    per_err16 = np.abs(self.df_summary.loc[f'{prefix}period_{planet.pl_letter}', 'err16'])
+                    per_err84 = self.df_summary.loc[f'{prefix}period_{planet.pl_letter}', 'err84']
+                    per_err = np.median([per_err16, per_err84])
                     if per_err < 1:
                         per_str = f"$P =$ {per_med:.2f} $\pm$ {per_err:.2e} d"
                     else:
                         per_str = f"$P =$ {per_med:.1f} $\pm$ {per_err:.1f} d"
-
-                    ecc_med = self.df_summary.loc[f'{prefix}ecc_{planet.pl_letter}', 'median']
-                    ecc_err = self.df_summary.loc[f'{prefix}ecc_{planet.pl_letter}', 'std']
-                    ecc_str = f"$e = {ecc_med:.2f} \pm {ecc_err:.2f}$"
+                    if self.toi.force_circular_orbits_for_transiting_planets:
+                        ecc_str = "$e \equiv 0$"
+                    else:
+                        ecc_med = self.df_summary.loc[f'{prefix}ecc_{planet.pl_letter}', 'median']
+                        ecc_err16 = np.abs(self.df_summary.loc[f'{prefix}ecc_{planet.pl_letter}', 'err16'])
+                        ecc_err84 = self.df_summary.loc[f'{prefix}ecc_{planet.pl_letter}', 'err84']
+                        ecc_err = np.median([ecc_err16, ecc_err84])
+                        ecc_str = f"$e = {ecc_med:.2f} \pm {ecc_err:.2f}$"
 
                     kamp_med = self.df_summary.loc[f'{prefix}K_{planet.pl_letter}', 'median']
-                    kamp_err = self.df_summary.loc[f'{prefix}K_{planet.pl_letter}', 'std']
+                    kamp_err16 = np.abs(self.df_summary.loc[f'{prefix}K_{planet.pl_letter}', 'err16'])
+                    kamp_err84 = self.df_summary.loc[f'{prefix}K_{planet.pl_letter}', 'err84']
+                    kamp_err = np.median([kamp_err16, kamp_err84])
                     kamp_str = f"$K = {kamp_med:.2f} \pm {kamp_err:.2f}$ m s$^{{-1}}$"
 
                     if planet.is_transiting:
                         mp_med = self.df_summary.loc[f'mp_{planet.pl_letter}', 'median']
-                        mp_err = self.df_summary.loc[f'mp_{planet.pl_letter}', 'std']
+                        mp_err16 = np.abs(self.df_summary.loc[f'mp_{planet.pl_letter}', 'err16'])
+                        mp_err84 = self.df_summary.loc[f'mp_{planet.pl_letter}', 'err84']
+                        mp_err = np.median([mp_err16, mp_err84])
                         mp_str = '\n' + f"$M_\mathrm{{p}} = {mp_med:.1f} \pm {mp_err:.1f}$ $M_\oplus$"
                         if mp_med > 200: # If mp > 200 Earth masses, put in Jupiter masses
                             mp_map_med = units.Mearth.to(units.Mjup, mp_med)
@@ -462,7 +525,9 @@ class RVPlot:
                             mp_str = '\n' + f"$M_\mathrm{{p}} = {mp_map_med:.1f} \pm {mp_map_err:.1f}$ $M_\mathrm{{Jup}}$"
                     else:
                         mp_med = self.df_summary.loc[f'{prefix}msini_{planet.pl_letter}', 'median']
-                        mp_err = self.df_summary.loc[f'{prefix}msini_{planet.pl_letter}', 'std']
+                        mp_err16 = np.abs(self.df_summary.loc[f'{prefix}msini_{planet.pl_letter}', 'err16'])
+                        mp_err84 = self.df_summary.loc[f'{prefix}msini_{planet.pl_letter}', 'err84']
+                        mp_err = np.median([mp_err16, mp_err84])
                         mp_str = '\n' + f"$M_\mathrm{{p}} \sin i = {mp_med:.1f} \pm {mp_err:.1f}$ $M_\oplus$"
                         if mp_med > 200: # If mp sini > 200 Earth masses, put in Jupiter masses
                             mp_map_med = units.Mearth.to(units.Mjup, mp_med)
@@ -470,7 +535,10 @@ class RVPlot:
                             mp_str = '\n' + f"$M_\mathrm{{p}} \sin i = {mp_map_med:.1f} \pm {mp_map_err:.1f}$ $M_\mathrm{{Jup}}$"
                 else:
                     per_str = f"$P =$ {planet.per:.2f} d"
-                    ecc_str = f"$e =$ {planet.ecc:.2f}"
+                    if self.toi.force_circular_orbits_for_transiting_planets:
+                        ecc_str = "$e \equiv 0$"
+                    else:
+                        ecc_str = f"$e =$ {planet.ecc:.2f}"
                     kamp_str = f"$K =$ {planet.kamp:.2f} m s$^{{-1}}$"
                     mp_str = ''
 
@@ -493,15 +561,18 @@ class RVPlot:
                 y_phase_max = np.max([max(ax.get_ylim()) for ax in axes])
                 y_phase_min = np.min([min(ax.get_ylim()) for ax in axes])
                 y_phase_lim = (y_phase_min, y_phase_max)
-                if k == 0 and self.rms_yscale_phase_folded_panels:
-                    y_phase_lim = (-3 * np.std(residuals), 3 * np.std(residuals))
+                if self.rms_yscale_phase_folded_panels and k == 0:
+                    limit = self.rms_yscale_phase_folded_panels_scale * np.std(residuals)
+                    if limit < kamp_planet_b: # HACK
+                        limit = kamp_planet_b * 1.5
+                    y_phase_lim = (-limit, limit)
                 for i in range(len(axes)):
                     axes[i].set_ylim(y_phase_lim)
         elif self.rms_yscale_phase_folded_panels: # HACK
             for k, ax in enumerate(phase_folded_axes):
                 kamp_current_planet = kamps_all_planets[k]
                 if kamp_current_planet < 10:
-                    y_phase_lim = (-5 * kamp_current_planet, 5 * kamp_current_planet)
+                    y_phase_lim = (-self.rms_yscale_phase_folded_panels_scale * np.std(residuals), self.rms_yscale_phase_folded_panels_scale * np.std(residuals))
                     ax.set_ylim(y_phase_lim)
         
         fig.align_ylabels()

@@ -6,6 +6,7 @@ import pandas as pd
 from scipy.stats import binned_statistic
 from tessla.data_utils import find_breaks
 from astropy import units
+from math import ceil
 
 # Exoplanet stuff
 import exoplanet as xo
@@ -37,7 +38,7 @@ class ThreePanelPhotPlot:
                 toi,
                 use_broken_x_axis=False, # Whether or not to break up the x-axis to avoid large gaps between sectors
                 data_gap_thresh=10, # Days. If gap in data is larger than this threshold, consider it another chunk in the broken axis (need to have use_broken_x_axis=True)
-                figsize=(12,14), 
+                figwidth=12,
                 margin=1, # Units of days
                 ylabelpad=10,
                 wspace=0.025, # space of gap in broken axis
@@ -45,13 +46,18 @@ class ThreePanelPhotPlot:
                 plot_random_transit_draws=False, # If true, plot random realizations of the phase-folded transit using the posteriors of the model fit.
                 num_random_transit_draws=25, # Number of random draws to plot.
                 save_format='.png',
-                save_dpi=400,
+                save_dpi=175, # Should make the whole figure about 1 MB in size
                 df_summary_fname=None,
                 rms_yscale_phase_folded_panels=True,
                 rms_yscale_multiplier=5,
                 data_uncert_label_rms_yscale_multiplier=-3,
                 sector_marker_fontsize=12,
-                param_fontsize=14
+                param_fontsize=14,
+                timeseries_phase_hspace=0.05,
+                return_fig_and_phase_folded_axes=False,
+                facecolor='white',
+                ytick_spacing=None,
+                residuals_ytick_spacing=None
                 ) -> None:
         
         self.toi = toi
@@ -71,7 +77,7 @@ class ThreePanelPhotPlot:
             self.df_summary = pd.read_csv(df_summary_fname, index_col=0)
 
         # Plot hyperparameters
-        self.figsize = figsize
+        self.figwidth = figwidth
         self.margin = margin
         self.ylabelpad = ylabelpad
         self.wspace = wspace
@@ -82,8 +88,13 @@ class ThreePanelPhotPlot:
         self.rms_yscale_multiplier = rms_yscale_multiplier
         self.data_uncert_label_rms_yscale_multiplier = data_uncert_label_rms_yscale_multiplier
         self.sector_marker_fontsize = sector_marker_fontsize
-        self.param_fontsize = param_fontsize 
-
+        self.param_fontsize = param_fontsize
+        self.timeseries_phase_hspace = timeseries_phase_hspace
+        self.return_fig_and_phase_folded_axes = return_fig_and_phase_folded_axes
+        self.facecolor = facecolor
+        self.ytick_spacing = ytick_spacing
+        self.residuals_ytick_spacing = residuals_ytick_spacing
+        
     def plot(self, save_fname=None, overwrite=False):
         '''
         Make the plot!
@@ -107,12 +118,15 @@ class ThreePanelPhotPlot:
         
         # Use broken axis plotting or regular plotting
         if self.use_broken_x_axis:
-            fig = self.__broken_three_panel_plot()
+            fig, phase_folded_axes, phase_folded_resid_axes = self.__broken_three_panel_plot()
         else:
-            fig = self.__three_panel_plot()
+            fig, phase_folded_axes, phase_folded_resid_axes = self.__three_panel_plot()
         
+        if self.return_fig_and_phase_folded_axes:
+            return fig, phase_folded_axes, phase_folded_resid_axes
+
         # Save the figure!
-        fig.savefig(save_fname, facecolor='white', bbox_inches='tight', dpi=self.save_dpi)
+        fig.savefig(save_fname, facecolor=self.facecolor, bbox_inches='tight', dpi=self.save_dpi)
         print(f"Photometry model plot saved to {save_fname}")
         plt.close()
     
@@ -148,9 +162,12 @@ class ThreePanelPhotPlot:
         elif yspan >= 3 and yspan < 3.5:
             major = 1
             minor = 0.5
-        elif yspan >= 3.5:
+        elif yspan >= 3.5 and yspan < 5:
             major = 2
             minor = 1
+        elif yspan >= 5:
+            major = 4
+            minor = 2
         return major, minor
 
     def __get_xtick_spacing(self):
@@ -225,10 +242,16 @@ class ThreePanelPhotPlot:
         sectors = self.toi.lc.sector[original_indices[xstart_ind:xstop_ind]]
         assert len(np.unique(sectors)) > 0, "No sector labels."
         if len(np.unique(sectors)) == 1:
-            sector_str = f"Sector {np.unique(sectors).value[0]}"
+            if len(np.unique(self.toi.lc.sector)) > 10:  # If a system has a lot of TESS photometry, don't write the word "Sector" to save space
+                sector_str = f"{np.unique(sectors).value[0]}"
+            else:
+                sector_str = f"Sector {np.unique(sectors).value[0]}"
         elif len(np.unique(sectors)) > 1:
             sectors = np.unique(sectors)
-            sector_str = "Sectors "
+            if len(np.unique(self.toi.lc.sector)) > 10:  # If a system has a lot of TESS photometry, don't write the word "Sector" to save space
+                sector_str = ""
+            else:
+                sector_str = "Sectors "
             for j in range(len(sectors) -1):
                 sector_str += f"{sectors.value[j]}, "
             sector_str += f"{sectors.value[-1]}"
@@ -243,14 +266,28 @@ class ThreePanelPhotPlot:
         Make the three panel plot using a broken x-axis. Used for TOIs with widely time-separated sectors.
         '''
         break_inds = find_breaks(self.x, diff_threshold=self.data_gap_thresh, verbose=self.toi.verbose)
+        
+        figheight = 14 # Default fig height
+        num_planet_rows = ceil(self.toi.n_transiting / 2)
+        if num_planet_rows > 1:
+            timeseries_height = 2 * figheight / 3
+            planet_row_height = 1 * figheight / 3
+        else:
+            timeseries_height = 3 * figheight / 5
+            planet_row_height = 2 * figheight / 5
+            self.timeseries_phase_hspace = 0.07
+        if num_planet_rows > 1:
+            figheight = figheight + (num_planet_rows - 1) * planet_row_height
 
         # Create the figure object
-        fig = plt.figure(figsize=self.figsize)
+        fig = plt.figure(figsize=(self.figwidth, figheight))
 
         # Create the GridSpec objects
-        gs0, gs1 = GridSpec(2, 1, figure=fig, height_ratios=[1, 0.5])
         heights = [1, 1, 0.33]
-        sps1, sps2, sps3 = gridspec.GridSpecFromSubplotSpec(3, 1, subplot_spec=gs0, height_ratios=heights, hspace=0.1)
+        gs0 = GridSpec(3, 1, figure=fig, height_ratios=heights, hspace=0.1)
+        timeseries_bottom = 1 - timeseries_height / figheight
+        gs0.update(bottom=timeseries_bottom + self.timeseries_phase_hspace*0.5)
+        sps1, sps2, sps3 = gs0
 
         xlim_tuple = self.__get_xlim_tuple(break_inds)
         
@@ -315,7 +352,10 @@ class ThreePanelPhotPlot:
         # Top panel housekeeping
         bax1.set_xticklabels([])
         bax1.set_ylabel("Relative flux [ppt]", fontsize=14, labelpad=self.ylabelpad)
-        major, minor = self.__get_ytick_spacing(np.max(self.y) - np.min(self.y))
+        if self.ytick_spacing is None:
+            major, minor = self.__get_ytick_spacing(np.max(self.y) - np.min(self.y))
+        else:
+            major, minor = self.ytick_spacing
         for ax in [ax_left, ax_right]:
             ax.yaxis.set_major_locator(MultipleLocator(major))
             ax.yaxis.set_minor_locator(MultipleLocator(minor))
@@ -340,9 +380,13 @@ class ThreePanelPhotPlot:
         bax2.set_xticklabels([])
         bax2.set_ylabel("Relative flux [ppt]", fontsize=14, labelpad=self.ylabelpad)
         ax_left, ax_right = bax2.axs[0], bax2.axs[-1]
-        major, minor = self.__get_ytick_spacing(np.max(self.y - gp_mod) - np.min(self.y - gp_mod))
+        if self.ytick_spacing is None:
+            major, minor = self.__get_ytick_spacing(np.max(self.y - gp_mod) - np.min(self.y - gp_mod))
+        else:
+            major, minor = self.ytick_spacing
         for ax in [ax_left, ax_right]:
             ax.yaxis.set_major_locator(MultipleLocator(major))
+            ax.yaxis.set_minor_locator(MultipleLocator(minor))
         ax_right.set_yticklabels([])
 
         ################################################################################################
@@ -360,16 +404,23 @@ class ThreePanelPhotPlot:
         bax3.axhline(0, color="#aaaaaa", lw=1)
         for ax in bax3.axs[1:]:
             ax.tick_params(axis='y', label1On=False) # Avoid y-axis labels popping up.
-        self.residuals = residuals.value # Save these
+        try:
+            self.residuals = residuals.value # Save these
+        except AttributeError:
+            self.residuals = residuals
 
         # Plot housekeeping
         bax3.set_ylabel("Residuals", fontsize=14, labelpad=self.ylabelpad)
         bax3.set_xlabel(f"Time [BJD - {self.toi.bjd_ref:.1f}]", fontsize=14, labelpad=30)
 
         ax_left, ax_right = bax3.axs[0], bax3.axs[-1]
-        major, minor = self.__get_residuals_ytick_spacing(np.max(self.residuals) - np.min(self.residuals))
+        if self.residuals_ytick_spacing is None:
+            major, minor = self.__get_residuals_ytick_spacing(np.max(self.residuals) - np.min(self.residuals))
+        else:
+            major, minor = self.residuals_ytick_spacing
         for ax in [ax_left, ax_right]:
             ax.yaxis.set_major_locator(MultipleLocator(major))
+            ax.yaxis.set_minor_locator(MultipleLocator(minor))
             bottom = -1 * np.max(ax.get_ylim())
             ax.set_ylim(bottom=bottom)
 
@@ -426,22 +477,36 @@ class ThreePanelPhotPlot:
         ################################################################################################
         ############################ PHASE-FOLDED TRANSIT AND RESIDUALS ################################
         ################################################################################################
-        fig = self.__plot_phase_folded_transits(fig, gs1)
+        fig, phase_folded_axes, phase_folded_resid_axes = self.__plot_phase_folded_transits(fig, timeseries_bottom)
         
-        return fig
+        return fig, phase_folded_axes, phase_folded_resid_axes
 
     def __three_panel_plot(self):
         '''
         Make a three panel plot but don't have to worry about breaks in the axis. E.g. if there's only one sector of photometry or all sectors are consecutive.
         '''
+        figheight = 14 # Default fig height
+        num_planet_rows = ceil(self.toi.n_transiting / 2)
+        if num_planet_rows > 1:
+            timeseries_height = 2 * figheight / 3
+            planet_row_height = 1 * figheight / 3
+        else:
+            timeseries_height = 3 * figheight / 5
+            planet_row_height = 2 * figheight / 5
+            self.timeseries_phase_hspace = 0.07
+        if num_planet_rows > 1:
+            figheight = figheight + (num_planet_rows - 1) * planet_row_height
+
         # Create the figure object
-        fig = plt.figure(figsize=self.figsize)
+        fig = plt.figure(figsize=(self.figwidth, figheight))
 
         # Create the GridSpec objects
-        gs0, gs1 = GridSpec(2, 1, figure=fig, height_ratios=[1, 0.5])
         heights = [1, 1, 0.33]
-        sps1, sps2, sps3 = gridspec.GridSpecFromSubplotSpec(3, 1, subplot_spec=gs0, height_ratios=heights, hspace=0.1)
-        
+        gs0 = GridSpec(3, 1, figure=fig, height_ratios=heights, hspace=0.1)
+        timeseries_bottom = 1 - timeseries_height / figheight
+        gs0.update(bottom=timeseries_bottom + self.timeseries_phase_hspace*0.5)
+        sps1, sps2, sps3 = gs0
+
         ################################################################################################
         ################################# TOP PANEL: Data and GP model #################################
         ################################################################################################
@@ -467,7 +532,10 @@ class ThreePanelPhotPlot:
         # Top panel housekeeping
         ax1.set_xticklabels([])
         ax1.set_ylabel("Relative flux [ppt]", fontsize=14, labelpad=self.ylabelpad)
-        major, minor = self.__get_ytick_spacing(np.max(self.y) - np.min(self.y))
+        if self.ytick_spacing is None:
+            major, minor = self.__get_ytick_spacing(np.max(self.y) - np.min(self.y))
+        else:
+            major, minor = self.ytick_spacing
         ax1.yaxis.set_major_locator(MultipleLocator(major))
         ax1.yaxis.set_minor_locator(MultipleLocator(minor))
 
@@ -486,7 +554,10 @@ class ThreePanelPhotPlot:
         # Plot housekeeping
         ax2.set_xticklabels([])
         ax2.set_ylabel("Relative flux [ppt]", fontsize=14, labelpad=self.ylabelpad)
-        major, minor = self.__get_ytick_spacing(np.max(self.y - gp_mod) - np.min(self.y - gp_mod))
+        if self.ytick_spacing is None:
+            major, minor = self.__get_ytick_spacing(np.max(self.y - gp_mod) - np.min(self.y - gp_mod))
+        else:
+            major, minor = self.ytick_spacing
         ax2.yaxis.set_major_locator(MultipleLocator(major))
         ax2.yaxis.set_minor_locator(MultipleLocator(minor))
 
@@ -507,8 +578,12 @@ class ThreePanelPhotPlot:
         # Plot housekeeping
         ax3.set_ylabel("Residuals", fontsize=14, labelpad=self.ylabelpad)
         ax3.set_xlabel(f"Time [BJD - {self.toi.bjd_ref:.1f}]", fontsize=14)
-        major, minor = self.__get_residuals_ytick_spacing(np.max(residuals) - np.min(residuals))
+        if self.residuals_ytick_spacing is None:
+            major, minor = self.__get_residuals_ytick_spacing(np.max(residuals) - np.min(residuals))
+        else:
+            major, minor = self.residuals_ytick_spacing
         ax3.yaxis.set_major_locator(MultipleLocator(major))
+        ax3.yaxis.set_minor_locator(MultipleLocator(minor))
         bottom = -1 * np.max(ax3.get_ylim())
         ax3.set_ylim(bottom=bottom)
 
@@ -532,16 +607,14 @@ class ThreePanelPhotPlot:
         ################################################################################################
         ############################ PHASE-FOLDED TRANSIT AND RESIDUALS ################################
         ################################################################################################
-        fig = self.__plot_phase_folded_transits(fig, gs1)
+        fig, phase_folded_axes, phase_folded_resid_axes = self.__plot_phase_folded_transits(fig, timeseries_bottom)
 
-        return fig
+        return fig, phase_folded_axes, phase_folded_resid_axes
     
-    def __plot_phase_folded_transits(self, fig, gs1):
+    def __plot_phase_folded_transits(self, fig, timeseries_bottom):
         '''
         Plot the folded transits for each planet.
         '''
-        heights = [1, 0.33]
-        sps = gridspec.GridSpecFromSubplotSpec(2, len(self.toi.transiting_planets), subplot_spec=gs1, height_ratios=heights, hspace=0.05)
 
         gp_mod = self.toi.extras["gp_pred"] + self.toi.map_soln["mean_flux"]
         residuals = self.y - gp_mod - np.sum(self.toi.extras["light_curves"], axis=-1)
@@ -551,157 +624,224 @@ class ThreePanelPhotPlot:
             chains = pd.read_csv(self.toi.chains_path)
         phase_folded_axes = []
         phase_folded_resid_axes = []
-        for i,planet in enumerate(self.toi.transiting_planets.values()):
 
-            ax0 = fig.add_subplot(sps[0, i])
-            phase_folded_axes.append(ax0)
+        # Set up the outer gridspec
+        num_planet_rows = ceil(self.toi.n_transiting / 2)
+        outer_gs = GridSpec(num_planet_rows, 2, figure=fig, hspace=0.2)
+        outer_gs.update(top=timeseries_bottom - self.timeseries_phase_hspace*0.5)
 
-            # Plot the folded data
-            x_fold = (self.x - planet.t0 + 0.5 * planet.per) % planet.per - 0.5 * planet.per
-            ax0.plot(x_fold, self.y - gp_mod, ".k", label="Data", zorder=-1000, alpha=0.3)
+        for k in range(num_planet_rows):
+            # Nested gridspec objects. One for each row of the phased plots. 
+            # See https://stackoverflow.com/questions/31484273/spacing-between-some-subplots-but-not-all
+            heights = [1, 0.33] # Heigh ratio between phase plot and residuals
+            sps = gridspec.GridSpecFromSubplotSpec(2, 2, subplot_spec=outer_gs[k, :], height_ratios=heights, hspace=0.05)
 
-            # Plot the binned flux in bins of 30 minutes
-            bin_duration = 0.5 / 24 # 30 minutes in units of days
-            bins = (x_fold.max() - x_fold.min()) / bin_duration
-            binned_flux, binned_edges, _ = binned_statistic(x_fold, self.y - gp_mod, statistic="mean", bins=bins)
-            binned_edge_diff = np.ediff1d(binned_edges) / 2
-            binned_locs = binned_edges[:-1] + binned_edge_diff
-            ax0.scatter(binned_locs, binned_flux, s=20, color='tomato', edgecolor='red', zorder=1000, label='Binned flux')
-
-            # Calculate indices for the folded model
-            inds = np.argsort(x_fold)
-            xlim = 0.3 # Days
-            inds = inds[np.abs(x_fold)[inds] < xlim] # Get indices within the xlim of the transit
-            map_model = self.toi.extras["light_curves"][:, i][inds]
-            
-            # Plot the MAP solution
-            ax0.plot(x_fold[inds], map_model, color=planet.color, alpha=1, zorder=1001, label="MAP solution")
-
-            if self.plot_random_transit_draws:
-                if self.toi.verbose:
-                    print(f"Plotting {self.num_random_transit_draws} random draws of phase-folded transit for planet {planet.pl_letter}...")
-                for j in tqdm(range(self.num_random_transit_draws)): # Could optionally use the "disable" keyword argument to only use the progress if self.toi.verbose == True.
-                    
-                    ind = np.random.choice(np.arange(self.num_random_transit_draws))
-
-                    # Build the model we used before
-                    # Star
-                    u = [chains['u_0'].values[ind], chains['u_1'].values[ind]]
-                    xo_star = xo.LimbDarkLightCurve(u)
-
-                    # Orbit
-                    period = chains[f"period_{planet.pl_letter}"].values[ind]
-                    t0 = chains[f"t0_{planet.pl_letter}"].values[ind]
-                    ror = chains[f"ror_{planet.pl_letter}"].values[ind]
-                    b = chains[f"b_{planet.pl_letter}"].values[ind]
-                    if not self.toi.is_joint_model:
-                        dur = chains[f"dur_{planet.pl_letter}"].values[ind]
-                        orbit = xo.orbits.KeplerianOrbit(period=period, t0=t0, b=b, ror=ror, duration=dur)
-                    else:
-                        # If a joint model, parameterized in terms of stellar density and ecc and omega directly
-                        rstar = chains["rstar"].values[ind]
-                        mstar = chains["mstar"].values[ind]
-                        ecc = chains[f"ecc_{planet.pl_letter}"].values[ind]
-                        omega = chains[f"omega_{planet.pl_letter}"].values[ind]
-                        orbit = xo.orbits.KeplerianOrbit(r_star=rstar, m_star=mstar, period=period, t0=t0, b=b, ecc=ecc, omega=omega)
-
-                    # Light curves
-                    N_EVAL_POINTS = 500
-                    phase_lc = np.linspace(-xlim, xlim, N_EVAL_POINTS)
-                    lc_phase_pred = 1e3 * xo_star.get_light_curve(orbit=orbit, r=ror, t=t0 + phase_lc, texp=self.toi.cadence/60/60/24)
-                    lc_phase_pred = lc_phase_pred.eval()
-
-                    # Plot the random draw. Wasteful because it only uses one of the planet light curves and does this again for the next planet
-                    ax0.plot(phase_lc, lc_phase_pred, color=planet.color, alpha=0.3, zorder=999, label='Random posterior draw')
-
-            # Plot the residuals below
-            ax1 = fig.add_subplot(sps[1, i])
-            phase_folded_resid_axes.append(ax1)
-            ax1.plot(x_fold, residuals, '.k', label='Residuals', alpha=0.3, zorder=0)
-            ax1.axhline(0, color="#aaaaaa", lw=1)
-
-            # Plot housekeeping
-            ax0.set_title(f"{self.toi.name} {planet.pl_letter}")
-
-            # Put the x-axis labels and ticks in units of hours instead of days
-            for ax in [ax0, ax1]:
-                ax.xaxis.set_major_formatter(FuncFormatter(lambda x, pos: f"{x * 24:g}"))
-                ax.xaxis.set_major_locator(MultipleLocator(2/24))
-                ax.xaxis.set_minor_locator(MultipleLocator(1/24))
-                ax.tick_params(axis='x', direction='in', which='both', top=True, bottom=True)
-                ax.tick_params(axis='y', direction='in', which='both', left=True, right=True)
-
-            ax0.set_xticklabels([])
-            ax1.set_xlabel("Time since transit [hours]", fontsize=14)
-            major, minor = self.__get_ytick_spacing(np.max(self.y - gp_mod) - np.min(self.y - gp_mod))
-            ax0.yaxis.set_major_locator(MultipleLocator(major))
-            ax0.yaxis.set_minor_locator(MultipleLocator(minor))
-            # Residuals
-            major, minor = self.__get_residuals_ytick_spacing(np.max(self.y - gp_mod) - np.min(self.y - gp_mod))
-            ax1.yaxis.set_major_locator(MultipleLocator(major))
-
-            if i == 0:
-                ax0.set_ylabel("Relative flux [ppt]", fontsize=14)
-                ax1.set_ylabel("Residuals", fontsize=14)
-            
-            ax0.set_xlim([-xlim, xlim])
-            ax1.set_xlim([-xlim, xlim])
-            data_uncert = np.sqrt(np.exp(2 * self.toi.map_soln['log_sigma_phot']) + np.median(self.yerr)**2)
-            if self.rms_yscale_phase_folded_panels:
-                ax0.set_ylim([-self.rms_yscale_multiplier * data_uncert, self.rms_yscale_multiplier * data_uncert])
-                ax1.set_ylim([-self.rms_yscale_multiplier * data_uncert, self.rms_yscale_multiplier * data_uncert])
-
-            ax0.errorbar(-xlim + xlim*0.1, self.data_uncert_label_rms_yscale_multiplier * data_uncert, yerr=data_uncert, 
-                            fmt='none', color='k', elinewidth=2, capsize=4)
-            if i == 0:
-                text = ax0.text(-xlim + xlim*0.15, self.data_uncert_label_rms_yscale_multiplier * data_uncert, 'Data uncert.', fontsize=12)
-                text.set_bbox(dict(facecolor='white', alpha=0.5, edgecolor='none'))
-            
-            if self.df_summary is not None:
-                per_med = self.df_summary.loc[f'period_{planet.pl_letter}', 'median']
-                per_err = self.df_summary.loc[f'period_{planet.pl_letter}', 'std']
-                if per_err < 1:
-                    per_str = f"$P =$ {per_med:.2f} $\pm$ {per_err:.2e} d"
-                else:
-                    per_str = f"$P =$ {per_med:.1f} $\pm$ {per_err:.1f} d"
-                ror_med = self.df_summary.loc[f'ror_{planet.pl_letter}', 'median'] * 100
-                ror_err = self.df_summary.loc[f'ror_{planet.pl_letter}', 'std'] * 100
-                ror_str = f"$R_\mathrm{{p}}/R_* = {ror_med:.2f} \pm {ror_err:.2f}$ $\%$"
-                text_per_and_ror = ax0.text(0.05, 0.95, per_str + '\n' + ror_str, ha='left', va='top', transform=ax0.transAxes, fontsize=self.param_fontsize)
-                text_per_and_ror.set_bbox(dict(facecolor='white', alpha=0.5, edgecolor='none'))
-
-                rp_med = self.df_summary.loc[f'rp_{planet.pl_letter}', 'median']
-                rp_err = self.df_summary.loc[f'rp_{planet.pl_letter}', 'std']
-                rp_str = f"$R_\mathrm{{p}} = {rp_med:.2f} \pm {rp_err:.2f}$ $R_\oplus$"
-                b_med = self.df_summary.loc[f'b_{planet.pl_letter}', 'median']
-                b_err = self.df_summary.loc[f'b_{planet.pl_letter}', 'std']
-                b_str = f"$b = {b_med:.2f} \pm {b_err:.2f}$"
-                text_b_and_rp = ax0.text(0.95, 0.05, b_str + '\n' + rp_str, ha='right', va='bottom', transform=ax0.transAxes, fontsize=self.param_fontsize)
-                text_b_and_rp.set_bbox(dict(facecolor='white', alpha=0.5, edgecolor='none'))
+            # Figure out how many columns in this row
+            planets_left = self.toi.n_transiting - 2 * k
+            if planets_left > 1:
+                num_cols = 2
             else:
-                # Annotate with MAP solution values for Period and radius and rp/rstar and impact parameter.
-                per_str = f"$P =$ {planet.per:.2f} d"
-                ror_str = f"$R_\mathrm{{p}}/R_* = {np.sqrt(planet.depth * 1e-3) * 100:.2f}$ $\%$"
-                text_per_and_ror = ax0.text(0.05, 0.95, per_str + '\n' + ror_str, ha='left', va='top', transform=ax0.transAxes, fontsize=self.param_fontsize)
-                text_per_and_ror.set_bbox(dict(facecolor='white', alpha=0.5, edgecolor='none'))
+                num_cols = 1
+            planet_start_ind = 2 * k
+            planet_end_ind = planet_start_ind + num_cols
+            planet_ind = planet_start_ind
+
+            for planet in list(self.toi.transiting_planets.values())[planet_start_ind:planet_end_ind]:
                 
-                rp_map = (units.Rsun.to(units.Rearth, np.sqrt(planet.depth * 1e-3) * self.toi.star.rstar))
-                rp_str = f"$R_\mathrm{{p}} = {rp_map:.2f}$ $R_\oplus$"
-                b_str = f"$b =$ {planet.b:.2f}"
-                text_b_and_rp = ax0.text(0.95, 0.05, b_str + '\n' + rp_str, ha='right', va='bottom', transform=ax0.transAxes, fontsize=self.param_fontsize)
-                text_b_and_rp.set_bbox(dict(facecolor='white', alpha=0.5, edgecolor='none'))
+                # Get the correct column.
+                if planet_ind % 2 == 0 and planet_ind < self.toi.n_transiting - 1:
+                    planet_col_ind = 0
+                elif planet_ind % 2 == 0 and planet_ind == self.toi.n_transiting - 1:
+                    planet_col_ind = slice(None)
+                else:
+                    planet_col_ind = 1
+                
+                ax0 = fig.add_subplot(sps[0, planet_col_ind])
+                phase_folded_axes.append(ax0)
+
+                # Plot the folded data
+                x_fold = (self.x - planet.t0 + 0.5 * planet.per) % planet.per - 0.5 * planet.per
+                ax0.plot(x_fold, self.y - gp_mod, ".k", label="Data", zorder=-1000, alpha=0.3)
+
+                # Plot the binned flux in bins of 30 minutes
+                bin_duration = 0.5 / 24 # 30 minutes in units of days
+                bins = (x_fold.max() - x_fold.min()) / bin_duration
+                binned_flux, binned_edges, _ = binned_statistic(x_fold, self.y - gp_mod, statistic="mean", bins=bins)
+                binned_edge_diff = np.ediff1d(binned_edges) / 2
+                binned_locs = binned_edges[:-1] + binned_edge_diff
+                ax0.scatter(binned_locs, binned_flux, s=20, color='tomato', edgecolor='red', zorder=1000, label='Binned flux')
+
+                # Calculate indices for the folded model
+                inds = np.argsort(x_fold)
+                xlim = 0.3 # Days
+                inds = inds[np.abs(x_fold)[inds] < xlim] # Get indices within the xlim of the transit
+                map_model = self.toi.extras["light_curves"][:, planet_ind][inds]
+                
+                # Plot the MAP solution
+                ax0.plot(x_fold[inds], map_model, color=planet.color, alpha=1, zorder=1001, label="MAP solution")
+
+                if self.plot_random_transit_draws:
+                    if self.toi.verbose:
+                        print(f"Plotting {self.num_random_transit_draws} random draws of phase-folded transit for planet {planet.pl_letter}...")
+                    for j in tqdm(range(self.num_random_transit_draws)): # Could optionally use the "disable" keyword argument to only use the progress if self.toi.verbose == True.
+                        
+                        ind = np.random.choice(np.arange(self.num_random_transit_draws))
+
+                        # Build the model we used before
+                        # Star
+                        u = [chains['u_0'].values[ind], chains['u_1'].values[ind]]
+                        xo_star = xo.LimbDarkLightCurve(u)
+
+                        # Orbit
+                        period = chains[f"period_{planet.pl_letter}"].values[ind]
+                        t0 = chains[f"t0_{planet.pl_letter}"].values[ind]
+                        r_pl = chains[f"r_pl_{planet.pl_letter}"].values[ind]
+                        b = chains[f"b_{planet.pl_letter}"].values[ind]
+                        if not self.toi.is_joint_model:
+                            dur = chains[f"dur_{planet.pl_letter}"].values[ind]
+                            orbit = xo.orbits.KeplerianOrbit(period=period, t0=t0, b=b, duration=dur, r_star=self.toi.star.rstar)
+                        else:
+                            # If a joint model, parameterized in terms of stellar density and ecc and omega directly
+                            rstar = chains["rstar"].values[ind]
+                            mstar = chains["mstar"].values[ind]
+                            if self.toi.force_circular_orbits_for_transiting_planets:
+                                ecc = None
+                                omega = None
+                            else:
+                                ecc = chains[f"ecc_{planet.pl_letter}"].values[ind]
+                                omega = chains[f"omega_{planet.pl_letter}"].values[ind]
+                            orbit = xo.orbits.KeplerianOrbit(r_star=rstar, m_star=mstar, period=period, t0=t0, b=b, ecc=ecc, omega=omega)
+
+                        # Light curves
+                        N_EVAL_POINTS = 500
+                        phase_lc = np.linspace(-xlim, xlim, N_EVAL_POINTS)
+                        lc_phase_pred = 1e3 * xo_star.get_light_curve(orbit=orbit, r=r_pl, t=t0 + phase_lc, texp=self.toi.cadence/60/60/24)
+                        lc_phase_pred = lc_phase_pred.eval()
+
+                        # Plot the random draw. Wasteful because it only uses one of the planet light curves and does this again for the next planet
+                        ax0.plot(phase_lc, lc_phase_pred, color=planet.color, alpha=0.3, zorder=999, label='Random posterior draw')
+
+                # Plot the residuals below
+                ax1 = fig.add_subplot(sps[1, planet_col_ind], sharex=ax0)
+                phase_folded_resid_axes.append(ax1)
+                ax1.plot(x_fold, residuals, '.k', label='Residuals', alpha=0.3, zorder=0)
+                ax1.axhline(0, color="#aaaaaa", lw=1)
+
+                # Plot housekeeping
+                try:
+                    planet_name = planet.alt_name
+                except AttributeError:
+                    planet_name = planet.pl_letter
+                ax0.set_title(f"{self.toi.name} {planet_name}")
+
+                # Put the x-axis labels and ticks in units of hours instead of days
+                for ax in [ax0, ax1]:
+                    ax.xaxis.set_major_formatter(FuncFormatter(lambda x, pos: f"{x * 24:g}"))
+                    ax.xaxis.set_major_locator(MultipleLocator(2/24))
+                    ax.xaxis.set_minor_locator(MultipleLocator(1/24))
+                    ax.tick_params(axis='x', direction='in', which='both', top=True, bottom=True)
+                    ax.tick_params(axis='y', direction='in', which='both', left=True, right=True)
+                plt.setp(ax0.get_xticklabels(), visible=False)
+                if k == num_planet_rows - 1: # Only add the xlabel to the bottom row
+                    ax1.set_xlabel("Time since transit [hours]", fontsize=14)
+                if self.ytick_spacing is None:
+                    major, minor = self.__get_ytick_spacing(np.max(self.y - gp_mod) - np.min(self.y - gp_mod))
+                else:
+                    major, minor = self.ytick_spacing
+                ax0.yaxis.set_major_locator(MultipleLocator(major))
+                ax0.yaxis.set_minor_locator(MultipleLocator(minor))
+
+                # Residuals
+                if self.residuals_ytick_spacing is None:
+                    major, minor = self.__get_residuals_ytick_spacing(np.max(residuals) - np.min(residuals))
+                else:
+                    major, minor = self.residuals_ytick_spacing
+                ax1.yaxis.set_major_locator(MultipleLocator(major))
+                ax1.yaxis.set_minor_locator(MultipleLocator(minor))
+
+                if planet_col_ind == 0 or isinstance(planet_col_ind, slice):
+                    ax0.set_ylabel("Relative flux [ppt]", fontsize=14)
+                    ax1.set_ylabel("Residuals", fontsize=14)
+                
+                ax0.set_xlim([-xlim, xlim])
+                ax1.set_xlim([-xlim, xlim])
+                data_uncert = np.sqrt(np.exp(2 * self.toi.map_soln['log_sigma_phot']) + np.median(self.yerr)**2)
+                if self.rms_yscale_phase_folded_panels:
+                    ax0.set_ylim([-self.rms_yscale_multiplier * data_uncert, self.rms_yscale_multiplier * data_uncert])
+                    ax1.set_ylim([-self.rms_yscale_multiplier * data_uncert, self.rms_yscale_multiplier * data_uncert])
+
+                ax0.errorbar(-xlim + xlim*0.1, self.data_uncert_label_rms_yscale_multiplier * data_uncert, yerr=data_uncert, 
+                                fmt='none', color='k', elinewidth=2, capsize=4)
+                
+                if planet_col_ind == 0 or isinstance(planet_col_ind, slice):
+                    if planet_ind == 0:
+                        text = ax0.text(-xlim + xlim*0.15, self.data_uncert_label_rms_yscale_multiplier * data_uncert, 'Data uncert.', fontsize=12)
+                        text.set_bbox(dict(facecolor='white', alpha=0.5, edgecolor='none'))
+                
+                # Annotate the phase folded panels with parameter values
+                if self.df_summary is not None:
+                    per_med = self.df_summary.loc[f'period_{planet.pl_letter}', 'median']
+                    per_err16 = np.abs(self.df_summary.loc[f'period_{planet.pl_letter}', 'err16'])
+                    per_err84 = self.df_summary.loc[f'period_{planet.pl_letter}', 'err84']
+                    per_err = np.median([per_err16, per_err84])
+                    if per_err < 1:
+                        per_str = f"$P =$ {per_med:.2f} $\pm$ {per_err:.2e} d"
+                    else:
+                        per_str = f"$P =$ {per_med:.1f} $\pm$ {per_err:.1f} d"
+
+                    ror_med = self.df_summary.loc[f'ror_{planet.pl_letter}', 'median'] * 100
+                    ror_err16 = np.abs(self.df_summary.loc[f'ror_{planet.pl_letter}', 'err16']) * 100
+                    ror_err84 = self.df_summary.loc[f'ror_{planet.pl_letter}', 'err84'] * 100
+                    ror_err = np.median([ror_err16, ror_err84])
+                    ror_str = f"$R_\mathrm{{p}}/R_* = {ror_med:.2f} \pm {ror_err:.2f}$ $\%$"
+
+                    b_med = self.df_summary.loc[f'b_{planet.pl_letter}', 'median']
+                    b_err16 = np.abs(self.df_summary.loc[f'b_{planet.pl_letter}', 'err16'])
+                    b_err84 = self.df_summary.loc[f'b_{planet.pl_letter}', 'err84']
+                    b_err = np.median([b_err16, b_err84])
+                    b_str = f"$b = {b_med:.2f} \pm {b_err:.2f}$"
+
+                    rp_med = self.df_summary.loc[f'rp_{planet.pl_letter}', 'median']
+                    rp_err16 = np.abs(self.df_summary.loc[f'rp_{planet.pl_letter}', 'err16'])
+                    rp_err84 = self.df_summary.loc[f'rp_{planet.pl_letter}', 'err84']
+                    rp_err = np.median([rp_err16, rp_err84])
+                    rp_str = f"$R_\mathrm{{p}} = {rp_med:.2f} \pm {rp_err:.2f}$ $R_\oplus$"
+                    
+                else:
+                    # Annotate with MAP solution values for Period and radius and rp/rstar and impact parameter.
+                    per_str = f"$P =$ {planet.per:.2f} d"
+                    ror_str = f"$R_\mathrm{{p}}/R_* = {np.sqrt(planet.depth * 1e-3) * 100:.2f}$ $\%$"
+                    b_str = f"$b =$ {planet.b:.2f}"
+                    rp_map = (units.Rsun.to(units.Rearth, np.sqrt(planet.depth * 1e-3) * self.toi.star.rstar))
+                    rp_str = f"$R_\mathrm{{p}} = {rp_map:.2f}$ $R_\oplus$"
+                
+                text_obj = ax0.text(0.05, 0.975, per_str + '\n' + ror_str + '\n' + b_str + '\n' + rp_str, ha='left', va='top', transform=ax0.transAxes, fontsize=self.param_fontsize)
+                text_obj.set_bbox(dict(facecolor='white', alpha=0.5, edgecolor='none'))
+
+                # Move on to the next planet!
+                planet_ind += 1
         
-        # Make the y-axes range the same for all of the phase-folded transit plots
-        for axes in [phase_folded_axes, phase_folded_resid_axes]:
-            y_phase_max = np.max([max(ax.get_ylim()) for ax in axes])
-            y_phase_min = np.min([min(ax.get_ylim()) for ax in axes])
-            y_phase_lim = (y_phase_min, y_phase_max)
-            for i in range(len(axes)):
-                axes[i].set_ylim(y_phase_lim)
+        # Make the y-axes range the same for all of the phase-folded transit plots *IF* the transit depths are similar.
+        depth_planet_b = self.toi.planets['b'].depth # ppt
+        depths_all_planets = np.array([planet.depth for planet in self.toi.transiting_planets.values()])
+        depths_all_planets_minus_b = np.abs(depths_all_planets - depth_planet_b)
+        if all(depths_all_planets_minus_b < 0.5):
+            for axes in [phase_folded_axes, phase_folded_resid_axes]:
+                y_phase_max = np.max([max(ax.get_ylim()) for ax in axes])
+                y_phase_min = np.min([min(ax.get_ylim()) for ax in axes])
+                y_phase_lim = (y_phase_min, y_phase_max)
+                for i in range(len(axes)):
+                    axes[i].set_ylim(y_phase_lim)
+        else:
+            for axes in [phase_folded_axes, phase_folded_resid_axes]:
+                for i in range(len(axes)):
+                    y_phase_lim = (-1.5 * depths_all_planets[i], 1.5 * depths_all_planets[i]) # HACK
+                    axes[i].set_ylim(y_phase_lim)
+
         
         fig.align_ylabels()
 
-        return fig
+        return fig, phase_folded_axes, phase_folded_resid_axes
 
     def residuals_periodogram(self, save_fname=None, overwrite=False, min_per=1, max_per=50, samples_per_peak=1000, **kwargs):
         '''

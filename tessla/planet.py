@@ -5,8 +5,10 @@ import numpy as np
 planet_color_dict = {
     'b':'cornflowerblue',
     'c':'orange',
-    'd':'forestgreen',
-    'e':'purple'
+    'd':'springgreen', # 'forestgreen'
+    'e':'purple',
+    'f':'cyan',
+    'g':'pink'
 }
 
 class Planet:
@@ -48,6 +50,8 @@ class Planet:
         if bjd_ref != toi_bjd_ref:
             self.bjd_ref = toi_bjd_ref
             self.t0 = self.t0 + bjd_ref - toi_bjd_ref
+        else:
+            self.bjd_ref = bjd_ref
 
         self.b = b
         self.b_err = b_err

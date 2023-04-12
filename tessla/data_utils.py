@@ -161,11 +161,17 @@ def quick_look_summary(toi, df_derived_chains):
     # Stellar properties
     stellar_params = ['mstar', 'rstar']
     for param in stellar_params:
-        df.loc[param] = __get_summary_info(df_derived_chains[param])
+        try:
+            df.loc[param] = __get_summary_info(df_derived_chains[param])
+        except KeyError:
+            continue
 
     # Planet properties
     if not toi.is_joint_model:
         params = ['period', 't0', 'rp', 'ror', 'dur_hr', 'b', 'ecc', 'omega_folded_deg']
+        if toi.force_circular_orbits_for_transiting_planets:
+            params.remove('ecc')
+            params.remove('omega_folded_deg')
         for letter in toi.transiting_planets.keys():
             prefix = ''
             for param in params:
@@ -173,6 +179,9 @@ def quick_look_summary(toi, df_derived_chains):
     else:
         for letter in toi.transiting_planets.keys():
             params = ['period', 't0', 'rp', 'ror', 'b', 'ecc', 'omega', 'K', 'msini', 'mp', 'rho', 'a', 'teq', 'tsm', 'dur_hr', 'dur_circ_hr', 'Rtau_Petigura2020']
+            if toi.force_circular_orbits_for_transiting_planets:
+                params.remove('ecc')
+                params.remove('omega')
             prefix = ''
             for param in params:
                 df.loc[f"{prefix}{param}_{letter}"] = __get_summary_info(df_derived_chains[f"{prefix}{param}_{letter}"])

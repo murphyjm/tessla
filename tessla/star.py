@@ -119,7 +119,8 @@ class Star:
             rhostar_chain = get_density(mstar_chain, rstar_chain, 'solMass', 'solRad', 'g', 'cm')
             rhostar = np.median(rhostar_chain)
             rhostar_err = np.median(np.abs(np.quantile(rhostar_chain, [0.16, 0.84]) - rhostar))
-            assert mstar_prov == rstar_prov, "Difference provenance values for mstar and rstar"
+            if not mstar_prov == rstar_prov:
+                print("Warning: Difference provenance values for mstar and rstar")
             rhostar_prov = mstar_prov
 
         self.rhostar = rhostar

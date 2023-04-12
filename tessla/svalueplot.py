@@ -109,7 +109,7 @@ class SvaluePlot():
         
         # Top panel housekeeping
         ax1.set_xticklabels([])
-        ax1.set_ylabel("$S_\mathrm{HK}$ [dex]", fontsize=14, labelpad=self.ylabelpad)
+        ax1.set_ylabel("$S_\mathrm{HK}$", fontsize=14, labelpad=self.ylabelpad)
         # major, minor = self.__get_ytick_spacing()
         # ax1.yaxis.set_major_locator(MultipleLocator(major))
         # ax1.yaxis.set_minor_locator(MultipleLocator(minor))
@@ -155,6 +155,6 @@ class SvaluePlot():
             ax.xaxis.set_major_locator(MultipleLocator(100))
             ax.xaxis.set_minor_locator(MultipleLocator(50))
             ax.tick_params(axis='y', direction='in', which='both', left=True, right=True)
-            ax.tick_params(axis='x', direction='in', which='both', top=True, bottom=True)
+            ax.tick_params(axis='x', direction='in', which='both', top=True, bottom=True, labelsize=12)
 
         return fig

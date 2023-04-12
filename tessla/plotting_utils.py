@@ -10,7 +10,7 @@ from astropy.time import Time
 
 from tessla.tesslacornerplot import TesslaCornerPlot
 
-def sg_smoothing_plot(toi):
+def sg_smoothing_plot(toi, legend_outside=False):
     '''
     Make a sector-by-sector plot of the light curve and initial SG filter smoothing/outlier rejection.
     '''
@@ -37,7 +37,12 @@ def sg_smoothing_plot(toi):
         sg_outlier_mask_inv = ~toi.sg_outlier_mask & sector_mask
         ax.plot(toi.lc.time[sg_outlier_mask_inv].value, toi.lc.norm_flux[sg_outlier_mask_inv], 'xr', label="Discarded outliers")
 
-        ax.legend(fontsize=10, bbox_to_anchor=[1,1])
+        if legend_outside:
+            ax.legend(fontsize=10, bbox_to_anchor=[1,1])
+        else:
+            ylim_bottom, ylim_top = ax.get_ylim()
+            ax.set_ylim([ylim_bottom - 0.5, ylim_top]) # Make room for the legend below the data
+            ax.legend(fontsize=10, loc='lower center', ncol=2)
         ax.set_xlabel(f'Time [BJD - {toi.bjd_ref:.1f}]')
         ax.set_ylabel(f'Relative flux [ppt]')
         
@@ -236,18 +241,18 @@ def plot_individual_transits(toi, xlim=0.3):
     if toi.verbose:
         print(f"Individual transit plots saved to {out_dir}/individual_transits/")
 
-def star_noise_corner(toi, df_derived_chains, overwrite=False):
+def plot_star_noise_corner(toi, df_derived_chains, overwrite=False):
     if toi.phot_gp_kernel == "exp_decay":
     
         # Corner plot for star properties and noise parameters
         star_labels = ['$\mu$ [ppt]', '$u_1$', '$u_2$']
-        noise_labels = ['$\sigma_\mathrm{jitter}$ [ppt]', '$\sigma_\mathrm{GP,\:phot}$ [PPT]', r'$\rho_\mathrm{GP,\:phot}$ [d]', r'$\tau_\mathrm{GP,\:phot}$ [d]']
+        noise_labels = ['$\sigma_\mathrm{phot}$ [ppt]', '$\eta_\mathrm{GP,\:phot}$ [PPT]', r'$\rho_\mathrm{GP,\:phot}$ [d]', r'$\tau_\mathrm{GP,\:phot}$ [d]']
         star_noise_chains = np.vstack([
             df_derived_chains['mean_flux'], 
             df_derived_chains['u_0'],
             df_derived_chains['u_1'],
             np.exp(df_derived_chains['log_sigma_phot']),
-            np.exp(df_derived_chains['log_sigma_phot_gp']),
+            np.exp(df_derived_chains['log_sigma_phot_gp']), # Make this "eta" to differentiate the GP amplitudes from jitter terms.
             np.exp(df_derived_chains['log_rho_phot_gp']),
             np.exp(df_derived_chains['log_tau_phot_gp'])
         ]).T
@@ -257,43 +262,140 @@ def star_noise_corner(toi, df_derived_chains, overwrite=False):
         # TODO: Fix? Or just leave it like this and people can make corner plots on their own if they use a different kernel.
         print("NOTE: Right now automated corner plot generation only works if phot_gp_kernel == 'exp_decay'")
 
-def svalue_gp_corner(toi, df_derived_chains, overwrite=False):
+def plot_svalue_gp_corner(toi, df_derived_chains, overwrite=False):
     if toi.svalue_gp_kernel == "exp_decay":
     
         # Corner plot for Svalue GP hyperparameters
         # GP amplitudes for each RV instrument
-        noise_labels = [f'$\sigma_{{\mathrm{{GP,\:RV,\:}}{tel}}}$ [m s$^{{-1}}$]' for tel in toi.rv_inst_names]
+        noise_labels = [f'$\eta_{{\mathrm{{GP,\:RV,\:}}{tel}}}$ [m s$^{{-1}}$]' for tel in toi.rv_inst_names]
         chains = [np.exp(df_derived_chains[f'log_sigma_rv_gp_{tel}']) for tel in toi.rv_inst_names]
         
         # GP amplitudes and jitter for each Svalue instrument
-        noise_labels += [f'$\sigma_{{\mathrm{{GP,\:S_{{HK}},\:}}{tel}}}$ [dex]' for tel in toi.svalue_inst_names]
+        noise_labels += [f'$\eta_{{\mathrm{{GP,\:S_{{HK}},\:}}{tel}}}$ ' for tel in toi.svalue_inst_names]
         chains += [np.exp(df_derived_chains[f'log_sigma_svalue_gp_{tel}']) for tel in toi.svalue_inst_names]
-        noise_labels += [f'Jitter$_{{S_\mathrm{{HK}},\:{tel}}}$ [dex]' for tel in toi.svalue_inst_names]
+        noise_labels += [f'$\sigma_{{S_\mathrm{{HK}},\:{tel}}}$ ' for tel in toi.svalue_inst_names]
         chains += [np.exp(df_derived_chains[f'log_jitter_svalue_gp_{tel}']) for tel in toi.svalue_inst_names]
         
         # Global GP hyperparameters
         noise_labels += [
-            '$\mu_{S_\mathrm{HK}}$ [dex]',  
-            r'$\rho_{S_\mathrm{HK}}$ [d]', 
-            r'$\tau_{S_\mathrm{HK}}$ [d]'
+            '$\mu_{S_\mathrm{HK}}$ ',
         ]
         chains += [
             df_derived_chains['gp_svalue_mean'],
-            np.exp(df_derived_chains['log_rho_svalue_gp']),
-            np.exp(df_derived_chains['log_tau_svalue_gp'])
         ]
+        # Kernel-specific hyperparameters
+        noise_labels += [  
+            r'$\rho_{S_\mathrm{HK}}$ [d]',
+            r'$\tau_{S_\mathrm{HK}}$ [d]'  
+        ]
+        chains += [
+            np.exp(df_derived_chains['log_rho_rv_svalue_gp']),
+            np.exp(df_derived_chains['log_tau_rv_svalue_gp'])
+        ]
+
         svalue_gp_chains = np.vstack(chains).T
-        star_noise_corner = TesslaCornerPlot(toi, noise_labels, svalue_gp_chains, toi.name + " RV-$S_\mathrm{HK}$ GP hyperparameters")
-        star_noise_corner.plot(overwrite=overwrite)
+        svalue_gp_corner = TesslaCornerPlot(toi, noise_labels, svalue_gp_chains, toi.name + " RV-$S_\mathrm{HK}$ GP hyperparameters")
+        svalue_gp_corner.plot(save_fname=f"{toi.name.replace(' ', '_')}_rv_svalue_gp_corner_plot", overwrite=overwrite)
+    
+    elif toi.svalue_gp_kernel == 'rotation':
+
+        # Corner plot for Svalue GP hyperparameters
+        # GP amplitudes for each RV instrument
+        noise_labels = [f'$\eta_{{\mathrm{{GP,\:RV,\:}}\mathrm{{{tel}}}}}$ [m s$^{{-1}}$]' for tel in toi.rv_inst_names]
+        chains = [df_derived_chains[f'sigma_rv_gp_{tel}'] for tel in toi.rv_inst_names]
+        
+        # GP amplitudes and jitter for each Svalue instrument
+        noise_labels += [f'$\eta_{{\mathrm{{GP,\:S_{{HK}},\:}}\mathrm{{{tel}}}}}$ ' for tel in toi.svalue_inst_names]
+        chains += [df_derived_chains[f'sigma_svalue_gp_{tel}'] for tel in toi.svalue_inst_names]
+        noise_labels += ['$\sigma_{S_\mathrm{HK}}$ ']
+        chains += [np.exp(df_derived_chains['log_jitter_svalue_HIRES'])]
+        
+        # Global GP hyperparameters
+        noise_labels += [
+            '$\mu_{S_\mathrm{HK}}$ ',
+        ]
+        chains += [
+            df_derived_chains['gp_svalue_mean'],
+        ]
+        # Kernel-specific hyperparameters
+        noise_labels += [  
+            r'$P_\mathrm{rot}$ [d]',
+            r'$Q_{0,\:S_\mathrm{HK}}$',
+            r'$dQ_{S_\mathrm{HK}}$',
+            r'$f_{S_\mathrm{HK}}$',
+        ]
+        chains += [
+            df_derived_chains['prot_rv_svalue_gp'],
+            np.exp(df_derived_chains['log_Q0_rv_svalue_gp']),
+            np.exp(df_derived_chains['log_dQ_rv_svalue_gp']),
+            df_derived_chains['f_rv_svalue_gp']
+        ]
+        
+        svalue_gp_chains = np.vstack(chains).T
+        svalue_gp_corner = TesslaCornerPlot(toi, noise_labels, svalue_gp_chains, toi.name + " RV-$S_\mathrm{HK}$ GP hyperparameters")
+        svalue_gp_corner.plot(save_fname=f"{toi.name.replace(' ', '_')}_rv_svalue_gp_corner_plot", overwrite=overwrite)
+
+    elif toi.svalue_gp_kernel == 'activity':
+        
+        # GP amplitudes for each RV instrument
+        # Rotation term
+        noise_labels = [f'$\eta_{{\mathrm{{GP,\:rot,\:RV,\:}}\mathrm{{{tel}}}}}$ [m s$^{{-1}}$]' for tel in toi.rv_inst_names]
+        chains = [df_derived_chains[f'sigma_rv_gp_rot_{tel}'] for tel in toi.rv_inst_names]
+        # Exp decay term
+        noise_labels += [f'$\eta_{{\mathrm{{GP,\:dec,\:RV,\:}}\mathrm{{{tel}}}}}$ [m s$^{{-1}}$]' for tel in toi.rv_inst_names]
+        chains += [np.exp(df_derived_chains[f'log_sigma_rv_gp_dec_{tel}']) for tel in toi.rv_inst_names]
+        
+        # GP amplitudes and jitter for each Svalue instrument
+        # Rotation term
+        noise_labels += [f'$\eta_{{\mathrm{{GP,\:rot,\:S_{{HK}},\:}}\mathrm{{{tel}}}}}$ ' for tel in toi.svalue_inst_names]
+        chains += [df_derived_chains[f'sigma_svalue_gp_rot_{tel}'] for tel in toi.svalue_inst_names]
+        # Exp decay term
+        noise_labels += [f'$\eta_{{\mathrm{{GP,\:dec,\:S_{{HK}},\:}}\mathrm{{{tel}}}}}$ ' for tel in toi.svalue_inst_names]
+        chains += [df_derived_chains[f'log_sigma_svalue_gp_dec_{tel}'] for tel in toi.svalue_inst_names]
+
+        # Svalue jitter and mean
+        noise_labels += ['$\sigma_{S_\mathrm{HK}}$ ']
+        chains += [np.exp(df_derived_chains['log_jitter_svalue_HIRES'])]
+        noise_labels += ['$\mu_{S_\mathrm{HK}}$ ']
+        chains += [df_derived_chains['gp_svalue_mean']]
+
+        # Kernel-specific hyperparameters
+        # Rotation
+        noise_labels += [  
+            r'$P_\mathrm{rot}$ [d]',
+            r'$Q_{0,\:S_\mathrm{HK}}$',
+            r'$dQ_{S_\mathrm{HK}}$',
+            r'$f_{S_\mathrm{HK}}$',
+        ]
+        chains += [
+            df_derived_chains['prot_rv_svalue_gp'],
+            np.exp(df_derived_chains['log_Q0_rv_svalue_gp']),
+            np.exp(df_derived_chains['log_dQ_rv_svalue_gp']),
+            df_derived_chains['f_rv_svalue_gp']
+        ]
+
+        # Kernel-specific hyperparameters
+        # Exp decay
+        noise_labels += [  
+            r'$\rho_{S_\mathrm{HK}}$ [d]',
+        ]
+        chains += [
+            np.exp(df_derived_chains['log_rho_rv_svalue_gp']),
+        ]
+        
+        svalue_gp_chains = np.vstack(chains).T
+        svalue_gp_corner = TesslaCornerPlot(toi, noise_labels, svalue_gp_chains, toi.name + " RV-$S_\mathrm{HK}$ GP hyperparameters")
+        svalue_gp_corner.plot(save_fname=f"{toi.name.replace(' ', '_')}_rv_svalue_gp_corner_plot", overwrite=overwrite)
+
     else:
         # TODO: Fix? Or just leave it like this and people can make corner plots on their own if they use a different kernel.
-        print("NOTE: Right now automated corner plot generation only works if svalue_gp_kernel == 'exp_decay'")
+        print("NOTE: Right now automated corner plot generation only works if svalue_gp_kernel == 'exp_decay' or  svalue_gp_kernel == 'rotation' or svalue_gp_kernel == 'activity'.")
 
 def plot_phot_only_corners(toi, df_derived_chains, overwrite=False):
     '''
     Make the corner plots!
     '''
-    star_noise_corner(toi, df_derived_chains, overwrite=overwrite)
+    plot_star_noise_corner(toi, df_derived_chains, overwrite=overwrite)
 
     # Corner plot for each planet's transit parameters
     for i,letter in enumerate(toi.transiting_planets.keys()):
@@ -332,16 +434,15 @@ def plot_joint_corners(toi, df_derived_chains, overwrite=False):
     '''
     Make the corner plots!
     '''
-    star_noise_corner(toi, df_derived_chains, overwrite=overwrite)
+    plot_star_noise_corner(toi, df_derived_chains, overwrite=overwrite)
     
     if toi.include_svalue_gp:
-        svalue_gp_corner(toi, df_derived_chains, overwrite=overwrite)
+        plot_svalue_gp_corner(toi, df_derived_chains, overwrite=overwrite)
 
     # Corner plot for instrument parameters
     rv_trend_labels_dict = {
-        0:"$\gamma_\mathrm{trend}$ [m s$^{-1}$]",
-        1:"$\dot{\gamma}$ [m s$^{-1}$ d$^{-1}$]",
-        2:"$\ddot{\gamma}$ [m s$^{-1}$ d$^{-2}$]",
+        0:"$\dot{\gamma}$ [m s$^{-1}$ d$^{-1}$]",
+        1:"$\ddot{\gamma}$ [m s$^{-1}$ d$^{-2}$]",
     }
 
     rv_inst_labels = []
@@ -350,9 +451,9 @@ def plot_joint_corners(toi, df_derived_chains, overwrite=False):
         rv_inst_labels.append(f'$\gamma_\mathrm{{{tel}}}$ [m s$^{{-1}}$]')
         rv_inst_chains_list.append(df_derived_chains[f'gamma_rv_{tel}'])
         rv_inst_labels.append(f'$\sigma_\mathrm{{{tel}}}$ [m s$^{{-1}}$]')
-        rv_inst_chains_list.append(df_derived_chains[f'sigma_rv_{tel}'])
+        rv_inst_chains_list.append(np.exp(df_derived_chains[f'log_sigma_rv_{tel}']))
     if toi.rv_trend:
-        for i in range(0, toi.rv_trend_order + 1):
+        for i in range(0, toi.rv_trend_order):
             try:
                 rv_inst_labels.append(rv_trend_labels_dict[i])
                 rv_inst_chains_list.append(df_derived_chains[f'trend_rv_{i}'])
@@ -366,24 +467,41 @@ def plot_joint_corners(toi, df_derived_chains, overwrite=False):
     # Corner plot for the measured parameters
     for letter, planet in toi.planets.items():
         if planet.is_transiting:
-            planet_labels = [
-                '$P$ [d]',
-                '$T_\mathrm{c}$ [BTJD]',
-                '$R_\mathrm{p}/R_*$ [$\%$]',
-                '$b$',
-                '$e$',
-                '$\omega$ [Rad]',
-                '$K$ [m s$^{-1}$]'
-            ]
-            planet_chains = np.vstack([
-                df_derived_chains[f'period_{letter}'],
-                df_derived_chains[f't0_BTJD_{letter}'],
-                df_derived_chains[f'ror_{letter}'] * 100, # Put in units of percent to make the decimals easier to see
-                df_derived_chains[f'b_{letter}'],
-                df_derived_chains[f'ecc_{letter}'],
-                df_derived_chains[f'omega_{letter}'],
-                df_derived_chains[f'K_{letter}']
-            ]).T
+            if toi.force_circular_orbits_for_transiting_planets:
+                planet_labels = [
+                    '$P$ [d]',
+                    '$T_\mathrm{c}$ [BTJD]',
+                    '$R_\mathrm{p}/R_*$ [$\%$]',
+                    '$b$',
+                    '$K$ [m s$^{-1}$]'
+                ]
+                planet_chains = np.vstack([
+                    df_derived_chains[f'period_{letter}'],
+                    df_derived_chains[f't0_BTJD_{letter}'],
+                    df_derived_chains[f'ror_{letter}'] * 100, # Put in units of percent to make the decimals easier to see
+                    df_derived_chains[f'b_{letter}'],
+                    df_derived_chains[f'K_{letter}']
+                ]).T
+            else:
+                planet_labels = [
+                    '$P$ [d]',
+                    '$T_\mathrm{c}$ [BTJD]',
+                    '$R_\mathrm{p}/R_*$ [$\%$]',
+                    '$b$',
+                    '$e$',
+                    '$\omega$ [Rad]',
+                    '$K$ [m s$^{-1}$]'
+                ]
+                planet_chains = np.vstack([
+                    df_derived_chains[f'period_{letter}'],
+                    df_derived_chains[f't0_BTJD_{letter}'],
+                    df_derived_chains[f'ror_{letter}'] * 100, # Put in units of percent to make the decimals easier to see
+                    df_derived_chains[f'b_{letter}'],
+                    df_derived_chains[f'ecc_{letter}'],
+                    df_derived_chains[f'omega_{letter}'],
+                    df_derived_chains[f'K_{letter}']
+                ]).T
+
             planet_corner = TesslaCornerPlot(toi, planet_labels, planet_chains, f"{toi.name} {letter} measured parameters", color=planet.color)
             planet_corner.plot(overwrite=overwrite)
 
