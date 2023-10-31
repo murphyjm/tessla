@@ -27,7 +27,7 @@ def sg_smoothing_plot(toi, legend_outside=False):
         # Plot the smoothed data
         sg_outlier_mask = toi.sg_outlier_mask & sector_mask
         norm_flux_prime = np.interp(toi.lc.time.value, toi.lc.time[sg_outlier_mask].value, toi.lc.norm_flux[sg_outlier_mask].value)[sg_outlier_mask]
-        ax.plot(toi.lc.time[sg_outlier_mask].value, savgol_filter(norm_flux_prime, toi.sg_window_size, polyorder=3), color='C2', label='Smoothed Data')
+        ax.plot(toi.lc.time[sg_outlier_mask].value, savgol_filter(norm_flux_prime, toi.sg_window_size, polyorder=3), color='C2', label='Smoothed Data', zorder=100)
 
         # Mark the in-transit data for each planet.
         for pl_letter, planet in toi.transiting_planets.items():
@@ -45,7 +45,15 @@ def sg_smoothing_plot(toi, legend_outside=False):
             ax.legend(fontsize=10, loc='lower center', ncol=2)
         ax.set_xlabel(f'Time [BJD - {toi.bjd_ref:.1f}]')
         ax.set_ylabel(f'Relative flux [ppt]')
-        
+
+        ax.tick_params(axis='x', direction='in', which='both', top=True, bottom=True)
+        ax.xaxis.set_major_locator(MultipleLocator(5))
+        ax.xaxis.set_minor_locator(MultipleLocator(2.5))
+
+        ax.tick_params(axis='y', direction='in', which='both', left=True, right=True)
+        # ax.yaxis.set_major_locator(MultipleLocator(5))
+        # ax.yaxis.set_minor_locator(MultipleLocator(2.5))
+
         out_dir = os.path.join(toi.model_dir, 'plotting')
         if not os.path.isdir(out_dir):
             os.makedirs(out_dir)
