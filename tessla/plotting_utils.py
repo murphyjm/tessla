@@ -212,8 +212,8 @@ def plot_individual_transits(toi, xlim=0.3):
                 slice_obj = slice(start_ind, None)
             fig, ax = plt.subplots()
             ax.plot(x_fold[mask][slice_obj], y[mask][slice_obj], ".k", ms=4, label="Data")
-            # Plot the binned flux in bins of 30 minutes
-            bin_duration = 0.5 / 24 # 30 minutes in units of days
+            # Plot the binned flux in bins of 20 minutes
+            bin_duration = 0.333 / 24 # 20 minutes in units of days
             bins = (np.max(x_fold[mask]) - np.min(x_fold[mask])) / bin_duration
             binned_flux, binned_edges, _ = binned_statistic(x_fold[mask][slice_obj], y[mask][slice_obj], statistic="mean", bins=bins)
             binned_edge_diff = np.ediff1d(binned_edges) / 2
@@ -226,12 +226,25 @@ def plot_individual_transits(toi, xlim=0.3):
             ax.set_ylabel("Relative flux [ppt]")
             ax.set_title(f"{toi.name} {planet.pl_letter} transit {transit_num}")
 
+            ax.tick_params(axis='x', direction='in', which='both', top=False, bottom=True)
+            ax.xaxis.set_major_locator(MultipleLocator(0.2))
+            ax.xaxis.set_minor_locator(MultipleLocator(0.1))
+
+            ax.tick_params(axis='y', direction='in', which='both', left=True, right=True)
+            ax.yaxis.set_major_locator(MultipleLocator(1))
+            ax.yaxis.set_minor_locator(MultipleLocator(0.5))
+
             # Re-plot the data with the non-phase-folded time on the top x-axis so you know what transit this is.
             ax_top = ax.twiny()
             ax_top.plot(x[mask][slice_obj], y[mask][slice_obj], ".k", ms=4)
             ax_top.set_xlabel(f"Time [BJD - {toi.bjd_ref:.1f}]")
             ax_top.ticklabel_format(useOffset=False)
             ax_top.tick_params(axis='x', which='major', labelsize=10)
+            
+            ax_top.tick_params(axis='x', direction='in', which='both', top=True, bottom=False)
+            ax_top.xaxis.set_major_locator(MultipleLocator(0.1))
+            ax_top.xaxis.set_minor_locator(MultipleLocator(0.05))
+            
             ax.legend(loc="lower left", fontsize=10, framealpha=0.5, fancybox=True)
             
             save_fname = f'{toi.name.replace(" ", "_")}_{planet.pl_letter}_transit_{transit_num}.png'
