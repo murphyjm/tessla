@@ -372,7 +372,7 @@ def plot_svalue_gp_corner(toi, df_derived_chains, overwrite=False):
         chains += [df_derived_chains[f'sigma_svalue_gp_rot_{tel}'] for tel in toi.svalue_inst_names]
         # Exp decay term
         noise_labels += [f'$\eta_{{\mathrm{{GP,\:dec,\:S_{{HK}},\:}}\mathrm{{{tel}}}}}$ ' for tel in toi.svalue_inst_names]
-        chains += [np.exp(df_derived_chains[f'log_sigma_svalue_gp_dec_{tel}']) for tel in toi.svalue_inst_names]
+        chains += [df_derived_chains[f'log_sigma_svalue_gp_dec_{tel}'] for tel in toi.svalue_inst_names]
 
         # Svalue jitter and mean
         noise_labels += ['$\sigma_{S_\mathrm{HK}}$ ']
