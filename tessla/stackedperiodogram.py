@@ -299,18 +299,27 @@ class StackedPeriodogram:
                 if self.toi.chains_path is not None:
                     try:
                         chains = pd.read_csv(self.toi.chains_path)
-                        prot = np.exp(np.median(chains[prot_var_name_str]))
+                        prot_chains = np.exp(chains[prot_var_name_str])
+                        prot = np.median(prot_chains)
+                        prot_err = np.mean(np.abs(np.quantile(prot_chains, [0.16, 0.84]) - prot))
                         prot_posterior_med_used_flag = True
+
+                        # Plot vertical lines as 1-sigma window around rotation period and first harmonic
+                        ax[j].axvspan(prot - prot_err, prot + prot_err, color='red', lw=0, alpha=0.5)
+                        ax[j].axvspan((prot - prot_err)/2, (prot + prot_err)/2, lw=0, color='tomato', alpha=0.5)
+
                     except FileNotFoundError:
                         # If reading chains fails, use MAP value
                         prot = np.exp(self.toi.map_soln[prot_var_name_str])
                         prot_posterior_med_used_flag = False
                         prot_posterior_med_failed_flag = True
+                        ax[j].axvline(prot, color='red', lw=5, alpha=0.5)
+                        ax[j].axvline(prot/2, color='tomato', lw=5, alpha=0.5)
                 else:
                     prot = np.exp(self.toi.map_soln[prot_var_name_str])
                     prot_posterior_med_used_flag = False
-                ax[j].axvline(prot, color='red', lw=5, alpha=0.5)
-                ax[j].axvline(prot/2, color='tomato', lw=5, alpha=0.5)
+                    ax[j].axvline(prot, color='red', lw=5, alpha=0.5)
+                    ax[j].axvline(prot/2, color='tomato', lw=5, alpha=0.5)
             elif self.plot_phot_vert_line:
                 # Rotation period peak from OoT photometry
                 ax[j].axvline(self.toi.prot, color='blue', lw=5, alpha=0.5)
