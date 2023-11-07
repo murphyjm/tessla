@@ -57,7 +57,8 @@ class ThreePanelPhotPlot:
                 return_fig_and_phase_folded_axes=False,
                 facecolor='white',
                 ytick_spacing=None,
-                residuals_ytick_spacing=None
+                residuals_ytick_spacing=None,
+                plot_random_data_fraction=None, # To reduce the size of figures (when saving as .pdf). if not None, only plot some random fraction of the overall TESS data.
                 ) -> None:
         
         self.toi = toi
@@ -94,6 +95,11 @@ class ThreePanelPhotPlot:
         self.facecolor = facecolor
         self.ytick_spacing = ytick_spacing
         self.residuals_ytick_spacing = residuals_ytick_spacing
+        
+        if plot_random_data_fraction is not None:
+            assert plot_random_data_fraction > 0 and plot_random_data_fraction < 1, "plot_random_data_fraction, if specified, must be between 0 and 1"
+            self.random_data_fraction_inds = np.random.choice(np.arange(len(self.x)), int(plot_random_data_fraction * len(self.x)))
+        self.plot_random_data_fraction = plot_random_data_fraction
         
     def plot(self, save_fname=None, overwrite=False):
         '''
@@ -298,7 +304,10 @@ class ThreePanelPhotPlot:
         bax1.set_title(self.toi.name, pad=10)
 
         # Plot the data
-        bax1.plot(self.x, self.y, '.k', alpha=0.3, label="Data")
+        if self.plot_random_data_fraction is None:
+            bax1.plot(self.x, self.y, '.k', alpha=0.3, label="Data")
+        else:
+            bax1.plot(self.x[self.random_data_fraction_inds], self.y[self.random_data_fraction_inds], '.k', alpha=0.3, label="Data")
         
         # Plot the GP model on top chunk-by-chunk to avoid the lines that extend into the gaps
         # Also mark the transits in each chunk for each planet
@@ -372,7 +381,11 @@ class ThreePanelPhotPlot:
 
         # Plot the flattened data and the orbital model for each planet. Could also plot the orbital models in chunks 
         # like the gp model so plot lines don't extend into the data gaps but just being lazy here. 
-        bax2.plot(self.x, self.y - gp_mod, ".k", alpha=0.3, label="Flattened data")
+        if self.plot_random_data_fraction is None:
+            bax2.plot(self.x, self.y - gp_mod, ".k", alpha=0.3, label="Flattened data")
+        else:
+            bax2.plot(self.x[self.random_data_fraction_inds], self.y[self.random_data_fraction_inds] - gp_mod[self.random_data_fraction_inds], ".k", alpha=0.3, label="Flattened data")
+
         for k, planet in enumerate(self.toi.transiting_planets.values()):
             bax2.plot(self.x, self.toi.extras["light_curves"][:, k], color=planet.color, label=f"{self.toi.name} {planet.pl_letter}", alpha=1.0, zorder=2000 - k)
         
@@ -400,7 +413,11 @@ class ThreePanelPhotPlot:
 
         # Plot the residuals about the full model
         residuals = self.y - gp_mod - np.sum(self.toi.extras["light_curves"], axis=-1)
-        bax3.plot(self.x, residuals, ".k", alpha=0.3)
+        if self.plot_random_data_fraction is None:
+            bax3.plot(self.x, residuals, ".k", alpha=0.3)
+        else:
+            bax3.plot(self.x[self.random_data_fraction_inds], residuals[self.random_data_fraction_inds], ".k", alpha=0.3)
+        
         bax3.axhline(0, color="#aaaaaa", lw=1)
         for ax in bax3.axs[1:]:
             ax.tick_params(axis='y', label1On=False) # Avoid y-axis labels popping up.
@@ -514,7 +531,10 @@ class ThreePanelPhotPlot:
         ax1.set_title(self.toi.name, pad=10)
         
         # Plot the data
-        ax1.plot(self.x, self.y, '.k', alpha=0.3, label="Data")
+        if self.plot_random_data_fraction is None:
+            ax1.plot(self.x, self.y, '.k', alpha=0.3, label="Data")
+        else:
+            ax1.plot(self.x[self.random_data_fraction_inds], self.y[self.random_data_fraction_inds], '.k', alpha=0.3, label="Data")
 
         # Plot the GP model and mark the transits
         gp_mod = self.toi.extras["gp_pred"] + self.toi.map_soln["mean_flux"]
@@ -547,7 +567,10 @@ class ThreePanelPhotPlot:
         ####################### MIDDLE PANEL: Flattened data and orbital model #########################
         ################################################################################################
         ax2 = fig.add_subplot(sps2)
-        ax2.plot(self.x, self.y - gp_mod, ".k", alpha=0.3, label="Flattened data")
+        if self.plot_random_data_fraction is None:
+            ax2.plot(self.x, self.y - gp_mod, ".k", alpha=0.3, label="Flattened data")
+        else:
+            ax2.plot(self.x[self.random_data_fraction_inds], self.y[self.random_data_fraction_inds] - gp_mod[self.random_data_fraction_inds], ".k", alpha=0.3, label="Flattened data")
         for k, planet in enumerate(self.toi.transiting_planets.values()):
             ax2.plot(self.x, self.toi.extras["light_curves"][:, k], color=planet.color, label=f"{self.toi.name} {planet.pl_letter}", alpha=1.0, zorder=2000 - k)
         
@@ -572,7 +595,10 @@ class ThreePanelPhotPlot:
 
         # Plot the residuals about the full model
         residuals = self.y - gp_mod - np.sum(self.toi.extras["light_curves"], axis=-1)
-        ax3.plot(self.x, residuals, ".k", alpha=0.3)
+        if self.plot_random_data_fraction is None:
+            ax3.plot(self.x, residuals, ".k", alpha=0.3)
+        else:
+            ax3.plot(self.x[self.random_data_fraction_inds], residuals[self.random_data_fraction_inds], ".k", alpha=0.3)
         ax3.axhline(0, color="#aaaaaa", lw=1)
 
         # Plot housekeeping
