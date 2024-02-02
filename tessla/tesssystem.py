@@ -360,7 +360,7 @@ class TessSystem:
         TODO: Optional, but could change to updating t0 to near center of photometry data center to middle of phot and RV data.
               Let's just leave it as the phot data middle for now since they should be relatively close.
         '''
-        phot_data_middle = 0.5 * (np.max(self.lc.time.value) - np.min(self.lc.time.value))
+        phot_data_middle = 0.5 * (np.max(self.lc.time.value) + np.min(self.lc.time.value))
         for planet in self.planets.values():
             if np.abs(phot_data_middle - planet.t0) < buffer:
                 continue
